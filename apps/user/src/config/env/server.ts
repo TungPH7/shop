@@ -11,7 +11,7 @@ import { clientEnv } from './client';
  * Env phía SERVER — biến chỉ-server (bí mật) + KẾ THỪA client qua `extends`.
  *
  * ⭐ `extends: [clientEnv]`: gộp env client vào → code server đọc MỘT `env` có đủ
- * `API_URL`/`AUTH_SECRET` (server) lẫn `NEXT_PUBLIC_API_URL`/`NODE_ENV` (kế thừa). Client thì
+ * `API_URL`/`AUTH_SECRET` (server) lẫn `NEXT_PUBLIC_SITE_URL`/`NODE_ENV` (kế thừa). Client thì
  * chỉ import `clientEnv` → không bao giờ thấy tên biến server.
  *
  * ⭐ Vì sao file này KHÔNG `import 'server-only'` (dù chứa secret): nó nằm trên đường import
@@ -38,5 +38,8 @@ export const env = createEnv({
     AUTH_SECRET: process.env.AUTH_SECRET,
   },
   emptyStringAsUndefined: true,
-  skipValidation: !!process.env.SKIP_ENV_VALIDATION,
+  // `next build` has no secret: the deployer of ai-orchestrator builds one image for every environment and gives each
+  // its own secrets when the container starts. The first import of this file at run time checks them (SHOP-1).
+  skipValidation:
+    !!process.env.SKIP_ENV_VALIDATION || process.env.NEXT_PHASE === 'phase-production-build',
 });

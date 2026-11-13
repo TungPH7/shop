@@ -1,9 +1,6 @@
 import type { NextConfig } from 'next';
+import { PHASE_PRODUCTION_BUILD } from 'next/constants';
 import createNextIntlPlugin from 'next-intl/plugin';
-
-// ⭐ Validate env NGAY khi nạp config → `next build`/`next dev` FAIL SỚM nếu env
-// thiếu/sai (trước cả khi compile), thay vì lỗi mơ hồ lúc chạy (khuyến nghị t3-env).
-import './src/config/env/server';
 
 // Security headers + CSP (folder 19). Import TƯƠNG ĐỐI (không `~`) — bộ biên dịch config của Next
 // KHÔNG áp tsconfig `paths` (bài học folder 15). File thuần 0-dep.
@@ -17,6 +14,9 @@ import { buildSecurityHeaders } from './src/config/security-headers';
 const lowMemBuild = process.env.NEXT_BUILD_LOW_MEM === '1';
 
 const nextConfig: NextConfig = {
+  // The Dockerfile of ai-orchestrator runs .next/standalone: a server with only the modules it uses (SHOP-1).
+  output: 'standalone',
+
   // ⭐ Folder 10 — Cache Components: dynamic-by-default + opt-in cache (`use cache` /
   // `cacheLife` / `cacheTag`) + PPR (static shell + streaming). Cờ TOP-LEVEL (16.2.9 không
   // còn experimental; gộp ppr + dynamicIO + useCache thành một). Đánh đổi: static export &
@@ -70,4 +70,10 @@ const nextConfig: NextConfig = {
 // Plugin lo wiring messages/locale cho RSC + client; env import ở trên vẫn fail-fast trước.
 const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
-export default withNextIntl(nextConfig);
+// ⭐ Validate env NGAY khi nạp config → `next dev` FAIL SỚM nếu env thiếu/sai (trước cả khi compile), thay vì lỗi mơ
+// hồ lúc chạy (khuyến nghị t3-env). Not for `next build`: the deployer of ai-orchestrator builds one image for every
+// environment and gives each its secrets when the container starts, where the server checks them (SHOP-1).
+export default async function config(phase: string): Promise<NextConfig> {
+  if (phase !== PHASE_PRODUCTION_BUILD) await import('./src/config/env/server');
+  return withNextIntl(nextConfig);
+}

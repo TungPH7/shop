@@ -14,18 +14,19 @@ import * as z from 'zod';
 export const clientEnv = createEnv({
   client: {
     // PUBLIC: bị NHÚNG vào bundle trình duyệt → ai cũng đọc được. KHÔNG để secret.
-    NEXT_PUBLIC_API_URL: z.url(),
     // ⭐ Folder 21 (SEO): origin CÔNG KHAI của chính site (vd https://tungph7.com) — nguồn cho
-    // `metadataBase`, canonical/hreflang, sitemap.xml, robots.txt, og:url. KHÁC NEXT_PUBLIC_API_URL
-    // (đó là backend). Theo MÔI TRƯỜNG (localhost khi dev, domain thật khi prod) → là env, không phải
-    // hằng `site-config`. Public (lộ trong HTML) nên dùng tiền tố NEXT_PUBLIC_.
-    NEXT_PUBLIC_SITE_URL: z.url(),
+    // `metadataBase`, canonical/hreflang, sitemap.xml, robots.txt, og:url. KHÁC API_URL
+    // (đó là backend). Public (lộ trong HTML) nên dùng tiền tố NEXT_PUBLIC_.
+    // The deployer of ai-orchestrator builds one image for Development, Staging and Production, so a NEXT_PUBLIC_ value
+    // is the same in all three. The default is the origin of Production: Development and Staging sit behind basic auth,
+    // and their canonical, hreflang and sitemap URLs point search engines to Production. On your machine, set
+    // NEXT_PUBLIC_SITE_URL=http://localhost:3000 in .env.development (SHOP-1).
+    NEXT_PUBLIC_SITE_URL: z.url().default('https://shop.ao.t2g.io.vn'),
   },
   shared: {
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   },
   runtimeEnv: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
     NODE_ENV: process.env.NODE_ENV,
   },
