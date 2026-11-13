@@ -1,0 +1,157 @@
+# CI of a project (ai-orchestrator, quality-gates spec section 2.4): four jobs, one check each. jira-sync watches this
+# workflow by its name, CI. merge-gate, audit and the ruleset require the four jobs, which .ai-orchestrator/quality/gates.yaml
+# lists under `checks`. The project provides the scripts lint, typecheck, test:coverage (writing lcov) and build, run
+# with npm or pnpm by the lockfile at its root.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [develop, main, 'release/**']
+  # By hand, on a protected branch: gh workflow run CI --ref develop. For a push made while Actions was off on the
+  # repository, which then has no run (project-scaffold T16). With no PR and no push, the jobs check the head commit
+  # alone. On any other branch every job fails at its first step: such a run would write green checks on a PR's commit
+  # without the checks of a PR (review of ao-sample PR #30), and a skipped job counts as passing. gh-guard refuses
+  # gh workflow run to agents.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The PR's own newest commit, not the merge commit GitHub makes for it; on a push, the pushed commit.
+  HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  # Where the changes start: the PR's base branch, or the commit before the push (all zeros for a new branch).
+  BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+
+jobs:
+  # Conventions, suppressions, lowered thresholds and design.md files of a PR, and npm audit or pnpm audit
+  # (scripts/check-policy.mjs).
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: By hand only on develop, main or release/*
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/develop|refs/heads/main|refs/heads/release/*) ;;
+            *) echo "::error::CI runs by hand only on develop, main or release/*, not on $GITHUB_REF"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: npm ci --prefix .ai-orchestrator
+      # npm or pnpm, by the lockfile at the root (project-scaffold part 2, spec 2.1): the audit runs with it.
+      - name: npm or pnpm
+        run: node .ai-orchestrator/scripts/ci-package-manager.mjs
+      - run: node .ai-orchestrator/scripts/check-policy.mjs
+
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: By hand only on develop, main or release/*
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/develop|refs/heads/main|refs/heads/release/*) ;;
+            *) echo "::error::CI runs by hand only on develop, main or release/*, not on $GITHUB_REF"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: hashFiles('pnpm-lock.yaml') == ''
+        with:
+          node-version: 24
+          cache: npm
+      # A pnpm project has no cache: setup-node would ask a pnpm that is not installed yet where its store is.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: hashFiles('pnpm-lock.yaml') != ''
+        with:
+          node-version: 24
+      - run: npm ci --prefix .ai-orchestrator
+      # npm or pnpm, by the lockfile at the root (project-scaffold part 2, spec 2.1): sets PM and PM_INSTALL.
+      - name: npm or pnpm
+        run: node .ai-orchestrator/scripts/ci-package-manager.mjs
+      - run: $PM_INSTALL
+      - run: $PM run lint
+      - run: $PM run typecheck
+      - run: $PM run test:coverage
+      - name: Coverage of changed lines
+        if: github.event_name == 'pull_request'
+        run: node .ai-orchestrator/scripts/coverage-diff.mjs --base "$BASE_SHA"
+      - run: $PM run build
+
+  # gitleaks on the commits the PR or the push brings, pinned and checked against its published checksum.
+  secrets:
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - name: By hand only on develop, main or release/*
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/develop|refs/heads/main|refs/heads/release/*) ;;
+            *) echo "::error::CI runs by hand only on develop, main or release/*, not on $GITHUB_REF"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf gitleaks.tar.gz gitleaks
+          rm gitleaks.tar.gz
+      - name: Scan the new commits
+        run: |
+          case "$BASE_SHA" in
+            ''|0000000000000000000000000000000000000000) range="-1 $HEAD_SHA" ;;
+            *) range="$(git merge-base "$BASE_SHA" "$HEAD_SHA")..$HEAD_SHA" ;;
+          esac
+          ./gitleaks git --no-banner --redact --exit-code 1 --log-opts="$range" .
+
+  # Semgrep CE, pinned, through uvx; only findings the changes bring count.
+  sast:
+    runs-on: ubuntu-latest
+    env:
+      SEMGREP_VERSION: 1.180.0
+    steps:
+      - name: By hand only on develop, main or release/*
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/develop|refs/heads/main|refs/heads/release/*) ;;
+            *) echo "::error::CI runs by hand only on develop, main or release/*, not on $GITHUB_REF"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      # A new branch has no commit before its push: Semgrep scans its head commit alone, as gitleaks does, so a finding
+      # older than the push does not block it (project-scaffold T17). The root commit of a repository, and a run by
+      # hand, get every file.
+      - name: Semgrep on the changes
+        run: |
+          baseline=""
+          case "$BASE_SHA" in
+            ''|0000000000000000000000000000000000000000)
+              if [ "$GITHUB_EVENT_NAME" = push ] && git rev-parse --verify --quiet "$HEAD_SHA^" > /dev/null; then
+                baseline="--baseline-commit $(git rev-parse "$HEAD_SHA^")"
+              fi ;;
+            *) baseline="--baseline-commit $(git merge-base "$BASE_SHA" "$HEAD_SHA")" ;;
+          esac
+          uvx "semgrep==${SEMGREP_VERSION}" scan --config p/default --config p/owasp-top-ten --severity ERROR --error --metrics off $baseline

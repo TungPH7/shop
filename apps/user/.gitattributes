@@ -1,0 +1,7 @@
+# Chuẩn hoá xuống dòng = LF cho mọi file text trong repo, BẤT KỂ máy contributor
+# để git core.autocrlf = true hay false. Vì sao quan trọng ở đúng folder Git này:
+#   - Hook Husky (.husky/pre-commit, .husky/commit-msg) là script chạy bằng `sh`;
+#     nếu bị CRLF (\r\n) thì sh báo lỗi cú pháp -> hook hỏng khi clone về máy Windows.
+#   - Prettier đặt endOfLine: 'lf' (folder 03); CRLF sẽ làm `format:check` đỏ trên CI.
+# `text=auto` để git TỰ nhận diện file nhị phân (ảnh, font...) và KHÔNG đụng vào chúng.
+* text=auto eol=lf

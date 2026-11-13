@@ -1,0 +1,14 @@
+# Build output & generated — Prettier không format
+.next/
+out/
+build/
+coverage/
+node_modules/
+
+# Next tự sinh / lockfile — đừng format
+next-env.d.ts
+pnpm-lock.yaml
+
+# Tài liệu học viết tay + nghiên cứu tham khảo (bảng/format có chủ đích) — đừng để Prettier sửa
+study-guide-impl/
+frontend-technical/

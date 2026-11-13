@@ -1,0 +1,51 @@
+# The config of this project (SPEC-project-scaffold.md 2.1), written by ao-kit init from the profile base-pnpm.
+name: shop
+package_manager: pnpm
+jira:
+  space: SHOP
+github:
+  repo: TungPH7/shop
+  approvers:
+    - TungPH7
+  apps:
+    dev: tungph7-ao-dev
+    dev_id: 5514949
+    review: tungph7-ao-review
+    review_id: 5514961
+  kit_peers: []
+repos:
+  - name: shop
+    path: .
+apps:
+  user:
+    repo: shop
+    path: apps/user
+    profile: nextjs
+    dev: pnpm --filter ./apps/user run dev
+    port:
+      env: PORT
+      default: 3000
+    health: /
+    public: true
+    hosts:
+      development: shop-dev.ao.t2g.io.vn
+      staging: shop-staging.ao.t2g.io.vn
+      production: shop.ao.t2g.io.vn
+  admin:
+    repo: shop
+    path: apps/admin
+    profile: react
+    dev: pnpm --filter ./apps/admin run dev
+    port:
+      env: PORT
+      default: 5173
+    health: /
+    public: true
+    hosts:
+      development: shop-admin-dev.ao.t2g.io.vn
+      staging: shop-admin-staging.ao.t2g.io.vn
+      production: shop-admin.ao.t2g.io.vn
+roles:
+  optional: []
+claude:
+  allow: []

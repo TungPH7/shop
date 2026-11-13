@@ -1,0 +1,172 @@
+{
+  "Home": {
+    "metaTitle": "Server-first enterprise foundation",
+    "metaDescription": "Explore a production-grade Next.js 16 starter: App Router, React Server Components, BFF data access, i18n, auth, and SEO — built step by step.",
+    "heroAlt": "tungph7 codebase — Next.js 16 server-first foundation banner",
+    "tagline": "Phase 1.1 — Server-first core foundation (UI-agnostic).",
+    "currentLanguage": "Current language (from URL): {locale}",
+    "localesSupported": "{count, plural, one {# language supported} other {# languages supported}}",
+    "apiUrlLabel": "API base URL (public):",
+    "environmentLabel": "Environment:",
+    "aboutLink": "About →",
+    "cachingLink": "Caching demo →",
+    "productsLink": "Products →",
+    "errorDemoLink": "Error handling demo →"
+  },
+  "About": {
+    "metaTitle": "About",
+    "metaDescription": "Learn about this server-first Next.js 16 enterprise codebase and the architecture behind it.",
+    "title": "About",
+    "description": "Second demo route inside the (marketing) route group.",
+    "backHome": "← Back to home"
+  },
+  "Seo": {
+    "siteDescription": "A from-zero, server-first enterprise foundation built on Next.js 16 — App Router, React Server Components, type-safe i18n, and a UI-agnostic core.",
+    "ogImageTagline": "Server-first enterprise foundation",
+    "home": "Home"
+  },
+  "NotFound": {
+    "title": "404 — Page not found",
+    "description": "The page you are looking for doesn't exist or has been moved."
+  },
+  "Error": {
+    "title": "Something went wrong",
+    "description": "We couldn't complete that request. If you refreshed several times in a row, the demo backend may be rate-limiting you — please wait a moment and try again.",
+    "retry": "Try again"
+  },
+  "Validation": {
+    "too_short": "Please enter at least 2 characters.",
+    "too_long": "This value is too long.",
+    "required": "This field is required.",
+    "invalid_email": "Please enter a valid email.",
+    "invalid_phone": "Please enter a phone number of 9–15 characters (or leave it empty).",
+    "invalid_url": "Please enter a valid URL (or leave it empty).",
+    "password_too_short": "Password must be at least 6 characters.",
+    "password_mismatch": "The passwords don't match."
+  },
+  "LanguageSwitcher": {
+    "label": "Language"
+  },
+  "Theme": {
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "Auth": {
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "signedInAs": "Signed in ({role})",
+    "loginTitle": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "credentials": "Incorrect email or password.",
+    "rateLimited": "Too many attempts in a row — please wait a moment and try again.",
+    "unknown": "Sign-in failed. Please try again.",
+    "account": "Account"
+  },
+  "Account": {
+    "title": "Your account",
+    "loading": "Loading your account…",
+    "name": "Name",
+    "email": "Email",
+    "role": "Role",
+    "permissions": "Permissions",
+    "access": "Access",
+    "canManageProducts": "You can manage products.",
+    "editProfile": "Edit profile →"
+  },
+  "ProfileForm": {
+    "title": "Edit profile",
+    "loading": "Loading your profile…",
+    "name": "Name",
+    "phoneNumber": "Phone number",
+    "avatar": "Avatar URL",
+    "submit": "Save changes",
+    "submitting": "Saving…",
+    "saved": "Profile saved.",
+    "authError": "Your session expired. Please sign in again.",
+    "unknownError": "Could not save. Please try again."
+  },
+  "ChangePasswordForm": {
+    "title": "Change password",
+    "loading": "Loading…",
+    "password": "Current password",
+    "newPassword": "New password",
+    "confirmNewPassword": "Confirm new password",
+    "submit": "Change password",
+    "submitting": "Changing…",
+    "saved": "Password changed.",
+    "authError": "Your session expired. Please sign in again.",
+    "unknownError": "Could not change password. Check your current password and try again."
+  },
+  "Forbidden": {
+    "title": "403 — Access denied",
+    "description": "You're signed in, but you don't have permission to view this page.",
+    "home": "← Back to home"
+  },
+  "CachingDemo": {
+    "title": "Rendering & Caching (Cache Components)",
+    "intro": "Same page, two data sources: one cached into the static shell, one rendered per request and streamed in.",
+    "cachedTitle": "Cached data (use cache)",
+    "cachedHint": "Generated at build/revalidate time — stable across reloads (cacheLife 'hours' + cacheTag).",
+    "liveTitle": "Live data (request-time)",
+    "liveHint": "Generated on every request via connection() — changes each reload; streamed inside Suspense.",
+    "generatedAtLabel": "Generated at:",
+    "loading": "Loading live data…",
+    "revalidateButton": "Revalidate cache",
+    "revalidateHint": "Calls POST /api/revalidate → revalidateTag → the cached timestamp updates."
+  },
+  "Products": {
+    "metaTitle": "Products",
+    "metaDescription": "Browse products fetched server-side through the Data Access Layer, validated at the boundary and cached for performance.",
+    "title": "Products",
+    "intro": "Fetched server-side through the Data Access Layer (BFF → NestJS backend), validated at the boundary and cached.",
+    "empty": "No products found.",
+    "loading": "Loading products…",
+    "searchLabel": "Search by name",
+    "searchPlaceholder": "e.g. Áo",
+    "sortLabel": "Sort by",
+    "orderLabel": "Order",
+    "applyLabel": "Apply",
+    "sortCreatedAt": "Newest",
+    "sortPrice": "Price",
+    "sortSale": "On sale",
+    "orderAsc": "Ascending",
+    "orderDesc": "Descending",
+    "prev": "← Previous",
+    "next": "Next →",
+    "pageInfo": "Page {page} of {total}",
+    "density": "Density",
+    "densityComfortable": "Comfortable",
+    "densityCompact": "Compact",
+    "countTotal": "Total products",
+    "countLoading": "Counting…",
+    "countError": "Couldn't load count",
+    "countRefresh": "Refresh count",
+    "view": "View",
+    "viewList": "List",
+    "viewGrid": "Grid",
+    "refresh": "Refresh products",
+    "refreshed": "Refreshed at",
+    "rateLimited": "Too many refreshes in a row — the demo backend limits requests per minute. Please wait about a minute, then refresh again.",
+    "zoom": "Zoom",
+    "zoomClose": "Close",
+    "delete": "Delete",
+    "deleteValidationError": "Invalid product.",
+    "deleteAuthError": "You must be signed in (with permission) to delete.",
+    "deleteUnknownError": "Could not delete. Please try again."
+  },
+  "ErrorDemo": {
+    "title": "Error handling demo",
+    "intro": "Each link triggers a different failure so you can see which boundary catches it (folder 17).",
+    "pickScenario": "Pick a scenario above.",
+    "linkNotFound": "Call notFound() →",
+    "linkThrow": "Throw an unexpected error →",
+    "linkExpected": "Simulate an expected error (Result) →",
+    "reset": "← Reset",
+    "expectedNotice": "Expected error handled inline via Result (RateLimitError) — the page keeps working instead of crashing."
+  }
+}

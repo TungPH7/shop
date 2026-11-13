@@ -1,0 +1,17 @@
+# EditorConfig — cấu hình mặc định cho EDITOR, áp dụng NGAY LÚC GÕ (https://editorconfig.org).
+# Bổ trợ (không trùng) Prettier: Prettier format file code lúc save/commit; EditorConfig lo
+# trải nghiệm gõ trực tiếp + những loại file Prettier KHÔNG đụng tới (vd .md viết tay, file
+# config lạ). Cùng .gitattributes (eol=lf ở tầng git) tạo "bộ ba nhất quán": editor -> git -> format.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Markdown: KHÔNG xoá khoảng trắng cuối dòng — 2 space cuối dòng là cú pháp ngắt dòng cứng.
+[*.md]
+trim_trailing_whitespace = false

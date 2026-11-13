@@ -1,0 +1,10 @@
+# Build & deps
+dist
+coverage
+node_modules
+pnpm-lock.yaml
+
+# Documentation is authored by hand (tables, Vietnamese prose) — don't reflow.
+**/*.md
+study-guide-impl/
+frontend-technical/

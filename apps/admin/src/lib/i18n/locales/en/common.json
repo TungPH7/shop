@@ -1,0 +1,24 @@
+{
+  "app": {
+    "title": "tungph7 codebase"
+  },
+  "nav": {
+    "home": "Home",
+    "products": "Products",
+    "about": "About",
+    "login": "Login",
+    "profile": "Profile"
+  },
+  "language": {
+    "label": "Language"
+  },
+  "state": {
+    "loading": "Loading…"
+  },
+  "sidebar": {
+    "open": "Open sidebar",
+    "close": "Close sidebar",
+    "content": "Sidebar content (client-state demo)."
+  },
+  "greeting": "Hello, {{name}}"
+}

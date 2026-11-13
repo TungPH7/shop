@@ -1,0 +1,22 @@
+# How the deployer on the VPS builds, runs and smoke-tests the apps of shop (docs/release-workflow.md). ao-kit add
+# writes each app here; the smoke checks are yours to add to.
+apps:
+  user:
+    dockerfile: apps/user/Dockerfile
+    port: 3000
+    health: /
+    public: true
+  admin:
+    dockerfile: apps/admin/Dockerfile
+    port: 5173
+    health: /
+    public: true
+smoke:
+  - app: user
+    path: /
+    expect_status: 200
+    expect_text: <html
+  - app: admin
+    path: /
+    expect_status: 200
+    expect_text: <html

@@ -1,0 +1,24 @@
+{
+  "app": {
+    "title": "tungph7 codebase"
+  },
+  "nav": {
+    "home": "Trang chủ",
+    "products": "Sản phẩm",
+    "about": "Giới thiệu",
+    "login": "Đăng nhập",
+    "profile": "Hồ sơ"
+  },
+  "language": {
+    "label": "Ngôn ngữ"
+  },
+  "state": {
+    "loading": "Đang tải…"
+  },
+  "sidebar": {
+    "open": "Mở thanh bên",
+    "close": "Đóng thanh bên",
+    "content": "Nội dung thanh bên (demo client-state)."
+  },
+  "greeting": "Xin chào, {{name}}"
+}

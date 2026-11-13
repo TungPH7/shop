@@ -1,0 +1,8 @@
+{
+  "title": "Products",
+  "loading": "Loading products…",
+  "count_one": "{{count}} product",
+  "count_other": "{{count}} products",
+  "empty": "No products yet.",
+  "create": "Create product"
+}

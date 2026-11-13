@@ -1,0 +1,49 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# playwright (E2E, folder 24) — báo cáo + artifact do `playwright test` sinh ra (không commit)
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files — gitignore MỌI env thật (.env.development / .env.production / .env*.local…),
+# chỉ commit template .env.example. Next tự nạp .env.[NODE_ENV] theo lệnh dev/build/test.
+.env*
+!.env.example
+
+# vercel
+.vercel
+
+# typescript — next-env.d.ts do Next tự sinh lại mỗi lần build (không commit)
+*.tsbuildinfo
+next-env.d.ts

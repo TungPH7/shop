@@ -1,0 +1,7 @@
+# Stack skills of this project (agent-roster spec 2.7), from the profile base-pnpm. Each skill sits in .claude/skills/.
+roles:
+  fe-dev:
+    skills:
+      - vercel-react-best-practices
+      - user-conventions
+      - admin-conventions

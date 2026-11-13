@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+
+    /* Browser target + DOM libs. */
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+
+    /* Import locale JSON as typed modules (i18n: eager `common` + type-safe keys
+       via the i18next module augmentation). Vite handles JSON natively at runtime. */
+    "resolveJsonModule": true,
+
+    /* Path alias — MUST mirror resolve.alias in vite.config.ts.
+       No `baseUrl` (deprecated in TS 6); with moduleResolution "bundler"
+       `paths` resolve relative to this file. */
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src"]
+}

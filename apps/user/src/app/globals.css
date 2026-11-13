@@ -1,0 +1,96 @@
+/* Base style tối thiểu cho Phase 1.1. Design tokens (CSS-var, seam S4) ở
+   `~/styles/tokens.css` (folder 22) — file này TIÊU THỤ token semantic (vd var(--muted),
+   var(--surface)) nên đổi theme là cả app repaint. Engine Tailwind v4 (adapter) vẫn thuộc
+   Phase 1.2. `color-scheme` do next-themes quản theo theme (KHÔNG set ở đây — 1 chủ-sở-hữu). */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  /* Folder 20 — `--font-sans` do next/font (Inter, tự host) đặt qua class `sans.variable` trên <html>.
+     Fallback giữ nguyên: nếu vì lý do gì var trống thì vẫn rơi về font hệ thống (no FOIT). */
+  font-family:
+    var(--font-sans),
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+/* Folder 14 — seam S1 (Redux): mật độ danh sách = client-UI state. `DensityScope` áp `data-density`. */
+[data-density='comfortable'] li {
+  margin-block: 0.5rem;
+}
+[data-density='compact'] li {
+  margin-block: 0.15rem;
+  font-size: 0.9375rem;
+}
+
+/* Folder 14 — nuqs: chế độ xem = URL state (?view). `ViewScope` áp data-view. grid = lưới 2 cột. */
+[data-view='grid'] ul {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0;
+}
+
+/* Folder 20 — next/image. Hero (ảnh local, priority): width/height tường minh trong JSX giữ tỉ lệ;
+   class này cho responsive (rộng 100%, cao auto) mà KHÔNG gây layout-shift. */
+.hero-banner {
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+/* Card sản phẩm (<Image fill>): ô CỐ ĐỊNH tỉ lệ → trình duyệt giữ chỗ trước khi ảnh tải = 0 CLS.
+   `position:relative` BẮT BUỘC cho `fill`. Nền xám hiện trong lúc ảnh đang tải. */
+.product-thumb {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  aspect-ratio: 3 / 2;
+  margin-block: 0.25rem;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--muted);
+}
+.product-thumb img {
+  object-fit: cover;
+}
+
+/* Folder 20 — next/dynamic demo: modal phóng to ảnh (lazy-load khi bấm "Phóng to"). */
+.zoom-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 6, 23, 0.7);
+}
+.zoom-content {
+  max-width: 90vw;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--surface-foreground);
+}
+.zoom-img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}

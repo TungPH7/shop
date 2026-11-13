@@ -1,0 +1,44 @@
+# The pnpm workspace of Shop (ai-orchestrator, project-scaffold part 2): every app in apps/, one pnpm-lock.yaml for
+# the repo. pnpm 10 and later read their settings here too; ao-kit add merges in those of a template, such as allowBuilds.
+packages:
+  - apps/*
+# pnpm settings (pnpm 10+ đọc cấu hình ở pnpm-workspace.yaml, KHÔNG ở package.json).
+#
+# pnpm CHẶN MẶC ĐỊNH mọi build script của dependency (chống supply-chain: một
+# package độc hại có thể chạy code tuỳ ý lúc cài). Ta phải QUYẾT ĐỊNH TƯỜNG MINH
+# từng package: true = cho build, false = không build (vẫn cài, chỉ bỏ script).
+#
+# sharp = bộ tối ưu ảnh native Next.js. ⭐ Folder 20 (next/image) BẬT `sharp: true` để pnpm build
+# binary native → optimizer chạy được khi `next start` (tối ưu ảnh là việc RUNTIME theo từng request
+# tới /_next/image, KHÔNG phải lúc build; build vẫn xanh dù chưa có sharp). Folder 01 để false vì chưa
+# có ảnh nào.
+#
+# unrs-resolver = native module resolver (napi-rs), kéo vào GIÁN TIẾP qua
+# eslint-config-next (folder 03). Đã có sẵn prebuilt binary cho nền tảng này nên
+# KHÔNG cần chạy build script → false: ESLint vẫn resolve import bình thường
+# (đã verify `pnpm lint` xanh sau khi đặt false).
+allowBuilds:
+  sharp: true
+  unrs-resolver: false
+  # msw = mock network cho test (folder 05). Có install script (tạo worker cho trình
+  # duyệt) nhưng test ở Node dùng `msw/node` KHÔNG cần worker -> false.
+  msw: false
+  # esbuild = kéo vào GIÁN TIẾP qua vite/vitest (folder 05). Postinstall chỉ tải
+  # binary, mà binary đã có sẵn qua optional dep theo nền tảng -> false vẫn chạy.
+  esbuild: false
+  # @parcel/watcher + @swc/core = native, kéo GIÁN TIẾP qua next-intl 4.13 (folder 09).
+  # KHÔNG cần ở runtime: Next dùng SWC bundled riêng (không phải @swc/core standalone) +
+  # có watcher riêng; next-intl là JS precompiled → false (đã verify build/test xanh).
+  '@parcel/watcher': false
+  '@swc/core': false
+
+# --- Supply-chain cooldown allowlist ---
+# pnpm enforces a `minimumReleaseAge` cooldown that rejects packages published
+# very recently (the window in which a compromised version can be live before it
+# is yanked). We KEEP that protection on. But our version policy pins the latest
+# stable exact version, so a freshly-published — yet vetted — dev tool can sit
+# inside the window and block install / the pre-commit hook on an already-reviewed
+# lockfile entry. This allowlist fast-tracks packages we have explicitly reviewed.
+# Add an entry ONLY after confirming the pinned version is legitimate.
+minimumReleaseAgeExclude:
+  - lint-staged

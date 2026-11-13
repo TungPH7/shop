@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    /* Shared by every tsconfig. Per-env configs (app = browser, node = build
+       scripts) extend this and add only what differs: lib, jsx, paths, include. */
+
+    /* Modules — Vite/bundler resolves & transpiles; tsc only type-checks. */
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "moduleDetection": "force",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "useDefineForClassFields": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": [],
+
+    /* Strictness — "strictest" tier (well beyond `strict: true`). */
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "allowUnreachableCode": false,
+    "allowUnusedLabels": false,
+    "erasableSyntaxOnly": true,
+    "noUncheckedSideEffectImports": true
+  }
+}

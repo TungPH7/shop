@@ -1,0 +1,172 @@
+{
+  "Home": {
+    "metaTitle": "Nền tảng enterprise server-first",
+    "metaDescription": "Khám phá starter Next.js 16 chuẩn production: App Router, React Server Components, BFF, i18n, auth và SEO — xây từng bước.",
+    "heroAlt": "Ảnh bìa tungph7 codebase — nền tảng server-first Next.js 16",
+    "tagline": "Phase 1.1 — Nền tảng lõi server-first (không phụ thuộc UI).",
+    "currentLanguage": "Ngôn ngữ hiện tại (từ URL): {locale}",
+    "localesSupported": "{count, plural, other {Hỗ trợ # ngôn ngữ}}",
+    "apiUrlLabel": "API base URL (công khai):",
+    "environmentLabel": "Môi trường:",
+    "aboutLink": "Giới thiệu →",
+    "cachingLink": "Demo caching →",
+    "productsLink": "Sản phẩm →",
+    "errorDemoLink": "Demo xử lý lỗi →"
+  },
+  "About": {
+    "metaTitle": "Giới thiệu",
+    "metaDescription": "Tìm hiểu về codebase enterprise Next.js 16 server-first này và kiến trúc phía sau nó.",
+    "title": "Giới thiệu",
+    "description": "Route demo thứ hai trong route group (marketing).",
+    "backHome": "← Về trang chủ"
+  },
+  "Seo": {
+    "siteDescription": "Nền tảng enterprise server-first xây từ số 0 trên Next.js 16 — App Router, React Server Components, i18n type-safe và lõi không phụ thuộc UI.",
+    "ogImageTagline": "Nền tảng enterprise server-first",
+    "home": "Trang chủ"
+  },
+  "NotFound": {
+    "title": "404 — Không tìm thấy trang",
+    "description": "Trang bạn tìm không tồn tại hoặc đã được di chuyển."
+  },
+  "Error": {
+    "title": "Đã xảy ra lỗi",
+    "description": "Không thể hoàn tất yêu cầu. Nếu bạn vừa làm mới nhiều lần liên tiếp, backend demo có thể đang giới hạn tần suất — vui lòng đợi một lát rồi thử lại.",
+    "retry": "Thử lại"
+  },
+  "Validation": {
+    "too_short": "Vui lòng nhập ít nhất 2 ký tự.",
+    "too_long": "Giá trị quá dài.",
+    "required": "Trường này là bắt buộc.",
+    "invalid_email": "Email không hợp lệ.",
+    "invalid_phone": "Số điện thoại phải 9–15 ký tự (hoặc để trống).",
+    "invalid_url": "URL không hợp lệ (hoặc để trống).",
+    "password_too_short": "Mật khẩu phải có ít nhất 6 ký tự.",
+    "password_mismatch": "Mật khẩu xác nhận không khớp."
+  },
+  "LanguageSwitcher": {
+    "label": "Ngôn ngữ"
+  },
+  "Theme": {
+    "label": "Giao diện",
+    "light": "Sáng",
+    "dark": "Tối",
+    "system": "Hệ thống"
+  },
+  "Auth": {
+    "signIn": "Đăng nhập",
+    "signOut": "Đăng xuất",
+    "signedInAs": "Đã đăng nhập ({role})",
+    "loginTitle": "Đăng nhập",
+    "email": "Email",
+    "password": "Mật khẩu",
+    "submit": "Đăng nhập",
+    "submitting": "Đang đăng nhập…",
+    "credentials": "Email hoặc mật khẩu không đúng.",
+    "rateLimited": "Thử quá nhiều lần liên tiếp — vui lòng đợi một lát rồi thử lại.",
+    "unknown": "Đăng nhập thất bại. Vui lòng thử lại.",
+    "account": "Tài khoản"
+  },
+  "Account": {
+    "title": "Tài khoản của bạn",
+    "loading": "Đang tải tài khoản…",
+    "name": "Tên",
+    "email": "Email",
+    "role": "Vai trò",
+    "permissions": "Quyền",
+    "access": "Truy cập",
+    "canManageProducts": "Bạn có thể quản lý sản phẩm.",
+    "editProfile": "Sửa hồ sơ →"
+  },
+  "ProfileForm": {
+    "title": "Sửa hồ sơ",
+    "loading": "Đang tải hồ sơ…",
+    "name": "Tên",
+    "phoneNumber": "Số điện thoại",
+    "avatar": "URL ảnh đại diện",
+    "submit": "Lưu thay đổi",
+    "submitting": "Đang lưu…",
+    "saved": "Đã lưu hồ sơ.",
+    "authError": "Phiên đã hết hạn. Vui lòng đăng nhập lại.",
+    "unknownError": "Không lưu được. Vui lòng thử lại."
+  },
+  "ChangePasswordForm": {
+    "title": "Đổi mật khẩu",
+    "loading": "Đang tải…",
+    "password": "Mật khẩu hiện tại",
+    "newPassword": "Mật khẩu mới",
+    "confirmNewPassword": "Xác nhận mật khẩu mới",
+    "submit": "Đổi mật khẩu",
+    "submitting": "Đang đổi…",
+    "saved": "Đã đổi mật khẩu.",
+    "authError": "Phiên đã hết hạn. Vui lòng đăng nhập lại.",
+    "unknownError": "Không đổi được mật khẩu. Kiểm tra lại mật khẩu hiện tại rồi thử lại."
+  },
+  "Forbidden": {
+    "title": "403 — Từ chối truy cập",
+    "description": "Bạn đã đăng nhập, nhưng không có quyền xem trang này.",
+    "home": "← Về trang chủ"
+  },
+  "CachingDemo": {
+    "title": "Render & Caching (Cache Components)",
+    "intro": "Cùng một trang, hai nguồn data: một cái cache vào static shell, một cái render mỗi request rồi stream vào.",
+    "cachedTitle": "Data đã cache (use cache)",
+    "cachedHint": "Tạo lúc build/revalidate — đứng yên qua mỗi lần tải lại (cacheLife 'hours' + cacheTag).",
+    "liveTitle": "Data động (request-time)",
+    "liveHint": "Tạo mỗi request qua connection() — đổi mỗi lần tải; stream trong Suspense.",
+    "generatedAtLabel": "Tạo lúc:",
+    "loading": "Đang tải data động…",
+    "revalidateButton": "Revalidate cache",
+    "revalidateHint": "Gọi POST /api/revalidate → revalidateTag → mốc thời gian cache đổi."
+  },
+  "Products": {
+    "metaTitle": "Sản phẩm",
+    "metaDescription": "Duyệt sản phẩm được lấy phía server qua Data Access Layer, validate ở biên và cache để tối ưu hiệu năng.",
+    "title": "Sản phẩm",
+    "intro": "Lấy phía server qua Data Access Layer (BFF → backend NestJS), validate ở biên và cache.",
+    "empty": "Chưa có sản phẩm nào.",
+    "loading": "Đang tải sản phẩm…",
+    "searchLabel": "Tìm theo tên",
+    "searchPlaceholder": "vd. Áo",
+    "sortLabel": "Sắp xếp theo",
+    "orderLabel": "Thứ tự",
+    "applyLabel": "Áp dụng",
+    "sortCreatedAt": "Mới nhất",
+    "sortPrice": "Giá",
+    "sortSale": "Đang giảm",
+    "orderAsc": "Tăng dần",
+    "orderDesc": "Giảm dần",
+    "prev": "← Trước",
+    "next": "Sau →",
+    "pageInfo": "Trang {page}/{total}",
+    "density": "Mật độ",
+    "densityComfortable": "Thoáng",
+    "densityCompact": "Gọn",
+    "countTotal": "Tổng sản phẩm",
+    "countLoading": "Đang đếm…",
+    "countError": "Không tải được số lượng",
+    "countRefresh": "Làm mới số lượng",
+    "view": "Hiển thị",
+    "viewList": "Danh sách",
+    "viewGrid": "Lưới",
+    "refresh": "Làm mới sản phẩm",
+    "refreshed": "Đã làm mới lúc",
+    "rateLimited": "Làm mới quá nhiều lần liên tiếp — backend demo giới hạn số request mỗi phút. Vui lòng đợi khoảng một phút rồi làm mới lại.",
+    "zoom": "Phóng to",
+    "zoomClose": "Đóng",
+    "delete": "Xoá",
+    "deleteValidationError": "Sản phẩm không hợp lệ.",
+    "deleteAuthError": "Bạn cần đăng nhập (và có quyền) để xoá.",
+    "deleteUnknownError": "Không xoá được. Vui lòng thử lại."
+  },
+  "ErrorDemo": {
+    "title": "Demo xử lý lỗi",
+    "intro": "Mỗi liên kết kích hoạt một loại lỗi khác nhau để thấy ranh giới nào bắt nó (folder 17).",
+    "pickScenario": "Chọn một kịch bản ở trên.",
+    "linkNotFound": "Gọi notFound() →",
+    "linkThrow": "Ném lỗi bất ngờ →",
+    "linkExpected": "Mô phỏng lỗi dự kiến (Result) →",
+    "reset": "← Đặt lại",
+    "expectedNotice": "Lỗi dự kiến được xử lý tại chỗ bằng Result (RateLimitError) — trang vẫn hoạt động thay vì sập."
+  }
+}

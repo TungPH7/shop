@@ -1,0 +1,21 @@
+# Caddy inside the container of the app admin (ai-orchestrator, stack react): it serves the built files on :5173,
+# sends /api/* to the app api of the environment, and answers index.html for any other path, so the routes of the app
+# load from a link. Caddy of the VPS keeps HTTPS and basic auth in front of it. The name api is the same in every
+# environment, so one image serves all three; API_UPSTREAM changes it, as host:port.
+{
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:5173 {
+	encode gzip
+	handle /api/* {
+		reverse_proxy {$API_UPSTREAM:api:3001}
+	}
+	handle {
+		root * /srv
+		try_files {path} /index.html
+		file_server
+	}
+}
