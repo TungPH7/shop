@@ -200,10 +200,20 @@ export function copyTemplate({ from, ref, projectDir, app, exclude = [], git }) 
       written.push(`apps/${app}/${path}`);
     }
     if (pkg) writeFileSync(join(target, 'package.json'), `${JSON.stringify(pkg, null, 2)}\n`);
-    if (workspace) {
-      writeFileSync(rootWorkspace, workspace.text);
-      if (workspace.added.length > 0) notes.push(`pnpm-workspace.yaml at the root gained the settings of the template: ${workspace.added.join(', ')}`);
+    // The playwright-core of the repo follows its Playwright: a package such as @axe-core/playwright would pull a newer
+    // one when the lockfile is made again (Lượt 207, the user's Next.js template in shop).
+    const exact = /^\d+\.\d+\.\d+$/.test(root?.devDependencies?.[PLAYWRIGHT] ?? '') ? root.devDependencies[PLAYWRIGHT] : null;
+    let workspaceText = workspace?.text ?? (existsSync(rootWorkspace) ? readFileSync(rootWorkspace, 'utf8') : null);
+    if (exact && workspaceText !== null) {
+      const doc = parseDocument(workspaceText);
+      if (doc.getIn(['overrides', 'playwright-core']) !== exact) {
+        doc.setIn(['overrides', 'playwright-core'], exact);
+        workspaceText = String(doc);
+        notes.push(`pnpm-workspace.yaml at the root pins playwright-core to ${exact}, the Playwright of the repo`);
+      }
     }
+    if (workspaceText !== null && (workspace || exact)) writeFileSync(rootWorkspace, workspaceText);
+    if (workspace?.added.length > 0) notes.push(`pnpm-workspace.yaml at the root gained the settings of the template: ${workspace.added.join(', ')}`);
     if (files.includes('.nvmrc')) {
       const rootNvm = join(projectDir, '.nvmrc');
       const version = read('.nvmrc').trim();

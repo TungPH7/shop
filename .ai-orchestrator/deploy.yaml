@@ -4,8 +4,11 @@ apps:
   user:
     dockerfile: apps/user/Dockerfile
     port: 3000
-    health: /
+    # next-intl sends / to /en (localePrefix 'always'), and the smoke test does not follow a redirect.
+    health: /en
     public: true
+    # From /etc/ao/secrets/shop/<environment>.env: the server checks both when it starts.
+    env: [API_URL, AUTH_SECRET]
   admin:
     dockerfile: apps/admin/Dockerfile
     port: 5173
@@ -13,7 +16,7 @@ apps:
     public: true
 smoke:
   - app: user
-    path: /
+    path: /en
     expect_status: 200
     expect_text: <html
   - app: admin

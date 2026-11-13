@@ -6,7 +6,6 @@
     "tagline": "Phase 1.1 — Server-first core foundation (UI-agnostic).",
     "currentLanguage": "Current language (from URL): {locale}",
     "localesSupported": "{count, plural, one {# language supported} other {# languages supported}}",
-    "apiUrlLabel": "API base URL (public):",
     "environmentLabel": "Environment:",
     "aboutLink": "About →",
     "cachingLink": "Caching demo →",

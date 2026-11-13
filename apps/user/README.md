@@ -117,7 +117,6 @@ dự án (ngang hàng với `package.json`), tạo file tên `.env.development` 
 
 ```env
 API_URL=https://ecom-nest.t2g.io.vn
-NEXT_PUBLIC_API_URL=https://ecom-nest.t2g.io.vn
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 AUTH_SECRET=dev-only-not-a-real-secret-change-me-0123456789
 ```
@@ -205,8 +204,7 @@ lập tức** kèm thông báo rõ, thay vì lỗi mơ hồ lúc chạy.
 | Biến                   | Phạm vi    | Ý nghĩa                                                                                        |
 | ---------------------- | ---------- | ---------------------------------------------------------------------------------------------- |
 | `API_URL`              | **server** | URL backend cho DAL. Không lộ ra trình duyệt → nơi đặt URL nội bộ.                             |
-| `NEXT_PUBLIC_API_URL`  | public     | URL backend hiển thị phía client (bị nhúng vào bundle → **không bao giờ để secret**).          |
-| `NEXT_PUBLIC_SITE_URL` | public     | Origin công khai của chính site (không có `/` cuối) — nguồn cho canonical/hreflang/sitemap/OG. |
+| `NEXT_PUBLIC_SITE_URL` | public     | Origin công khai của chính site (không có `/` cuối) — nguồn cho canonical/hreflang/sitemap/OG. Mặc định là origin của Production. |
 | `AUTH_SECRET`          | **server** | Khoá niêm phong (mã hoá JWE) cookie phiên đăng nhập. **Tối thiểu 32 ký tự.**                   |
 
 **Next.js nạp file nào?**

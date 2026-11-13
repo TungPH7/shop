@@ -28,7 +28,6 @@ export default defineConfig({
     // lẫn fail. (Vitest KHÔNG tự nạp `.env.*` như Next → phải khai ở đây.)
     env: {
       API_URL: 'https://api.example.test',
-      NEXT_PUBLIC_API_URL: 'https://api.example.test',
       // Origin site cho test SEO (sitemap/robots/metadata helper đọc clientEnv.NEXT_PUBLIC_SITE_URL).
       NEXT_PUBLIC_SITE_URL: 'https://site.example.test',
       // ≥32 ký tự để qua validate AUTH_SECRET (folder 15). Test session-seal cũng dùng
@@ -45,6 +44,9 @@ export default defineConfig({
     restoreMocks: true,
     coverage: {
       provider: 'v8',
+      // The default reporters plus lcov: the CI of ai-orchestrator reads coverage/lcov.info to measure the lines a PR
+      // changes.
+      reporter: ['text', 'html', 'clover', 'json', 'lcov'],
       include: ['src/**/*.{ts,tsx}'],
       // ⭐ Loại trừ phần KHÔNG unit-test được có ý nghĩa → % phản ánh LOGIC đã test, không phải
       // boilerplate (triết lý Fowler/Google Testing: coverage tìm chỗ chưa test, KHÔNG phải điểm chất
@@ -54,7 +56,11 @@ export default defineConfig({
         'src/**/*.test.{ts,tsx}',
         'src/testing/**',
         'src/**/*.d.ts',
-        'src/app/**', // route shell/page/layout/handler/error/sitemap/robots/og — async RSC + Next conventions → E2E
+        // route shell/page/layout/error/sitemap/robots/og — async RSC + Next conventions → E2E. src/app/api/** stays in:
+        // a route handler is a plain function a unit test calls, and the CI of ai-orchestrator needs every file a PR
+        // changes in coverage/lcov.info (SHOP-1).
+        'src/app/*locale*/**',
+        'src/app/*.{ts,tsx}',
         'src/instrumentation.ts', // boot glue (nhánh E2E cover) — không unit-worthy
         'src/proxy.ts', // middleware next-intl — E2E cover (curl/Playwright)
       ],

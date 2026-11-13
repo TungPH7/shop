@@ -42,3 +42,6 @@ allowBuilds:
 # Add an entry ONLY after confirming the pinned version is legitimate.
 minimumReleaseAgeExclude:
   - lint-staged
+# One Playwright for the repo: a package such as @axe-core/playwright would pull a newer playwright-core.
+overrides:
+  playwright-core: 1.61.1

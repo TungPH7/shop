@@ -1,8 +1,8 @@
 import type { NextConfig } from 'next';
 import createNextIntlPlugin from 'next-intl/plugin';
 
-// ⭐ Validate env NGAY khi nạp config → `next build`/`next dev` FAIL SỚM nếu env
-// thiếu/sai (trước cả khi compile), thay vì lỗi mơ hồ lúc chạy (khuyến nghị t3-env).
+// ⭐ Validate env NGAY khi nạp config → `next dev` FAIL SỚM nếu env thiếu/sai (trước cả khi compile), thay vì lỗi mơ
+// hồ lúc chạy (khuyến nghị t3-env). The build script skips the check: see skipValidation in src/config/env/server.ts.
 import './src/config/env/server';
 
 // Security headers + CSP (folder 19). Import TƯƠNG ĐỐI (không `~`) — bộ biên dịch config của Next
@@ -17,6 +17,9 @@ import { buildSecurityHeaders } from './src/config/security-headers';
 const lowMemBuild = process.env.NEXT_BUILD_LOW_MEM === '1';
 
 const nextConfig: NextConfig = {
+  // The Dockerfile of ai-orchestrator runs .next/standalone: a server with only the modules it uses (SHOP-1).
+  output: 'standalone',
+
   // ⭐ Folder 10 — Cache Components: dynamic-by-default + opt-in cache (`use cache` /
   // `cacheLife` / `cacheTag`) + PPR (static shell + streaming). Cờ TOP-LEVEL (16.2.9 không
   // còn experimental; gộp ppr + dynamicIO + useCache thành một). Đánh đổi: static export &

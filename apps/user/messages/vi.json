@@ -6,7 +6,6 @@
     "tagline": "Phase 1.1 — Nền tảng lõi server-first (không phụ thuộc UI).",
     "currentLanguage": "Ngôn ngữ hiện tại (từ URL): {locale}",
     "localesSupported": "{count, plural, other {Hỗ trợ # ngôn ngữ}}",
-    "apiUrlLabel": "API base URL (công khai):",
     "environmentLabel": "Môi trường:",
     "aboutLink": "Giới thiệu →",
     "cachingLink": "Demo caching →",

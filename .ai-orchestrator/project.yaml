@@ -25,7 +25,7 @@ apps:
     port:
       env: PORT
       default: 3000
-    health: /
+    health: /en
     public: true
     hosts:
       development: shop-dev.ao.t2g.io.vn

@@ -29,7 +29,7 @@
     "@tanstack/react-query": "5.101.1",
     "@tanstack/react-query-devtools": "5.101.1",
     "jose": "6.2.3",
-    "next": "16.2.9",
+    "next": "16.4.6",
     "next-intl": "4.13.0",
     "next-themes": "0.4.6",
     "nuqs": "2.8.9",
@@ -39,7 +39,7 @@
     "react-hook-form": "7.80.0",
     "react-redux": "9.3.0",
     "server-only": "^0.0.1",
-    "zod": "4.4.3"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",
@@ -55,7 +55,7 @@
     "@vitest/coverage-v8": "4.1.9",
     "babel-plugin-react-compiler": "1.0.0",
     "eslint": "9.39.4",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "16.4.6",
     "eslint-config-prettier": "10.1.8",
     "eslint-import-resolver-typescript": "4.4.5",
     "eslint-plugin-check-file": "3.3.1",
