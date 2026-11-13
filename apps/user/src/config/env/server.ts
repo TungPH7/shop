@@ -38,8 +38,8 @@ export const env = createEnv({
     AUTH_SECRET: process.env.AUTH_SECRET,
   },
   emptyStringAsUndefined: true,
-  // `next build` has no secret: the deployer of ai-orchestrator builds one image for every environment and gives each
-  // its own secrets when the container starts. The first import of this file at run time checks them (SHOP-1).
-  skipValidation:
-    !!process.env.SKIP_ENV_VALIDATION || process.env.NEXT_PHASE === 'phase-production-build',
+  // The build script has no secret: the deployer of ai-orchestrator builds one image for every environment and gives
+  // each its own secrets when the container starts, and the first import of this file then checks them. pnpm names the
+  // script in npm_lifecycle_event, and the workers of `next build` inherit it (SHOP-1).
+  skipValidation: !!process.env.SKIP_ENV_VALIDATION || process.env.npm_lifecycle_event === 'build',
 });

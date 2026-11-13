@@ -38,8 +38,8 @@ test('the site URL defaults to the origin of Production, the same in every envir
   expect(clientEnv.NEXT_PUBLIC_SITE_URL).toBe('https://shop.ao.t2g.io.vn');
 });
 
-test('next build needs no secret: the server checks them when it starts', async () => {
-  vi.stubEnv('NEXT_PHASE', 'phase-production-build');
+test('the build script needs no secret: the server checks them when it starts', async () => {
+  vi.stubEnv('npm_lifecycle_event', 'build');
   vi.stubEnv('API_URL', '');
   vi.stubEnv('AUTH_SECRET', '');
   const { env } = await import('~/config/env/server');
