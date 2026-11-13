@@ -21,7 +21,9 @@ import { z } from 'zod';
 const envSchema = z.object({
   // Absolute http(s) URL of the backend API (see .env.development / .env.example).
   // `z.url()` is Zod 4's top-level URL format (`z.string().url()` is deprecated).
-  VITE_API_URL: z.url(),
+  // Or a path on this origin, `/api` by default: Caddy in the image of ai-orchestrator sends /api/* to the API of each
+  // environment, and the dev server does the same, so one build serves Development, Staging and Production (SHOP-1).
+  VITE_API_URL: z.union([z.url(), z.string().regex(/^\/(?!\/)/)]).default('/api'),
 });
 
 const parsed = envSchema.safeParse(import.meta.env);

@@ -38,6 +38,10 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    // PORT, as /ao-preview of ai-orchestrator sets it, and no other port when it is taken. /api/* goes to the API, as
+    // Caddy does in the image: API_URL, or the api app on this machine (SHOP-1).
+    port: Number(process.env['PORT'] ?? 5173),
+    strictPort: true,
+    proxy: { '/api': process.env['API_URL'] ?? 'http://localhost:3001' },
   },
 });
