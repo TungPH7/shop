@@ -1,9 +1,15 @@
 import { expect, test } from '@playwright/test';
 
+// On an environment (Development, Staging) the tests run against its URL, not the apps started here (SHOP-5).
+const isLocal = (url?: string) => url?.startsWith('http://localhost') === true;
+
 // E2E CÓ BACKEND (MSW-in-server, folder 24) — chứng minh render ASYNC Server Component của DAL, điều
 // unit/integration KHÔNG phủ được (async RSC chỉ E2E cover). Data đến từ store MSW chạy TRONG process
 // Next → toàn bộ đường BFF server-first (DAL `use cache` → http client → "backend") thực thi thật.
 test.describe('products (backend mock qua MSW-in-server)', () => {
+  // These tests need the MSW mock of the old NestJS product API, which only the apps started here have.
+  // The Epic Danh mục sản phẩm replaces them.
+  test.skip(({ baseURL }) => !isLocal(baseURL), 'reason: old product API mock (SHOP-5)');
   test('render danh sách sản phẩm fetch phía SERVER', async ({ page }) => {
     await page.goto('/en/products');
     await expect(page.getByRole('heading', { level: 1, name: 'Products' })).toBeVisible();

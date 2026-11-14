@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { defineConfig, devices, type Project } from '@playwright/test';
 import { parse } from 'yaml';
 
@@ -6,7 +7,8 @@ import { parse } from 'yaml';
 // .ai-orchestrator/project.yaml, so an app that ao-kit add brings needs no change here:
 // - each public app is a project of Playwright that runs the tests in <its path>/e2e/;
 // - the tests in e2e/ at the root go through the first public app;
-// - every app is started here with its dev command, on its port, until its health path answers.
+// - every app is started here with its dev command, on its port, until its health path answers; on an environment, only
+//   when a test is tagged @local (Pilot 3, T4), since an app may need Docker to start, such as a Spring Boot API.
 //
 // /ao-qa runs the same tests on Development or Staging: E2E_<APP>_URL is the URL of each public app there, such as
 // E2E_ADMIN_URL, and E2E_BASE_URL that of the first one. Tests tagged @local still run on the apps started here, since
@@ -42,6 +44,11 @@ function projectsOf(name: string, testDir: string, app: App, remote: string | un
   ];
 }
 
+// On an environment, the apps start here only for the tests tagged @local: no such test, no app to start.
+const onEnvironment = open.some(([name], i) => remoteUrl(name, i === 0) !== undefined);
+const specs = (dir: string) => (existsSync(dir) ? readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((path) => /\.spec\.[cm]?[jt]sx?$/.test(path)).map((path) => join(dir, path)) : []);
+const localTests = [...open.map(([, app]) => `${app.path}/e2e`), 'e2e'].flatMap(specs).some((file) => readFileSync(file, 'utf8').includes('@local'));
+
 const projects: Project[] = open.flatMap(([name, app], i) => projectsOf(name, `${app.path}/e2e`, app, remoteUrl(name, i === 0)));
 if (open.length > 0) projects.push(...projectsOf('shared', 'e2e', open[0][1], remoteUrl(open[0][0], true)));
 
@@ -52,7 +59,7 @@ export default defineConfig({
   reporter: 'list',
   use: { trace: 'on-first-retry' },
   projects,
-  webServer: apps.map(([, app]) => ({
+  webServer: (onEnvironment && !localTests ? [] : apps).map(([, app]) => ({
     command: app.dev,
     url: `${localUrl(app)}${app.health}`,
     reuseExistingServer: !process.env.CI,
