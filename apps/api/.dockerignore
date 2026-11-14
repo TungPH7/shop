@@ -58,7 +58,9 @@ docker-compose*.yml
 
 # --- Documentation ---
 *.md
-!README.md                    # giữ README chính (nếu bạn LABEL ARG đọc nó — optional)
+# giữ README chính (nếu bạn LABEL ARG đọc nó — optional). The comment sits on its own line: .dockerignore reads text
+# after a pattern as part of the pattern, and Docker 24 refuses one with letters outside ASCII.
+!README.md
 
 # --- Test data / backup ---
 docker/postgres/data/
