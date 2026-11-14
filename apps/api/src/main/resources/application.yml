@@ -57,7 +57,8 @@ spring:
     resources:
       add-mappings: false
 server:
-  port: "${SERVER_PORT:8080}"
+  # PORT, as for every app of the repo: /ao-preview and the deployer choose it; 3001 is where admin and user call api.
+  port: "${PORT:3001}"
   servlet:
     context-path: "/"
   forward-headers-strategy: "native"
