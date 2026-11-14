@@ -17,6 +17,10 @@ const REFUSED = [405, 409];
 // The account GitHub gives a GitHub App: its slug followed by [bot].
 export const botLogin = (slug) => `${slug}[bot]`;
 
+// The accounts merge-gate writes with: ao-merge, the only App the rulesets let merge without your approval (Pilot 3,
+// spec 2.9), and ao-dev, which merge-gate used before and still uses in a project with no ao-merge.
+const writers = (apps) => [apps.merge, apps.dev].filter(Boolean).map(botLogin);
+
 // Every open PR, oldest first: skipped, decided, and merged with the client `mergeClient()` gives when it meets every
 // condition, one line each. dryRun only prints, and never calls mergeClient. A merge GitHub refuses for now is a wait;
 // any other error is returned among the failures, and the run goes on. With `notify` ({ jira, mapping, space }), a PR
@@ -89,10 +93,10 @@ async function afterRelease({ writer, github, sha, tag, backMerge, log }) {
   log(`Opened #${number}: ${title}`);
 }
 
-// A merge back with a conflict: one comment of the ao-dev App per head commit, and no merge.
+// A merge back with a conflict: one comment of merge-gate per head commit, and no merge.
 async function tellConflict({ pr, github, getWriter, apps, dryRun, log }) {
   const marker = needsYouMarker(pr.head.sha, pr.number);
-  if ((await github.getAll(`/issues/${pr.number}/comments`)).some(({ body, user }) => user?.login === botLogin(apps.dev) && body?.startsWith(marker))) return;
+  if ((await github.getAll(`/issues/${pr.number}/comments`)).some(({ body, user }) => writers(apps).includes(user?.login) && body?.startsWith(marker))) return;
   if (dryRun) {
     log(`Would comment on #${pr.number}: ${marker}`);
     return;
@@ -131,7 +135,7 @@ export function needsYouText({ pr, paths, missing, gates }) {
 async function tellYou({ pr, decision, github, getWriter, notify, apps, gates, dryRun, log }) {
   const marker = needsYouMarker(pr.head.sha, pr.number);
   const text = needsYouText({ pr, ...decision, gates });
-  const onPr = (await github.getAll(`/issues/${pr.number}/comments`)).some(({ body, user }) => user?.login === botLogin(apps.dev) && body?.startsWith(marker));
+  const onPr = (await github.getAll(`/issues/${pr.number}/comments`)).some(({ body, user }) => writers(apps).includes(user?.login) && body?.startsWith(marker));
   if (!onPr) {
     if (dryRun) log(`Would comment on #${pr.number}: ${marker}`);
     else {
@@ -179,7 +183,15 @@ async function readMergeFacts(github, number, { docs, gates, apps }) {
     reviews: await github.getAll(`/pulls/${number}/reviews`),
     checks: await readChecks(github, pr.head.sha),
     docs: key && docs ? { ...(await readDocsFacts({ github, jira: docs.jira, key, branch: pr.head.ref })), passage: docs.passage } : undefined,
+    ...(isBackMerge(pr) && { tags: await releaseTags(github) }),
   };
+}
+
+// The tags vX.Y.Z of the repository and the commit each names. merge-gate and the hotfix step of ao-step make
+// lightweight tags; an annotated tag names a tag object, so it is left out rather than taken for a commit.
+export async function releaseTags(github) {
+  const refs = await github.getAll('/git/matching-refs/tags/v');
+  return refs.filter(({ ref, object }) => /^refs\/tags\/v\d+\.\d+\.\d+$/.test(ref) && object?.type === 'commit').map(({ ref, object }) => ({ name: ref.slice('refs/tags/'.length), sha: object.sha }));
 }
 
 function describe(number, { action, reason, missing, paths, docs, note, base }, gates) {
@@ -193,15 +205,30 @@ function describe(number, { action, reason, missing, paths, docs, note, base }, 
 // The PR of a release branch into main.
 const isReleasePr = (pr) => parseBranch(pr.head.ref)?.kind === 'release' && pr.base.ref === 'main';
 
-// A PR that merges main back: its head is main of this very repository, not a branch of that name in a fork.
-export const isBackMerge = (pr) => pr.head.ref === 'main' && Boolean(pr.head.repo?.full_name) && pr.head.repo.full_name === pr.base.repo?.full_name;
+// The head and the base of a PR are branches of this very repository, not of a fork.
+const sameRepo = (pr) => Boolean(pr.head.repo?.full_name) && pr.head.repo.full_name === pr.base.repo?.full_name;
 
-// Why merge-gate leaves a PR alone, from what the list of open PRs gives too; undefined when it does not.
+// A PR that merges main back: its head is main of this very repository, not a branch of that name in a fork.
+export const isBackMerge = (pr) => pr.head.ref === 'main' && sameRepo(pr);
+
+// The version of the PR of a release report (Pilot 3, spec 2.9): release-notes/vX.Y.Z into release/vX.Y.Z of this very
+// repository, which /ao-ship opens as ao-dev. null for any other PR.
+export function notesVersion(pr) {
+  const version = pr.head.ref.match(/^release-notes\/v(\d+\.\d+\.\d+)$/)?.[1];
+  return version && pr.base.ref === `release/v${version}` && sameRepo(pr) ? version : null;
+}
+
+// The only files the PR of a release report changes: the report and the changelog of its version.
+export const notesPaths = (version) => [`docs/releases/v${version}.md`, 'CHANGELOG.md'];
+
+// Why merge-gate leaves a PR alone, from what the list of open PRs gives too; undefined when it does not. merge-gate
+// opens a merge back with ao-merge, and the hotfix step of ao-step with ao-dev; every other PR it merges ao-dev opened.
 function skipReason(pr, apps, gates) {
   if (pr.state !== 'open') return 'the PR is not open';
-  if (pr.user?.login !== botLogin(apps.dev)) return `opened by ${pr.user?.login}, not by ${apps.dev}: whoever opened it merges it`;
+  const openers = isBackMerge(pr) ? writers(apps) : [botLogin(apps.dev)];
+  if (!openers.includes(pr.user?.login)) return `opened by ${pr.user?.login}, not by ${apps.dev}: whoever opened it merges it`;
   if (pr.draft) return 'the PR is a draft';
-  if (isReleasePr(pr)) return undefined;
+  if (isReleasePr(pr) || notesVersion(pr)) return undefined;
   if (isBackMerge(pr)) {
     const bases = gates.release_pull_requests.back_merge_bases;
     return bases.some((glob) => matchesGlob(glob, pr.base.ref)) ? undefined : `main merges back only into ${bases.join(' or ')}`;
@@ -224,7 +251,8 @@ function skipReason(pr, apps, gates) {
 //   { action: 'skip', reason }                              not a PR merge-gate merges
 // The merge of a release PR also carries `release: { tag, backMerge }`, what merge-gate does after it.
 // `space`, when given, is the project space: the docs branch of an Epic outside it is reviewed like any PR.
-export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, approvers, docs, space }) {
+// `tags`, for a merge back: the release tags of the repository, [{ name, sha }], as releaseTags reads them.
+export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, approvers, docs, space, tags = [] }) {
   const reason = skipReason(pr, apps, gates);
   if (reason) return skip(reason);
   // null means GitHub has not worked it out yet; the merge call itself refuses a conflict.
@@ -239,10 +267,26 @@ export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, 
     if (missing.length > 0) return { action: 'wait', missing };
     return { ...keep, release: { tag: release.tag.replace('<VERSION>', parseBranch(pr.head.ref).version), backMerge: release.back_merge_after_release } };
   }
-  // Every commit of main passed gate ③ or gate ⑤ already.
+  // What main brings back is a version you shipped: its head is the commit of a release tag, which merge-gate puts on
+  // the merge of a release PR you approved at gate ⑤, and the hotfix step on a hotfix you shipped (Pilot 3, spec 2.9).
+  // A commit that reached main any other way waits here, instead of flowing into develop on CI alone.
   if (isBackMerge(pr)) {
     if (pr.mergeable === false) return { action: 'conflict', base: pr.base.ref };
-    return checks.green ? keep : { action: 'wait', missing: [`CI green ${at}`] };
+    const missing = [
+      ...((tags ?? []).some(({ sha }) => sha === pr.head.sha) ? [] : [`a release tag vX.Y.Z ${at}: main merges back only once its head is a version you shipped`]),
+      ...(checks.green ? [] : [`CI green ${at}`]),
+    ];
+    return missing.length > 0 ? { action: 'wait', missing } : keep;
+  }
+  // The release report of /ao-ship: no review and no approval, since it holds only the report and the changelog that
+  // devops and qa wrote; any other file makes it yours, a renamed file by its old name too.
+  const notes = notesVersion(pr);
+  if (notes) {
+    const allowed = notesPaths(notes);
+    const beyond = [...new Set(files.flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename])))].filter((path) => !allowed.includes(path));
+    if (beyond.length > 0) return { action: 'needs-you', paths: beyond, missing: [] };
+    const missing = [...(checks.green ? [] : [`CI green ${at}`]), ...conflicts];
+    return missing.length > 0 ? { action: 'wait', missing } : { action: 'merge', method: 'squash', sha: pr.head.sha, title: `${pr.title} (#${pr.number})` };
   }
   const merge = { action: 'merge', method: gates.merge_method[parseBranch(pr.head.ref).kind], sha: pr.head.sha, title: pr.title, body: squashBody(commits) };
 

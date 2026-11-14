@@ -11,6 +11,8 @@ const fromProject = (config) => ({
   AO_DEV_APP_ID: String(config.github.apps.dev_id),
   AO_REVIEW_APP: config.github.apps.review,
   AO_REVIEW_APP_ID: String(config.github.apps.review_id),
+  // merge-gate's own App (Pilot 3, spec 2.9), when the project has one.
+  ...(config.github.apps.merge && { AO_MERGE_APP: config.github.apps.merge, AO_MERGE_APP_ID: String(config.github.apps.merge_id) }),
   ...(config.github.kit_peers?.length > 0 && { AO_KIT_PEERS: config.github.kit_peers.join(',') }),
 });
 

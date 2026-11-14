@@ -7,12 +7,11 @@ import { extractKeys, parseBranch } from '../tracker/conventions.mjs';
 import { adfText, readChecks } from '../tracker/facts.mjs';
 import { raiseFlag } from '../tracker/sync.mjs';
 import { docsPullRequest, readDocsFacts } from './docs-pr.mjs';
-import { matchesGlob } from './glob.mjs';
-import { approved, botLogin, docsUnmet, docsVerdict, isBackMerge, protectedPaths, unmetConditions } from './merge-gate.mjs';
+import { approved, botLogin, docsUnmet, docsVerdict, isBackMerge, notesPaths, notesVersion, protectedPaths, releaseTags, unmetConditions } from './merge-gate.mjs';
 
-// The only files the ao-dev bot may change on a release branch without a PR: the regression report and the changelog
-// the script of /ao-ship commits (release-workflow spec 2.7 step 4). Both lie outside the image.
-export const RELEASE_BOT_PATHS = ['docs/releases/**', 'CHANGELOG.md'];
+// Who may merge a PR that needs no approval of yours, a merge back or the release report: merge-gate, with ao-merge
+// (Pilot 3, spec 2.9) or, in a project with no ao-merge yet, ao-dev; or you.
+const mergers = (apps, approvers) => [...[apps.merge, apps.dev].filter(Boolean).map(botLogin), ...approvers];
 
 // The merged PR whose merge commit is `sha`, into `branch`; for a release branch also into develop, since a new
 // release branch is cut from a commit of develop. A PR that only contains the commit is not its merge.
@@ -21,43 +20,47 @@ export function mergedPull(pulls, sha, branch) {
   return pulls.find((pr) => pr.merged_at && pr.merge_commit_sha === sha && bases.includes(pr.base.ref));
 }
 
-// facts: the commit `sha` and its `message`, the `branch` it is deployed from, `commit` ({ author, committer, parents,
-// files } of the commit itself: the two logins GitHub links, the number of parents, the changed files), `pull` (GET
-// /pulls/{n} of the PR mergedPull found, or null), that PR's `files`, `reviews` and the `checks` of its head commit,
-// the `gates`, the slugs of the two `apps`, your logins (`approvers`), and for a docs PR its `docs` facts as merge-gate
+// facts: the commit `sha` and its `message`, the `branch` it is deployed from, `pull` (GET /pulls/{n} of the PR
+// mergedPull found, or null), that PR's `files`, `reviews` and the `checks` of its head commit, the `gates`, the slugs
+// of the `apps` (dev, review, and merge when the project has it), your logins (`approvers`), and for a docs PR its `docs` facts as merge-gate
 // reads them. Returns { ok, pr, problems, keys }: keys are the work items to flag, from the PR title, or from the commit
-// header when there is no PR. A docs PR passes on the terms merge-gate merged it on (dev-workflow spec 2.4).
-export function decideAudit({ sha, branch, message, commit, pull, files = [], reviews = [], checks, gates, apps, approvers, docs, space }) {
+// header when there is no PR. A docs PR passes on the terms merge-gate merged it on (dev-workflow spec 2.4). `tags`, for a
+// merge back: the release tags of the repository, [{ name, sha }], as releaseTags reads them.
+export function decideAudit({ sha, branch, message, pull, files = [], reviews = [], checks, gates, apps, approvers, docs, space, tags = [] }) {
   const short = sha.slice(0, 7);
-  if (!pull) {
-    const keys = extractKeys(message.split('\n', 1)[0]);
-    const bot = botLogin(apps.dev);
-    if (parseBranch(branch)?.kind === 'release' && commit?.author === bot && commit.committer === bot && commit.parents === 1) {
-      // The release report of /ao-ship. Whoever holds the token of ao-dev, an agent included, can change nothing the
-      // image holds this way; a file moved away counts by its old path too.
-      const outside = changedPaths(commit.files).filter((path) => !RELEASE_BOT_PATHS.some((glob) => matchesGlob(glob, path)));
-      if (commit.files.length > 0 && outside.length === 0) return result(null, [], keys);
-      const changes = outside.length > 0 ? outside.join(', ') : 'no file';
-      return result(null, [`${short} on ${branch} is a commit of ${bot} without a PR, which may only change ${RELEASE_BOT_PATHS.join(' and ')}, but it changes ${changes}`], keys);
-    }
-    return result(null, [`${short} on ${branch} is not the merge of a PR into ${branch}: it was pushed without one`], keys);
-  }
+  // Every commit comes through a PR. The release report of /ao-ship did not, before Pilot 3, spec 2.9: whoever held the
+  // token of ao-dev, an agent included, could change the release notes that way.
+  if (!pull) return result(null, [`${short} on ${branch} is not the merge of a PR into ${branch}: it was pushed without one`], extractKeys(message.split('\n', 1)[0]));
   const keys = extractKeys(pull.title ?? '');
   if (mergedPull([pull], sha, branch) !== pull) return result(pull.number, [`PR #${pull.number} was merged into ${pull.base.ref}, not ${branch}`], keys);
 
   const problems = [];
   let missing;
+  const merger = pull.merged_by?.login;
+  const at = `on head ${pull.head.sha.slice(0, 7)}`;
+  const notes = notesVersion(pull);
   if (isBackMerge(pull)) {
-    // Every commit of main passed gate ③ or gate ⑤ there: no review and no approval (release-workflow spec 2.7).
-    // merge-gate merges it only without conflicts, so the merge commit adds nothing of its own.
-    missing = checks.green ? [] : [`CI green on head ${pull.head.sha.slice(0, 7)}`];
-    const merger = pull.merged_by?.login;
-    if (merger !== botLogin(apps.dev) && !approvers.includes(merger)) {
+    // Every commit of main passed gate ③ or gate ⑤ there: no review and no approval (release-workflow spec 2.7), once
+    // its head is a version you shipped, a commit a release tag names (Pilot 3, spec 2.9). merge-gate merges it only
+    // without conflicts, so the merge commit adds nothing of its own.
+    missing = [
+      ...(checks.green ? [] : [`CI green ${at}`]),
+      ...((tags ?? []).some((tag) => tag.sha === pull.head.sha) ? [] : [`a release tag vX.Y.Z ${at}`]),
+    ];
+    if (!mergers(apps, approvers).includes(merger)) {
       problems.push(`PR #${pull.number} merges main back into ${pull.base.ref}, which merge-gate or you merge, but ${merger} merged it`);
     }
+  } else if (notes) {
+    // The release report (Pilot 3, spec 2.9), on the terms merge-gate merges it on: ao-dev opened it, it changes only the
+    // report and the changelog of its version, a file moved away by its old path too, and CI passed.
+    missing = checks.green ? [] : [`CI green ${at}`];
+    const allowed = notesPaths(notes);
+    const beyond = changedPaths(files).filter((path) => !allowed.includes(path));
+    if (beyond.length > 0) problems.push(`PR #${pull.number} is the report of v${notes}, which may only change ${allowed.join(' and ')}, but it changes ${beyond.join(', ')}`);
+    if (pull.user?.login !== botLogin(apps.dev)) problems.push(`PR #${pull.number} is the report of v${notes}, which ao-dev opens, but ${pull.user?.login} opened it`);
+    if (!mergers(apps, approvers).includes(merger)) problems.push(`PR #${pull.number} is the report of v${notes}, which merge-gate or you merge, but ${merger} merged it`);
   } else if (parseBranch(pull.head.ref)?.kind === 'release') {
     // Every item of a release passed review on its own PR: CI and your approval are enough.
-    const at = `on head ${pull.head.sha.slice(0, 7)}`;
     missing = [
       ...(checks.green ? [] : [`CI green ${at}`]),
       ...(approved({ pr: pull, reviews, approvers, authorApproves: true }) ? [] : [`approval ${at}`]),
@@ -70,7 +73,6 @@ export function decideAudit({ sha, branch, message, commit, pull, files = [], re
       if (verdict && missing.length > 0) missing[missing.length - 1] += ` (${verdict.reason})`;
     }
     const paths = protectedPaths(files, gates);
-    const merger = pull.merged_by?.login;
     if (paths.length > 0 && !approvers.includes(merger)) problems.push(`PR #${pull.number} changes ${paths.join(', ')}, which only you merge, but ${merger} merged it`);
   }
   if (missing.length > 0) problems.unshift(`PR #${pull.number} was merged without: ${missing.join('; ')}`);
@@ -92,8 +94,7 @@ export async function runAudit({ github, jira, docs, mapping, space, sha, branch
   const decision = decideAudit({ sha, branch, ...facts, gates, apps, approvers, space });
   const short = facts.sha.slice(0, 7);
   if (decision.ok) {
-    const what = decision.pr ? `the merge of PR #${decision.pr}${docsKey ? `, the docs PR of ${docsKey}` : ''}, which met every gate` : `a commit of ${botLogin(apps.dev)} that only changes ${RELEASE_BOT_PATHS.join(' and ')}`;
-    log(`audit passed: ${short} on ${branch} is ${what}`);
+    log(`audit passed: ${short} on ${branch} is the merge of PR #${decision.pr}${docsKey ? `, the docs PR of ${docsKey}` : ''}, which met every gate`);
     return { ...decision, flagged: [] };
   }
   log(`audit failed: ${short} on ${branch}`);
@@ -127,14 +128,8 @@ export async function runAudit({ github, jira, docs, mapping, space, sha, branch
 export async function readAuditFacts({ github, docs, sha, branch, gates, apps, space }) {
   const found = await github.get(`/commits/${sha}`);
   const full = found.sha ?? sha;
-  const commit = {
-    author: found.author?.login ?? null,
-    committer: found.committer?.login ?? null,
-    parents: found.parents?.length ?? 0,
-    files: found.files ?? [],
-  };
   const listed = mergedPull(await github.getAll(`/commits/${full}/pulls`), full, branch);
-  if (!listed) return { facts: { sha: full, message: found.commit.message, commit, pull: null }, docsKey: null };
+  if (!listed) return { facts: { sha: full, message: found.commit.message, pull: null }, docsKey: null };
   // Only the PR itself says who merged it.
   const pull = await github.get(`/pulls/${listed.number}`);
   const files = await github.getAll(`/pulls/${pull.number}/files`);
@@ -142,12 +137,13 @@ export async function readAuditFacts({ github, docs, sha, branch, gates, apps, s
   const facts = {
     sha: full,
     message: found.commit.message,
-    commit,
     pull,
     files,
     reviews: await github.getAll(`/pulls/${pull.number}/reviews`),
     checks: await readChecks(github, pull.head.sha),
     docs: docsKey && docs ? { ...(await readDocsFacts({ github, jira: docs.jira, key: docsKey, branch: pull.head.ref })), passage: docs.passage } : undefined,
+    // A merge back passes once the head of main it merged was a version you shipped (Pilot 3, spec 2.9).
+    ...(isBackMerge(pull) && { tags: await releaseTags(github) }),
   };
   return { facts, docsKey };
 }

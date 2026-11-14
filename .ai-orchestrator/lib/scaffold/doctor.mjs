@@ -43,8 +43,15 @@ export function doctor(facts) {
   const java = facts.java ?? [];
   for (const { app, want, jdk } of java) row('Machine', `JDK ${want} for ${app}`, Boolean(jdk), jdkMissing(want));
   if (java.length > 0) row('Machine', 'Docker is running', facts.docker?.running === true, 'Start Docker Desktop, then run doctor again: the Testcontainers of the Java tests and the database of /ao-preview need it');
+  // Keys that must not stay where agents run (Pilot 3, spec 2.9): an agent runs as your Windows user and reads what you
+  // read. The key of ao-merge lives only in the merge-gate environment; the age identity, in your password manager.
+  const stray = facts.strayKeys ?? { merge: [], age: [] };
+  row('Machine', 'no key of ao-merge on this machine', stray.merge.length === 0, `Delete ${stray.merge.join(', ')}: GitHub holds the key of ao-merge in the merge-gate environment, and no machine an agent uses should`);
+  row('Machine', 'no age identity of the backups on this machine', stray.age.length === 0, `Keep the identity in your password manager, then delete ${stray.age.join(', ')}; to restore, paste it into ao-backup-pull.mjs decrypt --identity - (docs/vps-setup.md section 16)`);
   // The backup copies this machine pulls (Pilot 3, spec 2.4): a row only on a machine set up to pull them.
-  if (facts.backupCopies) {
+  if (facts.backupCopies?.broken) {
+    row('Machine', `backup copies of ${config?.name} on this machine are at most 36 h old`, false, `${facts.backupCopies.broken}: run node <kit>/scripts/ao-backup-pull.mjs install --host <ssh host> --dest <folder> again, which writes it (docs/vps-setup.md section 16)`);
+  } else if (facts.backupCopies) {
     const mine = facts.backupCopies.filter(({ project }) => project === config?.name);
     const old = mine.filter(({ hours }) => hours > 36);
     const pull = 'run node <kit>/scripts/ao-backup-pull.mjs pull --host <ssh host> --dest <folder>, and see docs/vps-setup.md section 16';
@@ -74,7 +81,12 @@ export function doctor(facts) {
   const gh = facts.github;
   row('GitHub', 'default branch develop', gh.defaultBranch === 'develop', 'ao-kit setup github <dir>, once develop is on GitHub');
   row('GitHub', `environments ${ENVIRONMENTS.join(', ')}`, ENVIRONMENTS.every((name) => gh.environments.includes(name)), 'ao-kit setup github <dir>');
-  row('GitHub', 'secrets JIRA_CI_TOKEN, and AO_DEV_APP_KEY of merge-gate', gh.secrets.includes('JIRA_CI_TOKEN') && gh.envSecrets.includes('AO_DEV_APP_KEY'), 'ao-kit setup github <dir> --dev-app-key-file <second key of ao-dev>');
+  // merge-gate merges with ao-merge, the only App the rulesets let merge without your approval (Pilot 3, spec 2.9).
+  if (config?.github?.apps?.merge) {
+    row('GitHub', 'secrets JIRA_CI_TOKEN, and AO_MERGE_APP_KEY of merge-gate', gh.secrets.includes('JIRA_CI_TOKEN') && gh.envSecrets.includes('AO_MERGE_APP_KEY'), 'ao-kit setup github <dir> --merge-app-key-file <the key of ao-merge>, then delete the key file');
+  } else {
+    row('GitHub', 'the ao-merge App, the only one the rulesets let merge without your approval', false, 'node <kit>/scripts/github-app-create.mjs --owner <you> --repo <repo> --apps merge (docs/github-apps-setup.md); write its slug and id as github.apps.merge and merge_id in project.yaml; then ao-kit setup github <dir> --merge-app-key-file <the key>, and delete the key file');
+  }
   for (const kind of ['dev', 'review']) {
     const app = facts.apps[kind];
     row('GitHub', `ao-${kind} installed on ${repo}`, app.ok, `${app.reason ?? 'no token'}: install the App on the repo (docs/getting-started.md)`);

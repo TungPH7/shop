@@ -23,6 +23,15 @@ export const APPS = {
     description: 'Deploys the commits that passed the ai-orchestrator gates, from the VPS.',
     permissions: { contents: 'read', pull_requests: 'read', checks: 'read', statuses: 'read', actions: 'read', deployments: 'write' },
   },
+  // merge-gate's own App (Pilot 3, review of shop PR #13): the rulesets let only it merge a PR without your approval, so
+  // its key lives only in the merge-gate environment of the repository, never on a machine where an agent runs. It
+  // merges, tags and opens the back-merge; workflows, to merge a PR that changes a workflow file. merge-gate reads with
+  // the workflow token.
+  merge: {
+    suffix: 'ao-merge',
+    description: 'Merges the pull requests that pass the ai-orchestrator gates, from GitHub Actions only.',
+    permissions: { contents: 'write', pull_requests: 'write', workflows: 'write' },
+  },
 };
 
 // One App: installable only on your account, no webhook (GitHub still wants its URL), no user sign-in. GitHub comes back

@@ -23,6 +23,9 @@ No agent runs here (human-loop spec 4.3).
   delete such a file yourself.
 - On STOP, tell the human the reason and the command or clicks it names, in Vietnamese, and stop. When the check
   prints a sample of the apps of `project.yaml`, show it as it is.
+- When the check prints neither STOP nor GO but a state, such as `The preview of <KEY> runs on <branch>: …` or
+  `No preview runs.`, followed by `Next:`, nothing is wrong: tell the human, in Vietnamese, what runs and its URLs, and
+  the `Next:` command, and stop. Run nothing yourself.
 - On GO, run `node .ai-orchestrator/scripts/ao-step.mjs preview $0 --go` with the Bash tool, with a timeout of
   600000 ms, and wait for it. It puts the project folder on the PR branch, runs `npm ci` when the lockfile changed,
   and starts the apps, which keep running after it ends. Do not start, stop or change anything yourself.

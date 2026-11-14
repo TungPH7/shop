@@ -35,7 +35,7 @@ try {
   const repo = values.repo ?? process.env.GITHUB_REPOSITORY ?? originRepo(projectDir);
   if (!repo) throw new Error('Set GITHUB_REPOSITORY, pass --repo <owner>/<name>, or run audit in a clone whose origin is on GitHub');
   const settings = projectSettings(projectDir);
-  const apps = { dev: setting('AO_DEV_APP', settings), review: setting('AO_REVIEW_APP', settings) };
+  const apps = { dev: setting('AO_DEV_APP', settings), review: setting('AO_REVIEW_APP', settings), merge: setting('AO_MERGE_APP', settings) };
   if (!apps.dev || !apps.review) throw new Error('Set AO_DEV_APP and AO_REVIEW_APP, the slugs of the two GitHub Apps, in .claude/settings.json');
   const approvers = (setting('AO_APPROVERS', settings) ?? '').split(',').map((login) => login.trim()).filter(Boolean);
   if (approvers.length === 0) log('Warning: AO_APPROVERS is not set, so no PR counts as approved by you');

@@ -36,7 +36,7 @@ import { withLoggedSession } from '../lib/workflow/runs.mjs';
 import { gatherFacts, readRunning } from '../lib/workflow/facts.mjs';
 import { basicAuthEnv, qaFollowUp } from '../lib/workflow/qa.mjs';
 import { releaseCutChanges } from '../lib/release/release-cut.mjs';
-import { changelogWith } from '../lib/release/release-pr.mjs';
+import { changelogWith, notesPullRequest, waitForMerge } from '../lib/release/release-pr.mjs';
 import { requestDeploy } from '../lib/release/deploy-request.mjs';
 import { adfText, buildReviewPack, filesToQuote } from '../lib/workflow/review-pack.mjs';
 import { postKitCopyReports, readKitCopy, renderedReason } from '../lib/workflow/kit-copy.mjs';
@@ -585,11 +585,12 @@ async function contentOf(github, path, branch) {
   }
 }
 
-// /ao-ship vX.Y.0, its last step (release-workflow spec 2.7, steps 4 and 5): as the ao-dev App, one commit on the release
-// branch with the regression report as docs/releases/<version>.md and the section of the release in CHANGELOG.md, then
-// the check that the branch changed nothing else since the regression, then the release PR into main. The commit names
-// the bot as author and committer, as audit's rule for the release report wants. Run again, it commits nothing new and
-// opens no second PR.
+// /ao-ship vX.Y.0, its last step (release-workflow spec 2.7, steps 4 and 5; Pilot 3, spec 2.9): as the ao-dev App, one
+// commit with the regression report as docs/releases/<version>.md and the section of the release in CHANGELOG.md, on
+// release-notes/<version> cut from the release branch, and its PR into the release branch, which merge-gate merges with
+// ao-merge: the rulesets let no App push to release/* any more. Once it is merged, the check that the release branch
+// changed nothing else since the regression, then the release PR into main. It waits up to 15 minutes for merge-gate,
+// then stops with what it waits for; run again, it commits nothing new and opens no second PR.
 async function releasePr({ version, branch, regression }, { repo, settings }) {
   const [report, section, body] = ['regression-report.md', 'changelog.md', 'pr-description.md'].map((name) => readRunFile(version, name));
   if (!report || !section || !body) throw new Error(`.ai/runs/${version}/ lacks the regression report or the notes of devops`);
@@ -599,18 +600,40 @@ async function releasePr({ version, branch, regression }, { repo, settings }) {
   const github = createGitHubClient({ repo, token, write: true });
   const bot = await botIdentity({ slug, token });
   const notes = [];
-  const head = (await github.get(`/git/ref/heads/${branch}`)).object.sha;
   const reportPath = `docs/releases/${version}.md`;
   const current = await contentOf(github, 'CHANGELOG.md', branch);
   const changelog = changelogWith(current, section, version);
   if (changelog !== current || report !== (await contentOf(github, reportPath, branch))) {
-    const { tree } = await github.get(`/git/commits/${head}`);
-    const files = [{ path: reportPath, content: report }, { path: 'CHANGELOG.md', content: changelog }].map((file) => ({ ...file, mode: '100644', type: 'blob' }));
-    const made = await github.request('POST', '/git/trees', undefined, { base_tree: tree.sha, tree: files });
-    const signed = { ...bot, date: new Date().toISOString() };
-    const commit = await github.request('POST', '/git/commits', undefined, { message: `docs(release): add the regression report and the changelog of ${version}`, tree: made.sha, parents: [head], author: signed, committer: signed });
-    await github.request('PATCH', `/git/refs/heads/${branch}`, undefined, { sha: commit.sha, force: false });
-    notes.push(`Committed ${reportPath} and CHANGELOG.md on ${branch} as ${bot.name}: ${commit.sha.slice(0, 8)}.`);
+    const want = notesPullRequest(version);
+    let pr = (await github.getAll('/pulls', { state: 'open', base: branch })).find((open) => open.head.ref === want.head);
+    if (pr) notes.push(`PR #${pr.number} of the release report into ${branch} is open already.`);
+    else {
+      const head = (await github.get(`/git/ref/heads/${branch}`)).object.sha;
+      const { tree } = await github.get(`/git/commits/${head}`);
+      const files = [{ path: reportPath, content: report }, { path: 'CHANGELOG.md', content: changelog }].map((file) => ({ ...file, mode: '100644', type: 'blob' }));
+      const made = await github.request('POST', '/git/trees', undefined, { base_tree: tree.sha, tree: files });
+      const signed = { ...bot, date: new Date().toISOString() };
+      const commit = await github.request('POST', '/git/commits', undefined, { message: `docs(release): add the regression report and the changelog of ${version}`, tree: made.sha, parents: [head], author: signed, committer: signed });
+      // The branch belongs to the report alone: a run that needs it again makes it again from the release branch.
+      try {
+        await github.request('POST', '/git/refs', undefined, { ref: `refs/heads/${want.head}`, sha: commit.sha });
+      } catch (error) {
+        if (error.status !== 422) throw error;
+        await github.request('PATCH', `/git/refs/heads/${want.head}`, undefined, { sha: commit.sha, force: true });
+      }
+      pr = await github.request('POST', '/pulls', undefined, { title: want.title, head: want.head, base: branch, body: want.body });
+      notes.push(`Committed ${reportPath} and CHANGELOG.md on ${want.head} as ${bot.name} (${commit.sha.slice(0, 8)}), and opened PR #${pr.number} into ${branch}.`);
+    }
+    const outcome = await waitForMerge(() => github.get(`/pulls/${pr.number}`));
+    if (outcome === 'closed') {
+      notes.push(`PR #${pr.number} of the release report was closed without a merge: read why on GitHub, then run /ao-ship ${version} again, which opens it again.`);
+      return notes;
+    }
+    if (outcome === 'waiting') {
+      notes.push(`merge-gate has not merged PR #${pr.number} of the release report after 15 minutes: see its CI and the merge-gate runs on GitHub, then run /ao-ship ${version} again once it is merged.`);
+      return notes;
+    }
+    notes.push(`merge-gate merged PR #${pr.number} of the release report into ${branch}.`);
   }
   const allowed = [reportPath, 'CHANGELOG.md'];
   const changed = ((await github.get(`/compare/${regression}...${branch}`)).files ?? []).flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename]));

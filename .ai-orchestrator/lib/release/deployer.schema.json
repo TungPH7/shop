@@ -37,7 +37,8 @@
       "additionalProperties": false,
       "properties": {
         "dev": { "$ref": "#/$defs/slug" },
-        "review": { "$ref": "#/$defs/slug" }
+        "review": { "$ref": "#/$defs/slug" },
+        "merge": { "description": "merge-gate's own App (Pilot 3, spec 2.9): audit takes its merges of a merge back and of a release report.", "$ref": "#/$defs/slug" }
       }
     },
     "approvers": {

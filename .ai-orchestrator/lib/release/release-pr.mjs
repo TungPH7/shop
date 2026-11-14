@@ -27,3 +27,27 @@ export function changelogWith(current, section, version) {
   if (!title || title.index !== 0) return `${body}\n${current}`;
   return `${current.slice(0, title[0].length)}${title[1] ? '' : '\n'}${body}\n${current.slice(title[0].length)}`;
 }
+
+// The PR of the release report (Pilot 3, spec 2.9): from a branch of its own, cut from the release branch, into it. The
+// rulesets let no App push to release/* any more, and merge-gate merges this PR on its own terms, so the report needs no
+// review and no approval of yours. `version` is vX.Y.Z.
+export function notesPullRequest(version) {
+  return {
+    head: `release-notes/${version}`,
+    title: `release notes: ${version}`,
+    body: `The regression report and the changelog of ${version}, which /ao-ship wrote from the notes of qa and devops. merge-gate merges this PR once CI is green, since it changes only docs/releases/${version}.md and CHANGELOG.md (Pilot 3, spec 2.9).`,
+  };
+}
+
+// Waits for a PR to be merged: read() gives the PR as GET /pulls/{n} does, again every `every` ms, until `limit` ms have
+// passed. Returns 'merged', 'closed' when it was closed without a merge, or 'waiting' when the time ran out.
+export async function waitForMerge(read, { every = 20_000, limit = 15 * 60_000, now = Date.now, wait = (ms) => new Promise((done) => setTimeout(done, ms)) } = {}) {
+  const end = now() + limit;
+  for (;;) {
+    const pr = await read();
+    if (pr.merged) return 'merged';
+    if (pr.state === 'closed') return 'closed';
+    if (now() + every > end) return 'waiting';
+    await wait(every);
+  }
+}

@@ -1,12 +1,13 @@
 // Your machine pulls the encrypted copies of the dumps (Pilot 3, spec 2.4; plan, decision 3). The account aobackup on
 // the VPS only reads, over SFTP, inside /var/backups/ao-offsite (ChrootDirectory, internal-sftp -R), so the paths it
 // lists start at that folder: /<project>/<environment>/<project>-<environment>-<UTC time>.dump.age. The copies land in
-// <dest>/<project>/<environment>/ and nothing there is ever removed. Pure but for localCopies, which reads the folder;
-// scripts/ao-backup-pull.mjs runs sftp, and ao-kit doctor reads the ages.
+// <dest>/<project>/<environment>/, which keeps the copies the VPS keeps (Pilot 3, spec 2.9). Pure but for localCopies
+// and pulledCopyAges, which read the folder and the record; scripts/ao-backup-pull.mjs runs sftp, and ao-kit doctor
+// reads the ages.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { backupTime } from './backup.mjs';
+import { backupTime, backupsToKeep } from './backup.mjs';
 
 const ENVIRONMENTS = ['development', 'staging', 'production'];
 const LINE = /^\/([a-z]([a-z0-9-]*[a-z0-9])?)\/([a-z]+)\/([A-Za-z0-9.-]+\.dump\.age)$/;
@@ -41,11 +42,37 @@ export function localCopies(dest) {
   return parseListing(paths.join('\n'));
 }
 
-// The ages of the copies on this machine when it pulls them (install wrote PULL_CONFIG), else null.
+// The ages of the copies on this machine when it pulls them (install wrote PULL_CONFIG), else null. A record that
+// cannot be read gives { broken }, which doctor shows as a row to fix, instead of stopping (review of shop PR #13).
 export function pulledCopyAges(now = new Date(), config = PULL_CONFIG) {
   if (!existsSync(config)) return null;
-  const { dest } = JSON.parse(readFileSync(config, 'utf8'));
+  let dest;
+  try {
+    ({ dest } = JSON.parse(readFileSync(config, 'utf8')));
+  } catch {
+    return { broken: `${config} is not JSON` };
+  }
+  if (typeof dest !== 'string' || dest === '') return { broken: `${config} names no folder` };
   return copyAges(localCopies(dest), now);
+}
+
+// Minutes of clock drift between the VPS and your machine that a copy's time may run ahead.
+const DRIFT_MS = 5 * 60_000;
+
+// A copy whose name holds a time later than now, past the drift (Pilot 3, spec 2.9): a VPS taken over could write one to
+// pass for the newest copy for ever. pull leaves it on the VPS and says so; copyAges leaves it out.
+export const isFuture = (file, now) => backupTime(file.name.slice(0, -'.age'.length)) - now > DRIFT_MS;
+
+// The copies of this machine to let go: those the VPS no longer keeps either (backupsToKeep: every copy of the 48 hours
+// before the newest, then the newest of each of the 7 newest days and of the 4 newest weeks), for each project and
+// environment on its own.
+export function toPrune(files) {
+  const groups = new Map();
+  for (const file of files) groups.set(`${file.project}/${file.env}`, [...(groups.get(`${file.project}/${file.env}`) ?? []), file]);
+  return [...groups.values()].flatMap((group) => {
+    const keep = backupsToKeep(group.map(({ name }) => name.slice(0, -'.age'.length)));
+    return group.filter(({ name }) => !keep.has(name.slice(0, -'.age'.length)));
+  });
 }
 
 // The copies not on your machine yet; exists(path) tells.
@@ -57,17 +84,18 @@ export function getBatch(files, dest) {
   return `${files.map((file) => `get "${file.path}" "${localPath(dest, file).replaceAll('\\', '/')}.part"`).join('\n')}\n`;
 }
 
-// The newest copy of each project and environment, and its age in whole hours, from the time in its name.
+// The newest copy of each project and environment, and its age in whole hours, from the time in its name. A copy dated
+// in the future does not count; one a few minutes ahead, by clock drift, is 0 hours old.
 export function copyAges(files, now) {
   const newest = new Map();
-  for (const file of files) {
+  for (const file of files.filter((one) => !isFuture(one, now))) {
     const key = `${file.project}/${file.env}`;
     const time = backupTime(file.name.slice(0, -'.age'.length));
     if (!newest.has(key) || newest.get(key).time < time) newest.set(key, { ...file, time });
   }
   return [...newest.values()]
     .sort((a, b) => `${a.project}/${a.env}`.localeCompare(`${b.project}/${b.env}`))
-    .map(({ project, env, name, time }) => ({ project, env, name, hours: Math.floor((now - time) / 3_600_000) }));
+    .map(({ project, env, name, time }) => ({ project, env, name, hours: Math.max(0, Math.floor((now - time) / 3_600_000)) }));
 }
 
 // The PowerShell that registers the task of Windows: every day at 09:00 and at each sign-in, and as soon as it can

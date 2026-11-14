@@ -17,7 +17,7 @@ const json = (result) => {
   }
 };
 
-export function setupGithub({ kitDir, repo, devAppId, devAppKeyFile, secret, readFile, gh, run }) {
+export function setupGithub({ kitDir, repo, mergeAppId, mergeAppKeyFile, secret, readFile, gh, run }) {
   const notes = [];
   const done = [];
   const left = [];
@@ -56,7 +56,7 @@ export function setupGithub({ kitDir, repo, devAppId, devAppKeyFile, secret, rea
     else write('the approval of the workflows of every PR from a fork', ['api', '-X', 'PUT', `repos/${repo}/actions/permissions/fork-pr-contributor-approval`, '-f', 'approval_policy=all_external_contributors']);
   } else notes.push(`${repo} is private: it needs no interaction limit and no approval of the workflows of forks`);
 
-  // merge-gate reads the second key of ao-dev from its environment, which only develop may use (docs/quality-gates.md).
+  // merge-gate reads the key of ao-merge from its environment, which only develop may use (docs/quality-gates.md).
   const envs = new Set((json(gh(['api', `repos/${repo}/environments`]))?.environments ?? []).map(({ name }) => name));
   const missingEnvs = [...ENVIRONMENTS, 'merge-gate'].filter((name) => !envs.has(name));
   if (missingEnvs.length === 0) done.push('environments');
@@ -75,18 +75,24 @@ export function setupGithub({ kitDir, repo, devAppId, devAppKeyFile, secret, rea
     if (!token) left.push('JIRA_CI_TOKEN is not set on this machine: set it as a user variable (docs/getting-started.md), then run ao-kit setup github again');
     else write('the secret JIRA_CI_TOKEN, from your variable', ['secret', 'set', 'JIRA_CI_TOKEN', '--repo', repo], { input: token });
   }
+  // The key of ao-merge lives only here (Pilot 3, spec 2.9): an agent holds the key of ao-dev on your machine, so the
+  // App the rulesets let merge without your approval is another one, whose key no machine keeps.
   const envSecrets = new Set((json(gh(['secret', 'list', '--env', 'merge-gate', '--repo', repo, '--json', 'name'])) ?? []).map(({ name }) => name));
-  if (envSecrets.has('AO_DEV_APP_KEY')) done.push('AO_DEV_APP_KEY');
-  else if (!devAppKeyFile) left.push('AO_DEV_APP_KEY: give the second private key of ao-dev with --dev-app-key-file <path> (docs/github-apps-setup.md, section 2), then run ao-kit setup github again');
-  else if (write('the secret AO_DEV_APP_KEY of merge-gate, from the key file', ['secret', 'set', 'AO_DEV_APP_KEY', '--env', 'merge-gate', '--repo', repo], { input: readFile(devAppKeyFile) })) notes.push(`Delete ${devAppKeyFile} now: GitHub holds the key, and no other copy should`);
+  if (envSecrets.has('AO_MERGE_APP_KEY')) done.push('AO_MERGE_APP_KEY');
+  else if (!mergeAppKeyFile) left.push('AO_MERGE_APP_KEY: give the private key of ao-merge with --merge-app-key-file <path> (docs/github-apps-setup.md, section 2), then run ao-kit setup github again');
+  else if (write('the secret AO_MERGE_APP_KEY of merge-gate, from the key file', ['secret', 'set', 'AO_MERGE_APP_KEY', '--env', 'merge-gate', '--repo', repo], { input: readFile(mergeAppKeyFile) })) notes.push(`Delete ${mergeAppKeyFile} now: GitHub holds the key of ao-merge, and no machine an agent uses should`);
 
-  // The ao-dev App bypasses two of the rulesets (lib/quality/ruleset.mjs), so gh-protect needs its id.
-  const ruleset = run(['node', join(kitDir, 'scripts', 'gh-protect.mjs').replaceAll('\\', '/'), '--repo', repo, '--dev-app-id', String(devAppId)]);
-  notes.push(`gh:protect: ${`${ruleset.stdout ?? ''}${ruleset.stderr ?? ''}`.trim().split('\n').at(-1) || `exit ${ruleset.status}`}`);
+  // Only ao-merge bypasses the ruleset of PRs (lib/quality/ruleset.mjs), so gh-protect needs its id.
+  let ruleset = { status: 1 };
+  if (!mergeAppId) left.push('github.apps.merge and merge_id are not in project.yaml: create the ao-merge App with node <kit>/scripts/github-app-create.mjs --apps merge (docs/github-apps-setup.md), write its slug and id there, then run ao-kit setup github again. No ruleset is applied before');
+  else {
+    ruleset = run(['node', join(kitDir, 'scripts', 'gh-protect.mjs').replaceAll('\\', '/'), '--repo', repo, '--merge-app-id', String(mergeAppId)]);
+    notes.push(`gh:protect: ${`${ruleset.stdout ?? ''}${ruleset.stderr ?? ''}`.trim().split('\n').at(-1) || `exit ${ruleset.status}`}`);
+  }
   if (done.length > 0) notes.push(`Already set: ${done.join(', ')}`);
   notes.push(...left);
   notes.push(
-    `By hand: add ${repo} to the two GitHub Apps: on GitHub, Settings → Applications → Installed GitHub Apps → Configure beside each App → Repository access → choose the repo → Save (docs/github-apps-setup.md section 3)`,
+    `By hand: add ${repo} to the three GitHub Apps (ao-dev, ao-review, ao-merge): on GitHub, Settings → Applications → Installed GitHub Apps → Configure beside each App → Repository access → choose the repo → Save (docs/github-apps-setup.md section 3)`,
     `By hand: connect GitHub for Atlassian to ${repo} (docs/jira-setup.md section 11)`,
   );
   return { ok: left.length === 0 && ruleset.status === 0, notes };

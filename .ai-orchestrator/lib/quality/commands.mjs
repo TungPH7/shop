@@ -32,6 +32,11 @@ const POWERSHELL_ENV = new RegExp(`(?:\\benv:[\\\\/]*|SetEnvironmentVariable\\(\
 const ORCHESTRATION = /(ao-step|ao-agent|ao-git-credential)\.mjs$/i;
 const GIT_DIR = ".git/ holds git's own settings and hooks: change them with git commands, not by editing the files";
 const KEY_FILE = /\.pem\b|ao-keys|AO_(?:DEV|REVIEW)_APP_KEY/i;
+// The backups of every environment (Pilot 3, spec 2.9): the age identity that opens them, the encrypted copies, the
+// folder your machine pulls them into, and the script that pulls and opens them. An agent runs as your Windows user,
+// so gh-guard stops the plain ways; that the identity stays off the machine is what holds (review of shop PR #13).
+const BACKUP = 'do not read the backup copies or the identity that opens them, and do not run ao-backup-pull.mjs: they hold the data of every environment';
+const BACKUP_FILE = /\.agekey\b|\.dump\.age\b|ao-backups|ao-backup-pull/i;
 // gh auth token prints your token, and so does gh auth status with -t, alone or in a group such as -at (after -h the
 // rest of the group is the host name); login, switch and the others change it.
 const TOKEN_COMMAND = /\bgh(?:\.exe)?\s+auth\s+(?:token|login|logout|switch|refresh|setup-git|git-credential)\b|\bgh(?:\.exe)?\s+auth\s+status\b[^\n;&|]*\s(?:--show-token\b|-[^-h\s]*t)/;
@@ -52,6 +57,7 @@ export function checkAgentCall(input, { gates, contract, projectDir, roster, tem
     case 'Read': {
       const file = args.file_path ?? '';
       if (KEY_FILE.test(file)) return deny(KEY);
+      if (BACKUP_FILE.test(file)) return deny(BACKUP);
       return GH_HOSTS_FILE.test(file) ? deny(TOKEN) : allow;
     }
     case 'Edit':
@@ -66,6 +72,7 @@ export function checkAgentCall(input, { gates, contract, projectDir, roster, tem
 function checkCommand(command, role, gates, roster, depth = 0) {
   if (TOKEN_COMMAND.test(command) || GH_HOSTS_FILE.test(command)) return deny(TOKEN);
   if (KEY_FILE.test(command)) return deny(KEY);
+  if (BACKUP_FILE.test(command)) return deny(BACKUP);
   if (POWERSHELL_ENV.test(command)) return deny(IDENTITY);
   for (const words of segments(command)) {
     const result = checkWords(words, role, gates, roster, depth);
