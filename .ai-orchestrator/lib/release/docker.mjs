@@ -24,20 +24,29 @@ function environment(env) {
   return env;
 }
 
-const network = (project, env) => `ao-${allowed('project', project, NAME)}-${environment(env)}`;
+export const network = (project, env) => `ao-${allowed('project', project, NAME)}-${environment(env)}`;
 const image = (project, app, tree) => `ao-${allowed('project', project, NAME)}-${allowed('app', app, NAME)}:${allowed('tree', tree, TREE)}`;
 const container = (project, env, app, tree) => `${network(project, env)}-${allowed('app', app, NAME)}-${allowed('tree', tree, TREE).slice(0, 12)}`;
 // Two names on the project network: the app's own, which the other apps of the project call, and one unique on the
 // VPS, which Caddy calls, since Caddy joins the network of every project and environment.
 const aliases = (project, env, app) => [app, `${network(project, env)}-${app}`];
 
-// Builds the image of one app at a tree, from the root of a checkout of that tree.
-export function buildArgs({ project, app, tree, dockerfile, context }) {
+// Builds the image of one app at a tree, from the root of a checkout of that tree, or from `folder` of it: the context
+// of deploy.yaml, for a Dockerfile made for its app folder (project-scaffold part 3, spec 2.5).
+export function buildArgs({ project, app, tree, dockerfile, context, folder }) {
   if (typeof context !== 'string' || !context.startsWith('/')) throw new Error(`build context ${JSON.stringify(context)} is not an absolute path`);
   if (typeof dockerfile !== 'string' || dockerfile.startsWith('/') || dockerfile.split('/').includes('..')) throw new Error(`dockerfile ${JSON.stringify(dockerfile)} is not inside the checkout`);
+  if (folder !== undefined && (typeof folder !== 'string' || folder.startsWith('/') || folder.split('/').some((part) => part === '..' || part === '.' || part === ''))) {
+    throw new Error(`build folder ${JSON.stringify(folder)} is not inside the checkout`);
+  }
   const labels = [`ao.project=${project}`, `ao.app=${app}`, `ao.tree=${tree}`].flatMap((label) => ['--label', label]);
-  return ['build', '--file', posix.join(context, dockerfile), '--tag', image(project, app, tree), ...labels, context];
+  return ['build', '--file', posix.join(context, dockerfile), '--tag', image(project, app, tree), ...labels, folder ? posix.join(context, folder) : context];
 }
+
+// The memory cap of a container when deploy.yaml names none (project-scaffold part 3, spec 2.5): the apps of ao-sample,
+// ao-pilot and shop used 11 to 87 MiB.
+export const DEFAULT_MEMORY = '512m';
+const MEMORY = /^[1-9][0-9]{0,4}[mg]$/;
 
 // The mode a file of a build context needs. COPY keeps the modes of the context, and the deployer runs with UMask=0077,
 // so a checkout is 0600 and 0700: an image with a USER other than root could not read its own code (release-workflow
@@ -46,11 +55,14 @@ export const readableMode = (mode, isDirectory) => mode | 0o044 | (isDirectory |
 
 // Runs a new container of one app on the project network, without an alias yet, so nothing calls it before its smoke
 // test. `names` are the variables it gets from docker's own environment: names only, never values.
-export function runArgs({ project, env, app, tree, names }) {
+export function runArgs({ project, env, app, tree, names, memory = DEFAULT_MEMORY }) {
   const labels = [`ao.project=${project}`, `ao.env=${env}`, `ao.app=${app}`, `ao.tree=${tree}`].flatMap((label) => ['--label', label]);
+  const cap = allowed('memory', memory, MEMORY);
   return [
     'run', '--detach', '--name', container(project, env, app, tree), '--network', network(project, env),
     '--restart', 'unless-stopped', '--pull', 'never', '--security-opt', 'no-new-privileges', '--cap-drop', 'ALL',
+    // No swap beyond the cap, so a container that outgrows it stops instead of slowing the VPS down.
+    '--memory', cap, '--memory-swap', cap,
     ...labels,
     ...names.flatMap((name) => ['--env', allowed('variable', name, VARIABLE)]),
     image(project, app, tree),
@@ -104,9 +116,9 @@ export async function swap({ run, smoke, project, env, tree, config, secrets, pu
   const moved = [];
   for (const app of order) {
     const name = container(project, env, app, tree);
-    const { port, health } = config.apps[app];
+    const { port, health, memory, start_timeout: startTimeout = 60 } = config.apps[app];
     try {
-      await run(runArgs({ project, env, app, tree, names: envs[app].names }), { env: envs[app].values });
+      await run(runArgs({ project, env, app, tree, names: envs[app].names, ...(memory && { memory }) }), { env: envs[app].values });
     } catch (error) {
       await undo(run, net, project, env, [{ app, name }, ...moved.toReversed()], old);
       return { outcome: 'failed', failures: [{ app, path: null, problem: `the container did not start: ${error.message}` }], stopped: [] };
@@ -121,7 +133,8 @@ export async function swap({ run, smoke, project, env, tree, config, secrets, pu
     const host = config.apps[app].public ? new URL(publicUrls[app]).host : `${app}:${port}`;
     const checks = config.smoke.filter((check) => check.app === app);
     if (!checks.some(({ path }) => path === health)) checks.unshift({ app, path: health, expect_status: 200, expect_text: '' });
-    const result = await smoke(checks, { [app]: { origin: `http://${ip}:${port}`, host } });
+    // A JVM app that migrates its database at start takes longer than the 60 s of the others (part 3, spec 2.5).
+    const result = await smoke(checks, { [app]: { origin: `http://${ip}:${port}`, host } }, { timeout: startTimeout * 1000 });
     if (!result.ok) {
       await undo(run, net, project, env, [{ app, name }, ...moved.toReversed()], old);
       return { outcome: 'failed', failures: result.failures, stopped: [] };
@@ -157,7 +170,7 @@ async function connect(run, net, name, names) {
   await run(['network', 'connect', ...names.flatMap((alias) => ['--alias', alias]), net, name]);
 }
 
-async function ensureNetwork(run, project, env) {
+export async function ensureNetwork(run, project, env) {
   const net = network(project, env);
   let members;
   try {
@@ -170,7 +183,8 @@ async function ensureNetwork(run, project, env) {
 }
 
 async function listContainers(run, project, env) {
-  const out = await run(['ps', '--all', '--filter', `label=ao.project=${project}`, '--filter', `label=ao.env=${env}`, '--format', '{{.Names}}\t{{.State}}\t{{.Label "ao.app"}}\t{{.Label "ao.tree"}}']);
+  // Only app containers, which carry ao.app: the database of the environment is never swapped (part 3, spec 2.4).
+  const out = await run(['ps', '--all', '--filter', `label=ao.project=${project}`, '--filter', `label=ao.env=${env}`, '--filter', 'label=ao.app', '--format', '{{.Names}}\t{{.State}}\t{{.Label "ao.app"}}\t{{.Label "ao.tree"}}']);
   return out.split('\n').filter(Boolean).map((line) => {
     const [name, state, app, tree] = line.split('\t');
     return { name, state, app, tree };

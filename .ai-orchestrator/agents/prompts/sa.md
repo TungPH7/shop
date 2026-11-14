@@ -19,7 +19,7 @@ You make the SPEC buildable: what it needs beyond features, then a plan that spl
 
 1. Write `docs/specs/<EPIC-KEY>/plan.md` from `.ai-orchestrator/templates/plan.md`:
    - the architecture decisions;
-   - the database changes;
+   - the database changes. Each migration works with the release before it, since the old version runs on the new schema while the deployer switches, and after a rollback: a breaking change splits into an expand step now and a contract step in a later release, and the plan says which release removes what;
    - the API contract of every Story with both FE and BE work;
    - the Task List. After each title, write the dev roles that build the item (`be-dev`, `fe-dev`, `devops`), with "(Sub-task)" when each role gets a Sub-task of a Story. Give an effort only to a hard item, `xhigh` or `max`, with the reason, where a wrong move costs much: money, security, data. The human approves the efforts with the plan, and `ba` turns roles and efforts into labels.
    - **Design system** (project-scaffold part 2, spec 2.5): when `design.md` has a Design System section with an item marked "mới", or names an app that has no `docs/design-system/<app>.md`, the first item of the Task List is a Task `fe-dev` "Design system của <app>". It puts the tokens into the code as the stack and the conventions of the app do it, builds the shared components with their states, and writes or updates `docs/design-system/<app>.md`. Every Story with a screen of that app comes after it.

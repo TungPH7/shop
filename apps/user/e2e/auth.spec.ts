@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
+// On an environment (Development, Staging) the tests run against its URL, not the apps started here (SHOP-5).
+const isLocal = (url?: string) => url?.startsWith('http://localhost') === true;
+
 // E2E AUTH (MSW-in-server, folder 15 + 24) — login THẬT qua Server Action → niêm phong cookie phiên
 // bằng jose → AuthStatus + RBAC element-level (`<Can>`). Mock trả token ADMIN + `/profile` có quyền xoá.
 // Chứng minh cả pipeline auth server-first trong trình duyệt THẬT (unit chỉ test rời từng mảnh: seal,
@@ -16,6 +19,9 @@ async function login(page: Page): Promise<void> {
 }
 
 test.describe('auth: login, RBAC, logout', () => {
+  // These tests need the MSW mock of the old NestJS auth API, which only the apps started here have.
+  // The login Epic replaces them.
+  test.skip(({ baseURL }) => !isLocal(baseURL), 'reason: old auth API mock, login Epic (SHOP-5)');
   // Reset store MSW-in-server TRƯỚC mỗi test (và mỗi retry) → test xoá bên dưới luôn thấy `E2E Deletable`
   // dù Playwright dùng chung 1 server cho cả run (folder 25). `request` = APIRequestContext (dùng baseURL).
   test.beforeEach(async ({ request }) => {

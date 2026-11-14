@@ -1,6 +1,9 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 
+// On an environment (Development, Staging) the tests run against its URL, not the apps started here (SHOP-5).
+const isLocal = (url?: string) => url?.startsWith('http://localhost') === true;
+
 // a11y E2E — quét WCAG bằng axe-core trong TRÌNH DUYỆT THẬT. Bổ trợ (KHÔNG thay) `jsx-a11y` lúc lint:
 // lint bắt lỗi TĨNH trong JSX; axe bắt lỗi ĐỘNG cần DOM/CSS thật (contrast, thứ tự heading, tên khả truy
 // cập sau render). Đây là giá trị riêng của E2E: jsdom không tính được style/contrast.
@@ -28,7 +31,12 @@ test.describe('accessibility (axe, WCAG A/AA)', () => {
     expect(violations).toEqual([]);
   });
 
-  test('trang Products (mocked) không vi phạm — quét sau khi stream xong', async ({ page }) => {
+  test('trang Products (mocked) không vi phạm — quét sau khi stream xong', async ({
+    page,
+    baseURL,
+  }) => {
+    // Needs the MSW mock of the old NestJS product API; the Epic Danh mục sản phẩm replaces it.
+    test.skip(!isLocal(baseURL), 'reason: old product API mock (SHOP-5)');
     await page.goto('/en/products');
     // Chờ dynamic-hole (ProductResults) stream xong → axe quét CẢ cây đã render, không chỉ shell tĩnh.
     await expect(page.getByText('E2E Widget')).toBeVisible();

@@ -10,11 +10,15 @@ checks: [policy, build-test, secrets, sast]
 # migrations are left out (Checkpoint 1, 2026-10-29), and so is the kit copy in .ai-orchestrator/ and .claude/, whose
 # code is tested in the kit. So are the scripts at the root of a project, which run on your machine, as scripts/dev.mjs
 # starts the apps (project-scaffold T17).
+# A Java app writes the JaCoCo XML report of its test:coverage (mvn verify), and its sources sit in src/main/java/
+# (project-scaffold part 3, spec 2.3). The e2e/ and scripts/ of each app of a pnpm project are left out as those at the
+# root are. An app leaves more out with coverage_exclude in project.yaml, a protected file.
 coverage:
   changed_lines_min: 80
   lcov: ["coverage/lcov.info", "apps/*/coverage/lcov.info"]
-  source: ["**/*.{ts,tsx,js,jsx,mjs,cjs}"]
-  exclude: ["**/*.{test,spec}.*", "**/*.e2e-spec.*", "**/*.d.ts", "**/*.config.*", "**/migrations/**", "e2e/**", "scripts/**", ".ai-orchestrator/**", ".claude/**"]
+  jacoco: ["apps/*/target/site/jacoco/jacoco.xml"]
+  source: ["**/*.{ts,tsx,js,jsx,mjs,cjs}", "**/src/main/java/**/*.java"]
+  exclude: ["**/*.{test,spec}.*", "**/*.e2e-spec.*", "**/*.d.ts", "**/*.config.*", "**/migrations/**", "{,apps/*/}e2e/**", "{,apps/*/}scripts/**", ".ai-orchestrator/**", ".claude/**"]
 
 # npm audit fails on this level and above. An exception names a GitHub advisory, why it is accepted, and when it ends.
 dependencies:
@@ -38,6 +42,17 @@ suppressions:
     - "nosemgrep"
     - "gitleaks:allow"
     - "secretlint-disable"
+    # Java (project-scaffold part 3, spec 2.3): javac, SonarQube, JUnit, Checkstyle, Spotless, SpotBugs, PMD, and
+    # @Generated, which JaCoCo leaves out of the coverage.
+    - "@SuppressWarnings"
+    - "NOSONAR"
+    - "@Disabled"
+    - "CHECKSTYLE:OFF"
+    - "CHECKSTYLE.OFF"
+    - "spotless:off"
+    - "@SuppressFBWarnings"
+    - "NOPMD"
+    - "@Generated"
   never: [".only("]
 
 # Branches only a PR may change, and the merge method of each kind of work item branch.
@@ -111,6 +126,21 @@ security_review:
     - "**/prisma/**"
     - "**/migrations/**"
     - "**/*.sql"
+    # Spring Boot (project-scaffold part 3, spec 2.3): how it is built, its config, where requests come in or are
+    # checked, who the user is, and what it reads and writes. Services stay out, as for NestJS.
+    - "**/pom.xml"
+    - "**/.mvn/**"
+    - "**/mvnw*"
+    - "**/application*.{yml,yaml,properties}"
+    - "**/*Controller.java"
+    - "**/*Filter.java"
+    - "**/*Interceptor.java"
+    - "**/*Security*.java"
+    - "**/*Auth*.java"
+    - "**/security/**"
+    - "**/*Repository.java"
+    - "**/domain/**"
+    - "**/dto/**"
   lower_effort: high
 
 # A PR that copies a kit another project reviewed in full (kit-copy-review spec 2.2, 2.3): ao-step compares it with the

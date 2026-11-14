@@ -1,0 +1,12 @@
+{
+  "name": "api",
+  "private": true,
+  "description": "The Java app api in the pnpm workspace: each script runs its Maven wrapper through the kit, with the JDK its pom.xml asks for.",
+  "scripts": {
+    "lint": "node ../../.ai-orchestrator/scripts/mvnw.mjs . lint",
+    "typecheck": "node ../../.ai-orchestrator/scripts/mvnw.mjs . typecheck",
+    "test:coverage": "node ../../.ai-orchestrator/scripts/mvnw.mjs . test:coverage",
+    "build": "node ../../.ai-orchestrator/scripts/mvnw.mjs . build",
+    "dev": "node ../../.ai-orchestrator/scripts/mvnw.mjs . dev"
+  }
+}

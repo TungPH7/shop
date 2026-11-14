@@ -5,3 +5,7 @@ roles:
       - vercel-react-best-practices
       - user-conventions
       - admin-conventions
+  be-dev:
+    skills:
+      - java-springboot
+      - api-conventions

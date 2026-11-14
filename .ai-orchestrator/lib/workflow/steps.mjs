@@ -44,6 +44,15 @@ export function decideStep(command, facts, options) {
 }
 
 const stop = (reason, next, extra = {}) => ({ go: false, reason, next, lines: [], ...extra });
+
+// The tests of a Java app start Postgres with Testcontainers (project-scaffold part 3, spec 2.2), so a decision that
+// starts be-dev on a project with a Java app stops first when Docker is not running. qa checks a deployed environment
+// and fe-dev the JS apps, so neither needs Docker. dockerRunning() is asked only when it matters.
+export function dockerGate(decision, { java, dockerRunning }) {
+  if (!decision.go || !java || !decision.runs.some((r) => r.role === 'be-dev')) return decision;
+  if (dockerRunning()) return decision;
+  return stop('the project has a Java app, whose tests start Postgres with Testcontainers, and Docker is not running', 'Start Docker Desktop, wait until it says Engine running, then run the command again');
+}
 const go = (runs, lines = []) => ({ go: true, runs, lines });
 
 // A run of `role` for `purpose`, at the effort of the roster unless given.

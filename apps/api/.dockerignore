@@ -1,0 +1,70 @@
+# =============================================================================
+# .dockerignore — exclude file không cần cho Docker build context.
+# Build context được transfer cho Docker daemon → giữ nhỏ giảm thời gian build.
+# =============================================================================
+
+# --- Build artifact (sẽ build lại trong stage 1, KHÔNG copy host target) ---
+target/
+**/target/
+*.jar
+*.war
+*.ear
+
+# --- Maven local cache ---
+.mvn/wrapper/maven-wrapper.jar
+.spotless/
+
+# --- Source control ---
+.git/
+.gitignore
+.gitattributes
+
+# --- IDE ---
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.settings/
+.classpath
+.project
+.factorypath
+.apt_generated
+.springBeans
+.sts4-cache
+.metadata/
+
+# --- OS files ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Secret & env (CRITICAL — không bao giờ vào image) ---
+.env
+.env.local
+.env.*.local
+.env.staging
+.env.prod
+.env.*
+
+# --- Docker artifact (không cần đệ quy vào image) ---
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# --- Documentation ---
+*.md
+# giữ README chính (nếu bạn LABEL ARG đọc nó — optional). The comment sits on its own line: .dockerignore reads text
+# after a pattern as part of the pattern, and Docker 24 refuses one with letters outside ASCII.
+!README.md
+
+# --- Test data / backup ---
+docker/postgres/data/
+
+# --- Misc ---
+scripts/
+.claude/

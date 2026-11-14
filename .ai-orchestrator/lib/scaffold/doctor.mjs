@@ -5,7 +5,9 @@
 // packageManager names, or null), env, files (the paths that exist),
 // kitDrift, renderCheck, hooksPath, gitignoreMissing, github: { defaultBranch, environments, secrets, envSecrets,
 // workflows (how many GitHub knows), ciRuns (on develop), public, interactionLimit ({ expires_at } or {}) }, apps: { dev,
-// review }, jiraCheck, claude: { trusted, mcp }, now (an ISO time) }
+// review }, jiraCheck, claude: { trusted, mcp }, now (an ISO time), java ([{ app, want, jdk }] for each Java app, jdk
+// being findJdk's answer or null), docker ({ running }, read when there is a Java app) }
+import { jdkMissing } from '../quality/maven.mjs';
 import { managerOf } from '../quality/package-manager.mjs';
 import { basicAuthEnv } from '../workflow/qa.mjs';
 
@@ -36,6 +38,11 @@ export function doctor(facts) {
     const wanted = facts.pnpmWanted;
     row('Machine', `pnpm ${wanted ?? '(packageManager of package.json)'}`, Boolean(wanted) && facts.versions.pnpm === wanted, wanted ? `The project runs pnpm ${facts.versions.pnpm ?? 'that is not installed'}: npm install -g pnpm@${wanted}, or corepack enable, which takes the version of packageManager` : 'Name the pnpm version in packageManager of package.json, such as "pnpm@11.8.0"');
   }
+  // project-scaffold part 3, spec 2.2: a Java app needs the JDK of its pom.xml, which mvnw.mjs finds, and Docker for the
+  // Testcontainers of its tests and the database /ao-preview starts.
+  const java = facts.java ?? [];
+  for (const { app, want, jdk } of java) row('Machine', `JDK ${want} for ${app}`, Boolean(jdk), jdkMissing(want));
+  if (java.length > 0) row('Machine', 'Docker is running', facts.docker?.running === true, 'Start Docker Desktop, then run doctor again: the Testcontainers of the Java tests and the database of /ao-preview need it');
   row('Machine', 'ATLASSIAN_AGENT_TOKEN is set', shapeOk(env.ATLASSIAN_AGENT_TOKEN), 'Set the API token of the agents\' Jira account as the user variable ATLASSIAN_AGENT_TOKEN (docs/getting-started.md)');
   row('Machine', 'JIRA_CI_TOKEN is set', shapeOk(env.JIRA_CI_TOKEN), 'Set the API token of the CI Jira account as the user variable JIRA_CI_TOKEN: ao-kit setup github and the QA evidence use it');
   for (const kind of ['DEV', 'REVIEW']) {
@@ -65,6 +72,9 @@ export function doctor(facts) {
     const app = facts.apps[kind];
     row('GitHub', `ao-${kind} installed on ${repo}`, app.ok, `${app.reason ?? 'no token'}: install the App on the repo (docs/getting-started.md)`);
   }
+  // Only a token of the App itself lists where it is installed, and its key lives on the VPS only, so this is a
+  // question (project-scaffold part 3, spec 2.6; found at T24 of part 2).
+  rows.push({ group: 'GitHub', name: `ao-deploy installed on ${repo}? GitHub does not let doctor read it`, ok: null, fix: 'The deployer on the VPS reads the repo with it, and stops with "App … is not installed" without it. On GitHub: your picture → Settings → Applications → Installed GitHub Apps → Configure next to the App ao-deploy → Repository access → Select repositories → this repo → Save' });
   // The first push to an empty repo may start nothing: no run though the workflows were active (Pilot 1, T7), or
   // Actions off on the repo though the API says enabled (T16).
   // A public repo keeps an interaction limit of six months (SPEC-project-scaffold-2.md, section 9, question 1).

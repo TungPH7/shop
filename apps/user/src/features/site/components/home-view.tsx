@@ -37,9 +37,6 @@ export function HomeView() {
       {/* ICU plural + số: en có 'one'/'other', vi chỉ 'other' (1 dạng số nhiều). */}
       <p>{t('localesSupported', { count: locales.length })}</p>
       <p>
-        {t('apiUrlLabel')} <code>{clientEnv.NEXT_PUBLIC_API_URL}</code>
-      </p>
-      <p>
         {t('environmentLabel')} <code>{clientEnv.NODE_ENV}</code>
       </p>
     </main>

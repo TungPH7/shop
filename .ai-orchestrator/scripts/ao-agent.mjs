@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { READ_PERMISSIONS, credentialHelper, launchPlan } from '../lib/agents/launch.mjs';
 import { mergeLocal, readRoster } from '../lib/agents/roster.mjs';
-import { projectSettings, setting } from '../lib/project-settings.mjs';
+import { appSettings, projectSettings } from '../lib/project-settings.mjs';
 import { appCredentials, botIdentity, githubRepoOf, installationToken } from '../lib/quality/github-app.mjs';
 
 const [role, ...rest] = process.argv.slice(2);
@@ -28,9 +28,6 @@ const args = rest.filter((arg) => arg !== '--ao-dry-run');
 const kitDir = resolve(process.env.AO_KIT_DIR ?? fileURLToPath(new URL('..', import.meta.url)));
 const projectDir = process.cwd();
 const skillDir = (name) => join(projectDir, '.claude', 'skills', name);
-// The settings of the Apps live in the project's .claude/settings.json, which only Claude Code reads: the session and
-// the credential helper get them from here.
-const APP_SETTINGS = ['AO_DEV_APP', 'AO_DEV_APP_ID', 'AO_REVIEW_APP', 'AO_REVIEW_APP_ID'];
 
 // The identity of the session, bought from GitHub: the repository of origin, the read-only token and the bot.
 async function resolveIdentity(appEnv) {
@@ -53,7 +50,9 @@ try {
   const names = roster.roles[role]?.skills ?? [];
   const skills = new Map(names.filter((name) => existsSync(join(skillDir(name), 'SKILL.md'))).map((name) => [name, { dir: skillDir(name), text: readFileSync(join(skillDir(name), 'SKILL.md'), 'utf8') }]));
   const settings = projectSettings(projectDir);
-  const appEnv = Object.fromEntries(APP_SETTINGS.map((name) => [name, setting(name, settings)]).filter(([, value]) => value));
+  // The settings of the Apps live in the project's .claude/settings.json, which only Claude Code reads: the session and
+  // the credential helper get them from here.
+  const appEnv = appSettings(settings);
   let resolved;
   try {
     resolved = await resolveIdentity(appEnv);

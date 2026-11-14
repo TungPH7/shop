@@ -53,6 +53,31 @@ export function designFilesToCheck(changes, exists) {
   return [...files];
 }
 
+// The level of a CVSS base score, as npm audit names levels. An advisory OSV has no score for yet counts as high, so it
+// fails until someone reads it and adds an exception.
+const levelOf = (score) => (Number.isNaN(score) ? 'high' : score >= 9 ? 'critical' : score >= 7 ? 'high' : score >= 4 ? 'moderate' : 'low');
+
+// report: the JSON of `osv-scanner scan source --format json` on the pom.xml of a Java app (project-scaffold part 3,
+// spec 2.3). Each group of advisories counts once per package, at its highest score. An exception names the GHSA id or
+// any alias of the group, such as its CVE.
+export function osvProblems(report, { audit_level: level, exceptions }, today) {
+  const problems = [];
+  for (const { package: pkg, groups = [], vulnerabilities = [] } of (report.results ?? []).flatMap((result) => result.packages ?? [])) {
+    for (const group of groups) {
+      const score = group.max_severity === '' || group.max_severity == null ? Number.NaN : Number(group.max_severity);
+      const severity = levelOf(score);
+      if (LEVELS.indexOf(severity) < LEVELS.indexOf(level)) continue;
+      const names = [...group.ids, ...(group.aliases ?? [])];
+      const exception = exceptions.find(({ advisory }) => names.includes(advisory));
+      if (exception && exception.expires >= today) continue;
+      const summary = vulnerabilities.find(({ id }) => id === group.ids[0])?.summary ?? 'no summary';
+      const scored = Number.isNaN(score) ? `${severity}, not scored` : `${severity} ${group.max_severity}`;
+      problems.push(`${pkg.name}@${pkg.version} ${scored}: ${summary} (${group.ids.join(', ')})${exception ? `; its exception expired on ${exception.expires}` : ''}`);
+    }
+  }
+  return problems;
+}
+
 // report: the JSON of `npm audit --json`, or of `pnpm audit --json` (project-scaffold part 2, spec 2.1). Each advisory
 // counts once, however many packages pull it in. npm lists advisories under the packages they touch, and packages that
 // are only vulnerable through another one name it instead of an advisory; pnpm lists them by id under `advisories`.
