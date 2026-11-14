@@ -9,6 +9,7 @@
 // in the current folder (T2). Elsewhere sh runs ./mvnw, which needs no executable bit.
 import { posix, win32 } from 'node:path';
 import { parseEnv } from 'node:util';
+import { parse } from 'yaml';
 
 // The Maven run of each script. typecheck and build skip Spotless and Checkstyle, which lint runs, so each script fails
 // for one reason only.
@@ -118,8 +119,24 @@ export function devEnv(base, dotenvText) {
   return { ...(dotenvText ? parseEnv(dotenvText) : {}), ...base };
 }
 
-// Before dev, the database of the app's docker-compose.yml, started and waited for until its health check passes.
-export const COMPOSE_UP = ['compose', 'up', '--detach', '--wait'];
+// Before dev, the services of the app's docker-compose.yml that run from an image, such as its database, started and
+// waited for until their health checks pass. A service with build: is the app itself (the user's template has one on
+// 8080), which Maven runs for dev, so it stays down (project-scaffold part 3, T21). null when nothing is left to start.
+export function composeUpArgs(composeText) {
+  let doc;
+  try {
+    doc = parse(composeText);
+  } catch (error) {
+    throw new Error(`the docker-compose.yml of the app cannot be read: ${error.message.split('\n')[0]}`);
+  }
+  const services = Object.entries(doc?.services ?? {}).filter(([, service]) => service && !service.build).map(([name]) => name);
+  return services.length > 0 ? ['compose', 'up', '--detach', '--wait', ...services] : null;
+}
+
+// Whether Docker runs, for doctor and for ao-step before be-dev on a Java app. Docker 24 on Windows with Docker Desktop
+// stopped exits 0 and prints an empty version (T21), so the version itself is what counts. done: a spawnSync result.
+export const DOCKER_INFO = ['info', '--format', '{{.ServerVersion}}'];
+export const dockerAnswered = (done) => done?.status === 0 && typeof done.stdout === 'string' && done.stdout.trim() !== '';
 
 // What to tell someone whose machine has no JDK of the version the pom asks for.
 export const jdkMissing = (want) => `JDK ${want} was not found: install it, or set JAVA_HOME_${want} to its folder (the one that holds bin/ and release)`;

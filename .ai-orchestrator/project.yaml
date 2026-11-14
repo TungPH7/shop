@@ -45,6 +45,26 @@ apps:
       development: shop-admin-dev.ao.t2g.io.vn
       staging: shop-admin-staging.ao.t2g.io.vn
       production: shop-admin.ao.t2g.io.vn
+  api:
+    repo: shop
+    path: apps/api
+    profile: spring-boot
+    dev: pnpm --filter ./apps/api run dev
+    port:
+      env: PORT
+      default: 3001
+    health: /actuator/health
+    # The <excludes> of jacoco-maven-plugin in apps/api/pom.xml, as source paths; MapperImpl is generated in target/.
+    coverage_exclude:
+      - src/main/java/com/tungph7/learnpostgres/LearnPostgresqlApiApplication.java
+      - src/main/java/com/tungph7/learnpostgres/feature/**/dto/**
+      - src/main/java/com/tungph7/learnpostgres/common/dto/**
+      - src/main/java/com/tungph7/learnpostgres/common/config/**
+      - src/main/java/**/*Properties.java
+      - src/main/java/com/tungph7/learnpostgres/common/error/ErrorCode.java
+      - src/main/java/com/tungph7/learnpostgres/common/error/ProblemDetailOpenApiCustomizer.java
+      - src/main/java/com/tungph7/learnpostgres/common/error/BadRequestException.java
+      - src/main/java/com/tungph7/learnpostgres/common/domain/CitextType.java
 roles:
   optional: []
 claude:

@@ -10,6 +10,8 @@ skills:
   - test-driven-development
   - incremental-implementation
   - api-and-interface-design
+  - java-springboot
+  - api-conventions
 ---
 
 You are `be-dev`, the Backend Developer of the SDLC contract. Your value in the Agent field of Jira is "Backend Developer".

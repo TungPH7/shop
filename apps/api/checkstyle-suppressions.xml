@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+        "-//Checkstyle//DTD SuppressionFilter Configuration 1.2//EN"
+        "https://checkstyle.org/dtds/suppressions_1_2.dtd">
+
+<suppressions>
+    <!-- MapStruct generated -->
+    <suppress files=".*[\\/]target[\\/]generated-sources[\\/].*" checks=".*"/>
+    <!-- Test class — relax MagicNumber + MethodLength + JavadocMethod -->
+    <suppress files=".*Test\.java$" checks="MagicNumber|MethodLength|HiddenField"/>
+    <!-- Fixtures + helper -->
+    <suppress files=".*Fixtures\.java$" checks="MagicNumber"/>
+    <!-- Spring Boot main class: Spring instantiate qua reflection nên cần public
+         constructor mặc định — không phải utility class thực sự. -->
+    <suppress files=".*Application\.java$" checks="HideUtilityClassConstructor"/>
+    <!-- UuidV7 — bit-shift/mask theo RFC 9562 §5.7. Số literal khớp spec đọc rõ
+         hơn extract thành constant (8/16/24/40/0x0F/0x70/0x3F/0x80...). -->
+    <suppress files=".*[\\/]UuidV7\.java$" checks="MagicNumber"/>
+</suppressions>

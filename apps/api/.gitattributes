@@ -1,0 +1,9 @@
+# Script Linux: BẮT BUỘC giữ LF
+/mvnw text eol=lf
+
+# Script Windows: BẮT BUỘC giữ CRLF
+*.cmd text eol=crlf
+
+# Mặc định: auto-detect text, normalize line ending về LF
+* text=auto eol=lf
+
