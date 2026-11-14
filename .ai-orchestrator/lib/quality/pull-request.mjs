@@ -2,7 +2,9 @@
 // templates/pull-request.md, and a review report (its head and its findings) against templates/review-report.md. Pure.
 // A project's kit copy has no templates folder, so the sections, placeholders and severities are listed here; tests
 // keep them equal to the templates.
+import { createHash } from 'node:crypto';
 import { checkPrTitle } from '../tracker/conventions.mjs';
+import { lastDecision } from '../tracker/facts.mjs';
 
 export const PR_SECTIONS = ['Jira', 'What Changed', 'How It Was Tested', 'Acceptance Criteria Coverage', 'Risks', 'Definition of Done'];
 export const PLACEHOLDERS = ['<type(scope): subject>', '<KEY>', '<Given … When … Then …>', '<test file › test name>'];
@@ -108,6 +110,65 @@ export function openFindings(reports) {
 }
 
 export const openCounts = (reports) => openFindings(reports).map((open) => open.length);
+
+// The id of a finding (Pilot 3, spec 2.9 part 5): 8 hex digits of the hash of its identity, so a finding keeps its id
+// from report to report as long as openFindings takes it for the same one. You name a finding by it to accept it. It
+// is a name, not a secret: whoever writes the reports could as well leave a finding out, and an acceptance holds only
+// on the head you approved.
+export const findingId = (finding) => createHash('sha256').update(identity(finding)).digest('hex').slice(0, 8);
+
+// How long a risk may stay accepted: at most this many days after the approval that accepts it.
+export const ACCEPT_MAX_DAYS = 90;
+// A line that starts with "Accept risk", alone or as an item of a list.
+const ACCEPT_START = /^\s*(?:[-*]\s+)?accept risk\b/i;
+const ACCEPT_LINE = /^\s*(?:[-*]\s+)?accept risk:\s*(\S+)\s+until\s+(\S+?)\s*:(.*)$/i;
+const FINDING_ID = /^[0-9a-f]{8}$/;
+
+// A day written YYYY-MM-DD as a number of days, or NaN when it is not a real day, such as 2026-02-30.
+function dayNumber(text) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text ?? '')) return Number.NaN;
+  const time = Date.parse(`${text}T00:00:00Z`);
+  return Number.isNaN(time) || new Date(time).toISOString().slice(0, 10) !== text ? Number.NaN : time / 86400000;
+}
+
+// The High findings you accept (Pilot 3, spec 2.9 part 5): the lines "Accept risk: <id> until <YYYY-MM-DD>: <why>" of
+// your latest deciding review, when it approves the `head` commit. A push after it needs a new approval, and so a new
+// acceptance. The last day must not be before `on`, the day it must hold (today for merge-gate and ao-step, the day of
+// the merge for audit), nor more than ACCEPT_MAX_DAYS after the approval. Returns { accepted: Map(id → { until,
+// reason, by }), problems }, problems saying why a line accepts nothing. Pure.
+export function acceptedRisks(reviews, { approvers, head, on }) {
+  if (Number.isNaN(dayNumber(on))) throw new Error(`acceptedRisks needs the day it must hold as YYYY-MM-DD, not ${on}`);
+  const accepted = new Map();
+  const problems = [];
+  for (const login of approvers) {
+    const last = lastDecision(reviews, login);
+    if (last?.state !== 'APPROVED' || last.commit_id !== head) continue;
+    const approvedOn = String(last.submitted_at ?? '').slice(0, 10);
+    for (const text of (last.body ?? '').split(/\r?\n/).filter((line) => ACCEPT_START.test(line))) {
+      const match = text.match(ACCEPT_LINE);
+      if (!match) {
+        problems.push(`"${text.trim()}" of ${login}: write it as "Accept risk: <id> until <YYYY-MM-DD>: <why>"`);
+        continue;
+      }
+      const [, written, until, why] = match;
+      const id = written.toLowerCase();
+      const reason = why.trim();
+      const day = dayNumber(until);
+      let problem;
+      if (!FINDING_ID.test(id)) problem = `${written} is not the id of a finding (8 hex digits)`;
+      else if (Number.isNaN(day)) problem = `${until} is not a day (YYYY-MM-DD)`;
+      else if (day < dayNumber(on)) problem = `until ${until}, before ${on}`;
+      else if (Number.isNaN(dayNumber(approvedOn)) || day - dayNumber(approvedOn) > ACCEPT_MAX_DAYS) problem = `until ${until}, more than ${ACCEPT_MAX_DAYS} days after the approval of ${approvedOn || 'an unknown day'}`;
+      else if (!reason) problem = 'it needs a reason after the colon';
+      if (problem) problems.push(`Accept risk: ${written} of ${login}: ${problem}`);
+      else accepted.set(id, { until, reason, by: login });
+    }
+  }
+  return { accepted, problems };
+}
+
+// The open findings that still block: a High you accept no longer does; a Critical always does.
+export const stillBlocking = (open, accepted) => open.filter((finding) => !(finding.severity === 'High' && accepted.has(findingId(finding))));
 
 // The first heading and the Role line that tell merge-gate which role wrote a review report.
 export function checkReviewHeader(body, roles) {

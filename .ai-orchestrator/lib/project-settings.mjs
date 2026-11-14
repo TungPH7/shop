@@ -19,9 +19,10 @@ export function setting(name, settings, env = process.env) {
   return value && !/^<.*>$/.test(value) ? value : undefined;
 }
 
-// The slugs and ids of the two GitHub Apps. A kit script run from a shell outside Claude Code, such as ao-pr.mjs from
-// the main session, has none of them in its environment (project-scaffold part 3, spec 2.6).
-export const APP_SETTINGS = ['AO_DEV_APP', 'AO_DEV_APP_ID', 'AO_REVIEW_APP', 'AO_REVIEW_APP_ID'];
+// The slugs and ids of the GitHub Apps; ao-merge's only when the project has it (Pilot 3, spec 2.9). A kit script run
+// from a shell outside Claude Code, such as ao-pr.mjs from the main session, has none of them in its environment
+// (project-scaffold part 3, spec 2.6).
+export const APP_SETTINGS = ['AO_DEV_APP', 'AO_DEV_APP_ID', 'AO_REVIEW_APP', 'AO_REVIEW_APP_ID', 'AO_MERGE_APP', 'AO_MERGE_APP_ID'];
 
 // Those of APP_SETTINGS that are set, the environment first: an object to spread into the environment of a call.
 export function appSettings(settings, env = process.env) {

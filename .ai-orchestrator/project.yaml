@@ -12,6 +12,8 @@ github:
     dev_id: 5514949
     review: tungph7-ao-review
     review_id: 5514961
+    merge: tungph7-ao-merge
+    merge_id: 5756976
   kit_peers: []
 repos:
   - name: shop

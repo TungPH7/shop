@@ -4,6 +4,7 @@
 // branch is on its head and started before you moved the Epic through that gate. Every push to the PR starts a run, so
 // a later push, even back to a commit you read, makes it a PR like any other. Pure, but readDocsFacts.
 import { jiraTime } from '../tracker/facts.mjs';
+import { touchedPaths } from './diff-paths.mjs';
 import { docsRule, epicOfDocsBranch } from './gates.mjs';
 import { matchesGlob } from './glob.mjs';
 
@@ -16,7 +17,7 @@ const CI_WORKFLOW = 'CI';
 export function docsPullRequest({ pr, files, gates, apps, space }) {
   const epic = epicOfDocsBranch(gates, pr.head?.ref ?? '');
   if (!epic || (space && !epic.startsWith(`${space}-`)) || pr.user?.login !== `${apps.dev}[bot]`) return null;
-  const names = files.flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename]));
+  const names = touchedPaths(files);
   const { paths } = docsRule(gates, epic);
   const inside = (name) => !name.split('/').includes('..') && paths.some((glob) => matchesGlob(glob, name));
   return names.length > 0 && names.every(inside) ? epic : null;

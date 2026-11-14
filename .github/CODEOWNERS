@@ -1,0 +1,3 @@
+# Written by ai-orchestrator from github.approvers of .ai-orchestrator/project.yaml (Pilot 3, spec 2.9). The rulesets
+# count only the approval of a code owner, so no App approves a PR in your place. Change project.yaml, not this file.
+* @TungPH7

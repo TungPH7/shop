@@ -21,7 +21,7 @@
         "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-atlassian.mjs\"" }]
       },
       {
-        "matcher": "Bash|Read|Edit|Write|NotebookEdit",
+        "matcher": "Bash|Read|Edit|Write|NotebookEdit|Grep|Glob",
         "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/gh-guard.mjs\"" }]
       }
     ],
