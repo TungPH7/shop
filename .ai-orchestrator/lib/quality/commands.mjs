@@ -37,7 +37,13 @@ const KEY_FILE = /\.pem\b|ao-keys|AO_(?:DEV|REVIEW|MERGE)_APP_KEY/i;
 // and the script that pulls and opens them. An agent runs as your Windows user, so gh-guard stops the plain ways; that
 // the identity stays off the machine is what holds (review of shop PR #13).
 const BACKUP = 'do not read the backup copies or the identity that opens them, and do not run ao-backup-pull.mjs: they hold the data of every environment';
-const BACKUP_FILE = /\.agekey\b|\.dump\.age\b|ao-backups|ao-backup-pull|(?:^|[\\/])\.ao(?:[\\/]|$)/i;
+// .ao counts where a path starts: at the start, after a slash, a space, a quote or = (review round 3 of shop PR #13:
+// `cd ~ && cat .ao/backup-pull.json` passed).
+const BACKUP_FILE = /\.agekey\b|\.dump\.age\b|ao-backups|ao-backup-pull|(?:^|[\s'"=\\/])\.ao(?:[\\/\s'"]|$)/i;
+// The marks a private key starts with (review round 3 of shop PR #13): a search for them, over your user folder, prints
+// the keys of the Apps whatever the files are called.
+const KEY_MARK = /PRIVATE KEY|AGE-SECRET-KEY/i;
+const KEY_SEARCH = 'do not search for a private key: ao-pr.mjs and git get the tokens of your role for you';
 
 // What a path, or a glob or pattern of Grep and Glob, may not name: keys, the token of gh, the backups. undefined when
 // it names none of them.
@@ -67,10 +73,17 @@ export function checkAgentCall(input, { gates, contract, projectDir, roster, tem
     case 'Read':
       return forbiddenFile(args.file_path ?? '') ?? allow;
     // Grep with output_mode content prints a file, and Glob lists them: the rules of Read, on each path they take
-    // (review round 2 of shop PR #13).
+    // (review round 2 of shop PR #13). They also read every file under their path, whatever its name, so like Edit and
+    // Write they stay in the project and the temp folder, and Grep looks for no private key (review round 3).
     case 'Grep':
-    case 'Glob':
-      return [args.path, args.glob, args.pattern].filter((value) => typeof value === 'string').map(forbiddenFile).find(Boolean) ?? allow;
+    case 'Glob': {
+      const named = [args.path, args.glob, args.pattern].filter((value) => typeof value === 'string').map(forbiddenFile).find(Boolean);
+      if (named) return named;
+      const roots = [args.path, ...(input.tool_name === 'Glob' && ABSOLUTE.test(args.pattern ?? '') ? [args.pattern] : [])];
+      const outside = roots.find((value) => outsideProject(value, projectDir, tempDir));
+      if (outside !== undefined) return deny(`${outside} is outside the project: Grep and Glob read only in the project and the temp folder`);
+      return input.tool_name === 'Grep' && KEY_MARK.test(args.pattern ?? '') ? deny(KEY_SEARCH) : allow;
+    }
     case 'Edit':
     case 'Write':
     case 'NotebookEdit':
@@ -83,6 +96,7 @@ export function checkAgentCall(input, { gates, contract, projectDir, roster, tem
 function checkCommand(command, role, gates, roster, depth = 0) {
   if (TOKEN_COMMAND.test(command) || GH_HOSTS_FILE.test(command)) return deny(TOKEN);
   if (KEY_FILE.test(command)) return deny(KEY);
+  if (KEY_MARK.test(command)) return deny(KEY_SEARCH);
   if (BACKUP_FILE.test(command)) return deny(BACKUP);
   if (POWERSHELL_ENV.test(command)) return deny(IDENTITY);
   for (const words of segments(command)) {
@@ -434,9 +448,25 @@ function checkEdit(file, role, gates, projectDir, roster, tempDir) {
   return refusal ? deny(refusal) : allow;
 }
 
+// A path or glob that starts at a drive, a slash or your home folder.
+const ABSOLUTE = /^(?:[A-Za-z]:|[\\/]|~)/;
+
+// Whether the path of a Grep or Glob reaches outside the project and the temp folder: your home folder (~) does, and no
+// path at all is the working folder, which is the project's or its worktree's.
+function outsideProject(value, projectDir, tempDir) {
+  if (typeof value !== 'string' || value.trim() === '') return false;
+  if (/^~(?:[\\/]|$)/.test(value)) return true;
+  // The folder itself counts as inside it: relativeToProject takes only what lies under it.
+  const plain = (path) => posix.normalize(path.replaceAll('\\', '/').replace(/^\/\/[?.]\//, '')).replace(/\/+$/, '').toLowerCase();
+  const inside = (dir) => Boolean(dir) && (plain(value) === plain(dir) || relativeToProject(value, dir) !== null);
+  return ![projectDir, ...[tempDir].flat()].some(inside);
+}
+
 // The path inside the project with forward slashes and no `.` or `..`, or null for a file outside it. The Windows
 // prefixes \\?\ and \\.\ name the same file.
 function relativeToProject(file, projectDir) {
+  // A drive with no slash after it, as in C:notes.txt, is the working folder of that drive, wherever that is: outside.
+  if (/^[A-Za-z]:(?![\\/])/.test(file)) return null;
   const path = posix.normalize(file.replaceAll('\\', '/').replace(/^\/\/[?.]\//, ''));
   if (!/^(?:[A-Za-z]:)?\//.test(path)) return path === '..' || path.startsWith('../') ? null : path;
   const root = `${projectDir.replaceAll('\\', '/').replace(/\/+$/, '')}/`;

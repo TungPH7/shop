@@ -609,8 +609,11 @@ function decideReview(facts, options) {
 
 // Both reports are on the head: a blocking finding goes back to the dev agent, otherwise you approve.
 function afterReviews({ pr }) {
-  const blocking = Object.entries(pr.reports).filter(([, report]) => report?.blocking > 0).map(([role, report]) => `${role} ${report.blocking}`);
-  if (blocking.length > 0 || pr.changesRequested) return stop(`the reports on the head of PR #${pr.number} ask for changes${blocking.length ? ` (Critical or High: ${blocking.join(', ')})` : ''}`, `/ao-fix ${pr.number}`);
+  const open = Object.entries(pr.reports).filter(([, report]) => report?.blocking > 0);
+  const blocking = open.map(([role, report]) => `${role} ${report.blocking}${report.ids?.length ? `: ${report.ids.join(' ')}` : ''}`);
+  // A High may be accepted rather than fixed (Pilot 3, spec 2.9 part 5): say how, with the ids to name.
+  const accept = open.some(([, report]) => report.ids?.length) ? `. To accept a High instead of fixing it, approve PR #${pr.number} on its head with one line per finding: Accept risk: <id> until <YYYY-MM-DD>: <why> (docs/quality-gates.md)` : '';
+  if (blocking.length > 0 || pr.changesRequested) return stop(`the reports on the head of PR #${pr.number} ask for changes${blocking.length ? ` (Critical or High: ${blocking.join(', ')})` : ''}${accept}`, `/ao-fix ${pr.number}`);
   const yours = pr.protectedPaths.length > 0 ? `, then Squash and merge it yourself: it changes ${pr.protectedPaths.join(', ')}` : '; merge-gate merges it';
   return stop(`both reports are on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}: it waits for you at gate ③ merge-approval`, `Read the reports and the diff of PR #${pr.number}, approve it${yours}`);
 }

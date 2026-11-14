@@ -36,7 +36,7 @@ import { withLoggedSession } from '../lib/workflow/runs.mjs';
 import { gatherFacts, readRunning } from '../lib/workflow/facts.mjs';
 import { basicAuthEnv, qaFollowUp } from '../lib/workflow/qa.mjs';
 import { releaseCutChanges } from '../lib/release/release-cut.mjs';
-import { changelogWith, notesPullRequest, waitForMerge } from '../lib/release/release-pr.mjs';
+import { changelogWith, notesPullRequest, onReleaseHead, waitForMerge } from '../lib/release/release-pr.mjs';
 import { requestDeploy } from '../lib/release/deploy-request.mjs';
 import { adfText, buildReviewPack, filesToQuote } from '../lib/workflow/review-pack.mjs';
 import { postKitCopyReports, readKitCopy, renderedReason } from '../lib/workflow/kit-copy.mjs';
@@ -553,8 +553,8 @@ function developHistory(tag) {
 }
 
 // /ao-release <vX.Y.0> <sha>, its one step (release-workflow spec 2.6): the Fix Versions and comments on Jira with the CI
-// token, which only your session holds, then the release branch as the ao-dev App. The branch comes last: once it is
-// there the command stops at "release branch open", so a step cut short before it can be run again.
+// token, which only your session holds, then the release branch with your gh login (Pilot 3, spec 2.9). The branch comes
+// last: once it is there the command stops at "release branch open", so a step cut short before it can be run again.
 async function releaseCut({ version, nextVersion, sha, included, after, cancelled = [] }, { repo, mapping, userToken }) {
   const notes = [];
   const ciToken = secret('JIRA_CI_TOKEN');
@@ -625,11 +625,13 @@ async function releasePr({ version, branch, regression }, { repo, settings }) {
       }
       return commit.sha;
     };
+    // merge-gate merges it only as one commit on the head of the release branch (review round 3 of shop PR #13).
+    const onHead = async () => onReleaseHead(await github.get(`/git/commits/${(await github.get(`/git/ref/heads/${want.head}`)).object.sha}`), (await github.get(`/git/ref/heads/${branch}`)).object.sha);
     let pr = (await github.getAll('/pulls', { state: 'open', base: branch })).find((open) => open.head.ref === want.head);
-    if (pr && (await holds(want.head))) notes.push(`PR #${pr.number} of the release report into ${branch} is open already, with the report and the changelog of this run.`);
+    if (pr && (await holds(want.head)) && (await onHead())) notes.push(`PR #${pr.number} of the release report into ${branch} is open already, with the report and the changelog of this run.`);
     else if (pr) {
       const sha = await commitNotes();
-      notes.push(`PR #${pr.number} of the release report into ${branch} held another report or changelog: ${want.head} is made again from ${branch} as ${bot.name} (${sha.slice(0, 8)}).`);
+      notes.push(`PR #${pr.number} of the release report into ${branch} held another report or changelog, or no longer sat on the head of ${branch}: ${want.head} is made again from ${branch} as ${bot.name} (${sha.slice(0, 8)}).`);
     } else {
       const sha = await commitNotes();
       pr = await github.request('POST', '/pulls', undefined, { title: want.title, head: want.head, base: branch, body: want.body });

@@ -88,6 +88,12 @@ export function doctor(facts) {
 
   const gh = facts.github;
   row('GitHub', 'default branch develop', gh.defaultBranch === 'develop', 'ao-kit setup github <dir>, once develop is on GitHub');
+  // GitHub reads .github/CODEOWNERS from the base branch of a PR (review round 3 of shop PR #13): where it is missing,
+  // the rule of the code owner has nobody to ask for, and any approval counts.
+  if (owners !== null && gh.codeownersOn) {
+    const lacking = Object.entries(gh.codeownersOn).filter(([, text]) => text !== owners).map(([ref]) => ref);
+    row('GitHub', '.github/CODEOWNERS is on main and on the open release branches', lacking.length === 0, `Missing or different on ${lacking.join(', ')}: GitHub reads it from the base branch of a PR, so any approval counts there. The next release brings it to main (docs/release-workflow.md); bring it to an open release branch through a PR you approve`);
+  }
   row('GitHub', `environments ${ENVIRONMENTS.join(', ')}`, ENVIRONMENTS.every((name) => gh.environments.includes(name)), 'ao-kit setup github <dir>');
   // merge-gate merges with ao-merge, the only App the rulesets let merge without your approval (Pilot 3, spec 2.9).
   if (config?.github?.apps?.merge) {

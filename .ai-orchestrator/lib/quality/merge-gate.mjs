@@ -9,7 +9,7 @@ import { raiseFlag } from '../tracker/sync.mjs';
 import { docsConditions, docsPullRequest, readDocsFacts } from './docs-pr.mjs';
 import { touchedPaths } from './diff-paths.mjs';
 import { matchesGlob } from './glob.mjs';
-import { checkDescription, openCounts, readReviewReport } from './pull-request.mjs';
+import { acceptedRisks, checkDescription, openFindings, readReviewReport, stillBlocking } from './pull-request.mjs';
 
 const OPEN_PRS = { state: 'open', sort: 'created', direction: 'asc' };
 // GitHub's answers to a merge it will not make now: 405, the PR cannot be merged; 409, the head moved.
@@ -25,8 +25,11 @@ const writers = (apps) => [apps.merge, apps.dev].filter(Boolean).map(botLogin);
 // Every open PR, oldest first: skipped, decided, and merged with the client `mergeClient()` gives when it meets every
 // condition, one line each. dryRun only prints, and never calls mergeClient. A merge GitHub refuses for now is a wait;
 // any other error is returned among the failures, and the run goes on. With `notify` ({ jira, mapping, space }), a PR
-// you merge yourself is also said on the PR and on its item (dev-workflow spec 2.7).
-export async function runMergeGate({ github, mergeClient, docs, notify, gates, apps, approvers, dryRun = false, log = console.log }) {
+// you merge yourself is also said on the PR and on its item (dev-workflow spec 2.7). `auditMain(pr)` audits the commits
+// a merge back brings from main (lib/quality/audit.mjs, auditBroughtBack); without it a merge back waits. `now` dates
+// the Highs you accept (Pilot 3, spec 2.9 part 5).
+export async function runMergeGate({ github, mergeClient, docs, notify, gates, apps, approvers, auditMain, now = () => new Date(), dryRun = false, log = console.log }) {
+  const today = now().toISOString().slice(0, 10);
   const failures = [];
   const open = await github.getAll('/pulls', OPEN_PRS);
   if (open.length === 0) log('No open PR');
@@ -37,8 +40,8 @@ export async function runMergeGate({ github, mergeClient, docs, notify, gates, a
     try {
       // The list already says whether merge-gate would skip it, before the reads.
       const reason = skipReason(listed, apps, gates);
-      const facts = reason ? undefined : await readMergeFacts(github, number, { docs, gates, apps });
-      const decision = reason ? skip(reason) : decideMerge({ ...facts, gates, apps, approvers });
+      const facts = reason ? undefined : await readMergeFacts(github, number, { docs, gates, apps, auditMain });
+      const decision = reason ? skip(reason) : decideMerge({ ...facts, gates, apps, approvers, today });
       if (decision.action !== 'merge') {
         log(describe(number, decision, gates));
         if (decision.action === 'needs-you' && notify && onlyYou(decision.missing)) await tellYou({ pr: facts.pr, decision, github, getWriter, notify, apps, gates, dryRun, log });
@@ -52,13 +55,14 @@ export async function runMergeGate({ github, mergeClient, docs, notify, gates, a
         continue;
       }
       // The merge call pins the head, not the base: read the PR again right before it, and leave a PR whose base or head
-      // moved since the facts were read to the next run (review round 2 of shop PR #13, Pilot 3 spec 2.9).
-      const now = await github.get(`/pulls/${number}`);
-      if (now.base?.ref !== facts.pr.base.ref || now.head?.sha !== decision.sha) {
-        log(`Waiting #${number}: the PR changed while merge-gate read it (base ${now.base?.ref}, head ${String(now.head?.sha).slice(0, 7)}); the next run decides again`);
+      // moved since the facts were read to the next run (review round 2 of shop PR #13, Pilot 3 spec 2.9). The token is
+      // bought first, so that only the merge call comes after that read (review round 3).
+      await getWriter();
+      const again = await github.get(`/pulls/${number}`);
+      if (again.base?.ref !== facts.pr.base.ref || again.head?.sha !== decision.sha) {
+        log(`Waiting #${number}: the PR changed while merge-gate read it (base ${again.base?.ref}, head ${String(again.head?.sha).slice(0, 7)}); the next run decides again`);
         continue;
       }
-      await getWriter();
       let merged;
       try {
         // With the head SHA, GitHub refuses the merge if a push came after the facts were read.
@@ -68,6 +72,12 @@ export async function runMergeGate({ github, mergeClient, docs, notify, gates, a
       } catch (error) {
         if (!REFUSED.includes(error.status)) throw error;
         log(`Waiting #${number}: GitHub refused the merge at ${decision.sha.slice(0, 7)} (${error.status}): ${error.message.replace(/^GitHub .*? returned \d+: /, '')}`);
+      }
+      // A base changed between that read and the merge call would have taken the PR elsewhere: say so as a failure,
+      // which turns the run red (review round 3 of shop PR #13).
+      if (merged) {
+        const base = (await github.get(`/pulls/${number}`)).base?.ref;
+        if (base !== facts.pr.base.ref) throw new Error(`PR #${number} was merged into ${base}, not ${facts.pr.base.ref} as merge-gate read it: check that merge by hand`);
       }
       if (merged && decision.release) await afterRelease({ writer, github, sha: merged.sha, ...decision.release, log });
     } catch (error) {
@@ -178,7 +188,7 @@ async function tellYou({ pr, decision, github, getWriter, notify, apps, gates, d
 
 // The facts decideMerge needs for PR `number`. The PR itself is read again: only that answer says if it can merge.
 // For a docs PR, `docs` ({ jira, passage }) also reads its Epic and the CI runs of its branch; without it there are none.
-async function readMergeFacts(github, number, { docs, gates, apps }) {
+async function readMergeFacts(github, number, { docs, gates, apps, auditMain }) {
   const pr = await github.get(`/pulls/${number}`);
   const files = await github.getAll(`/pulls/${number}/files`);
   const space = docs?.space;
@@ -191,7 +201,8 @@ async function readMergeFacts(github, number, { docs, gates, apps }) {
     reviews: await github.getAll(`/pulls/${number}/reviews`),
     checks: await readChecks(github, pr.head.sha),
     docs: key && docs ? { ...(await readDocsFacts({ github, jira: docs.jira, key, branch: pr.head.ref })), passage: docs.passage } : undefined,
-    ...(isBackMerge(pr) && { tags: await releaseTags(github) }),
+    ...(isBackMerge(pr) && { tags: await releaseTags(github), brought: auditMain ? await auditMain(pr) : undefined }),
+    ...(notesVersion(pr) && { baseHead: (await github.get(`/git/ref/heads/${pr.base.ref}`)).object?.sha }),
   };
 }
 
@@ -259,8 +270,11 @@ function skipReason(pr, apps, gates) {
 //   { action: 'skip', reason }                              not a PR merge-gate merges
 // The merge of a release PR also carries `release: { tag, backMerge }`, what merge-gate does after it.
 // `space`, when given, is the project space: the docs branch of an Epic outside it is reviewed like any PR.
-// `tags`, for a merge back: the release tags of the repository, [{ name, sha }], as releaseTags reads them.
-export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, approvers, docs, space, tags = [] }) {
+// `tags`, for a merge back: the release tags of the repository, [{ name, sha }], as releaseTags reads them; `brought`,
+// the audit of the commits it brings from main, [{ sha, ok, problems }], as auditBroughtBack gives it, or undefined when
+// merge-gate could not run it. `baseHead`, for the PR of a release report: the commit at the head of its release branch.
+// `today` (YYYY-MM-DD) is the day a High you accept must still hold on; without it no acceptance counts.
+export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, approvers, docs, space, tags = [], brought, baseHead, today }) {
   const reason = skipReason(pr, apps, gates);
   if (reason) return skip(reason);
   // null means GitHub has not worked it out yet; the merge call itself refuses a conflict.
@@ -277,15 +291,22 @@ export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, 
   }
   // What main brings back is a version you shipped: its head is the commit of a release tag, which merge-gate puts on
   // the merge of a release PR you approved at gate ⑤, and the hotfix step on a hotfix you shipped (Pilot 3, spec 2.9).
-  // A commit that reached main any other way waits here, instead of flowing into develop on CI alone.
+  // A commit that reached main any other way waits here, instead of flowing into develop on CI alone. Every commit the
+  // merge back brings on the first-parent line of main must pass audit too, as for a deploy: a tag on the head does not
+  // vouch for what lies under it (review round 3 of shop PR #13).
   if (isBackMerge(pr)) {
     if (pr.mergeable === false) return { action: 'conflict', base: pr.base.ref };
+    const failed = brought?.find(({ ok }) => !ok);
     const missing = [
       ...((tags ?? []).some(({ sha }) => sha === pr.head.sha) ? [] : [`a release tag vX.Y.Z ${at}: main merges back only once its head is a version you shipped`]),
+      ...(brought === undefined ? ['an audit of the commits main brings back'] : failed ? [`${failed.sha.slice(0, 7)} on main passing audit (${failed.problems.join('; ')})`] : []),
       ...(checks.green ? [] : [`CI green ${at}`]),
     ];
     return missing.length > 0 ? { action: 'wait', missing } : keep;
   }
+  // GitHub lists at most 3,000 files of a PR: with fewer listed than the PR changes, no path check can be trusted
+  // (review round 3 of shop PR #13).
+  if (truncated(pr, files)) return { action: 'wait', missing: [`every file listed: GitHub listed ${files.length} of the ${pr.changed_files} files, so merge-gate cannot check their paths; read the PR and merge it yourself`] };
   // The release report of /ao-ship: no review and no approval, since it holds only the report and the changelog that
   // devops and qa wrote; any other file makes it yours, a renamed file by its old name too.
   const notes = notesVersion(pr);
@@ -293,7 +314,7 @@ export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, 
     const allowed = notesPaths(notes);
     const beyond = touchedPaths(files).filter((path) => !allowed.includes(path));
     if (beyond.length > 0) return { action: 'needs-you', paths: beyond, missing: [] };
-    const missing = [...(checks.green ? [] : [`CI green ${at}`]), ...conflicts];
+    const missing = [...oneCommitOnBase(pr, commits, baseHead), ...(checks.green ? [] : [`CI green ${at}`]), ...conflicts];
     return missing.length > 0 ? { action: 'wait', missing } : { action: 'merge', method: 'squash', sha: pr.head.sha, title: `${pr.title} (#${pr.number})` };
   }
   const merge = { action: 'merge', method: gates.merge_method[parseBranch(pr.head.ref).kind], sha: pr.head.sha, title: pr.title, body: squashBody(commits) };
@@ -304,7 +325,7 @@ export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, 
     return missing.length > 0 ? { action: 'wait', missing, docs: verdict.key } : { ...merge, docs: verdict.key };
   }
   const note = verdict ? { note: verdict.reason } : {};
-  const missing = [...unmetConditions({ pr, checks, reviews, gates, apps, approvers }), ...conflicts];
+  const missing = [...unmetConditions({ pr, checks, reviews, gates, apps, approvers, on: today }), ...conflicts];
   const paths = protectedPaths(files, gates);
   if (paths.length > 0) return { action: 'needs-you', paths, missing };
   if (missing.length > 0) return { action: 'wait', missing, ...note };
@@ -312,6 +333,21 @@ export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, 
 }
 
 const skip = (reason) => ({ action: 'skip', reason });
+
+// Fewer files listed than the PR changes: GET /pulls/{n}/files stops at 3,000.
+export const truncated = (pr, files) => Number.isInteger(pr.changed_files) && files.length < pr.changed_files;
+
+// The PR of a release report is one commit on the head of its release branch, as /ao-ship makes it (review round 3 of
+// shop PR #13). A merge commit, or a commit on another parent, could make the squash carry more than the two files, into
+// whatever base the PR has at the moment of the merge.
+function oneCommitOnBase(pr, commits, baseHead) {
+  if (!baseHead) return [`the head of ${pr.base.ref}`];
+  const want = `one commit on the head ${baseHead.slice(0, 7)} of ${pr.base.ref}`;
+  if (commits.length !== 1) return [`${want} (${commits.length} commits)`];
+  const parents = commits[0].parents ?? [];
+  if (parents.length !== 1) return [`${want} (a merge commit)`];
+  return parents[0].sha === baseHead ? [] : [`${want} (it is on ${parents[0].sha.slice(0, 7)})`];
+}
 
 // For a docs PR, docsConditions with its Epic key; without the facts (no Jira token), it waits for them. undefined
 // for any other PR.
@@ -331,12 +367,13 @@ export function docsUnmet({ pr, checks, reviews, verdict }) {
 
 // The conditions of section 2.5 a PR does not meet at its head commit, besides who opened it, conflicts and protected
 // paths, as phrases of what it waits for. audit checks a merged PR against them too, and passes authorApproves: a PR
-// one of your logins opened counts as approved, since GitHub does not let you approve your own PR.
-export function unmetConditions({ pr, checks, reviews, gates, apps, approvers, authorApproves = false }) {
+// one of your logins opened counts as approved, since GitHub does not let you approve your own PR. `on` (YYYY-MM-DD) is
+// the day a High you accept must still hold on (Pilot 3, spec 2.9 part 5); without it no acceptance counts.
+export function unmetConditions({ pr, checks, reviews, gates, apps, approvers, authorApproves = false, on }) {
   const head = pr.head.sha;
   const at = `on head ${head.slice(0, 7)}`;
   const missing = baseConditions({ pr, checks });
-  missing.push(...reportGaps(reviews, head, at, gates.github_apps.review.roles, botLogin(apps.review)));
+  missing.push(...reportGaps(reviews, head, at, gates.github_apps.review.roles, botLogin(apps.review), { approvers, on }));
   if (changesRequestedOn(reviews, head)) missing.push(`answer to the changes requested ${at}`);
   if (!approved({ pr, reviews, approvers, authorApproves })) missing.push(`approval ${at}`);
   return missing;
@@ -358,8 +395,11 @@ function baseConditions({ pr, checks }) {
 
 // Each role of the review App needs a report posted by that App on the head commit; the latest one of each role must
 // be readable and leave no Critical or High finding open. A security report of the new part counts with the reports
-// before it, whatever their commit: the earlier findings it does not list as Fixed stay open (openFindings).
-export function reportGaps(reviews, head, at, roles, bot) {
+// before it, whatever their commit: the earlier findings it does not list as Fixed stay open (openFindings). With `on`,
+// a High you accept in your approval of the head no longer blocks until its last day (acceptedRisks); a line that
+// accepts nothing is said with the gap.
+export function reportGaps(reviews, head, at, roles, bot, { approvers = [], on } = {}) {
+  const { accepted, problems } = on ? acceptedRisks(reviews, { approvers, head, on }) : { accepted: new Map(), problems: [] };
   const reports = reviews.filter((r) => r.user?.login === bot).map((r) => ({ ...readReviewReport(r.body, roles), sha: r.commit_id }));
   return roles.flatMap((role) => {
     const mine = reports.filter((report) => report.role === role);
@@ -367,8 +407,8 @@ export function reportGaps(reviews, head, at, roles, bot) {
     const latest = mine[index];
     if (!latest) return [`${role} report ${at}`];
     if (!latest.ok) return [`readable ${role} report ${at} (${latest.problems.join('; ')})`];
-    const open = openCounts(mine.slice(0, index + 1)).at(-1);
-    if (open > 0) return [`${role} report ${at} without Critical or High findings (${open} open)`];
+    const open = stillBlocking(openFindings(mine.slice(0, index + 1)).at(-1), accepted).length;
+    if (open > 0) return [`${role} report ${at} without Critical or High findings (${open} open${problems.length > 0 ? `; ${problems.join('; ')}` : ''})`];
     return [];
   });
 }

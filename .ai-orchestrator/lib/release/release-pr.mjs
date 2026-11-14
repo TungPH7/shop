@@ -39,6 +39,11 @@ export function notesPullRequest(version) {
   };
 }
 
+// Whether the commit of the report's branch (as GET /git/commits/{sha} gives it) is one commit on `releaseHead`, the
+// head of the release branch: merge-gate merges the report only then (review round 3 of shop PR #13), so /ao-ship makes
+// the branch again when the release branch moved on under it.
+export const onReleaseHead = (commit, releaseHead) => (commit?.parents ?? []).length === 1 && commit.parents[0].sha === releaseHead;
+
 // Waits for a PR to be merged: read() gives the PR as GET /pulls/{n} does, again every `every` ms, until `limit` ms have
 // passed. Returns 'merged', 'closed' when it was closed without a merge, or 'waiting' when the time ran out.
 export async function waitForMerge(read, { every = 20_000, limit = 15 * 60_000, now = Date.now, wait = (ms) => new Promise((done) => setTimeout(done, ms)) } = {}) {

@@ -19,7 +19,9 @@
 // - ao-release-tags: only ao-merge (the tag of a release) and you (the tag of a hotfix) make, move or delete a v* tag,
 //   which a merge back trusts.
 // - ao-protected: the protected branches of quality/gates.yaml; no deletion, no force push; nobody bypasses it.
-// So merge-gate and audit hold ao-merge, as in soft mode, and GitHub holds everyone else, the agents included.
+// So merge-gate and audit hold ao-merge, as in soft mode, and GitHub holds everyone else, the agents' Apps included.
+// It does not hold an agent that takes your own login from this machine: until agents run under a Windows account of
+// their own, that is a risk you accept (Pilot 3, spec 2.9 part 5).
 export const RULESET = 'ao-protected';
 export const MERGE_RULESET = 'ao-protected-merge';
 export const MAIN_RULESET = 'ao-protected-main';
