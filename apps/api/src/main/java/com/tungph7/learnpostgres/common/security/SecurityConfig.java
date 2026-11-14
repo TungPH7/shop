@@ -31,7 +31,12 @@ public class SecurityConfig {
             auth ->
                 auth
                     // === Probe & monitoring ===
-                    .requestMatchers("/actuator/health", "/actuator/info")
+                    // Probes too: the Docker HEALTHCHECK calls liveness unauthenticated (SHOP-5).
+                    .requestMatchers(
+                        "/actuator/health",
+                        "/actuator/health/liveness",
+                        "/actuator/health/readiness",
+                        "/actuator/info")
                     .permitAll()
 
                     // === API documentation ===
