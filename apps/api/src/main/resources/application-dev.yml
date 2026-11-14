@@ -1,0 +1,22 @@
+---
+spring:
+  jpa:
+    show-sql: true
+    properties:
+      hibernate:
+        highlight_sql: true
+        use_sql_comments: true
+  flyway:
+    out-of-order: true
+management:
+  endpoint:
+    health:
+      show-details: "always"
+logging:
+  level:
+    com.tungph7.learnpostgres: "DEBUG"
+    org.springframework.web: "INFO"
+    org.hibernate.SQL: "DEBUG"
+    org.hibernate.orm.jdbc.bind: "TRACE"
+    com.zaxxer.hikari: "INFO"
+    org.flywaydb: "DEBUG"

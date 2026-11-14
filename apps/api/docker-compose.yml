@@ -1,0 +1,107 @@
+---
+name: "learn-postgresql-api"
+services:
+  postgres:
+    image: "${POSTGRES_IMAGE:-postgres:17-alpine}"
+    container_name: "${POSTGRES_CONTAINER_NAME:-learn-postgres}"
+    restart: "unless-stopped"
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_ROOT_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_ROOT_PASSWORD}"
+      POSTGRES_INITDB_ARGS: "${POSTGRES_INITDB_ARGS:-}"
+      TZ: "${TZ:-UTC}"
+      PGTZ: "${TZ:-UTC}"
+      APP_DB_NAME: "${POSTGRES_DB}"
+      APP_DB_USER: "${POSTGRES_USER}"
+      APP_DB_PASSWORD: "${POSTGRES_PASSWORD}"
+    ports:
+    - "${POSTGRES_HOST_PORT:-5432}:5432"
+    volumes:
+    - "postgres_data:/var/lib/postgresql/data"
+    - "./docker/postgres/init:/docker-entrypoint-initdb.d:ro"
+    healthcheck:
+      test:
+      - "CMD-SHELL"
+      - "pg_isready -U ${POSTGRES_ROOT_USER:-postgres} -d ${POSTGRES_DB} || exit 1"
+      interval: "10s"
+      timeout: "5s"
+      retries: 5
+      start_period: "30s"
+    networks:
+    - "app-network"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: "1G"
+        reservations:
+          memory: "256M"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+  app:
+    build:
+      context: "."
+      dockerfile: "Dockerfile"
+      args:
+        VERSION: "0.0.1-SNAPSHOT"
+        BUILD_DATE: "${BUILD_DATE:-unknown}"
+        GIT_COMMIT: "${GIT_COMMIT:-unknown}"
+    image: "learn-postgresql-api:${APP_VERSION:-0.0.1-SNAPSHOT}"
+    container_name: "learn-app"
+    restart: "unless-stopped"
+    environment:
+      SPRING_PROFILES_ACTIVE: "${APP_PROFILE:-prod}"
+      DB_HOST: "postgres"
+      DB_PORT: 5432
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      SERVER_PORT: 8080
+      APP_ERRORS_BASE_URL: "${APP_ERRORS_BASE_URL:-https://docs.example.com/errors}"
+      APP_LOGGING_CORRELATION_ID_HEADER: "X-Correlation-Id"
+      APP_SECURITY_CORS_ALLOWED_ORIGINS: "${APP_SECURITY_CORS_ALLOWED_ORIGINS:-http://localhost:5173}"
+      TZ: "${TZ:-UTC}"
+    ports:
+    - "${APP_HOST_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: "service_healthy"
+    healthcheck:
+      test:
+      - "CMD"
+      - "wget"
+      - "--no-verbose"
+      - "--tries=1"
+      - "--spider"
+      - "http://localhost:8080/actuator/health/liveness"
+      interval: "30s"
+      timeout: "5s"
+      retries: 3
+      start_period: "60s"
+    networks:
+    - "app-network"
+    deploy:
+      resources:
+        limits:
+          memory: "1G"
+          cpus: "1.0"
+        reservations:
+          memory: "512M"
+          cpus: "0.5"
+    read_only: false
+    cap_drop:
+    - "ALL"
+    security_opt:
+    - "no-new-privileges:true"
+networks:
+  app-network:
+    name: "${COMPOSE_NETWORK_NAME:-learn-app-network}"
+    driver: "bridge"
+volumes:
+  postgres_data:
+    name: "${POSTGRES_CONTAINER_NAME:-learn-postgres}-data"
+    driver: "local"

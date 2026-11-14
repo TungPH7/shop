@@ -1,0 +1,35 @@
+---
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 10
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    out-of-order: false
+    baseline-on-migrate: false
+management:
+  endpoint:
+    health:
+      show-details: "never"
+logging:
+  level:
+    root: "WARN"
+    com.tungph7.learnpostgres: "INFO"
+    org.hibernate.SQL: "WARN"
+    org.hibernate.orm.jdbc.bind: "WARN"
+springdoc:
+  swagger-ui:
+    enabled: false
+  api-docs:
+    enabled: false
+app:
+  security:
+    headers:
+      csp: "default-src 'self'"
+      hsts:
+        preload: true

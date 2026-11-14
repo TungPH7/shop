@@ -1,0 +1,35 @@
+---
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 10000
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+  flyway:
+    out-of-order: false
+    validate-on-migrate: true
+    baseline-on-migrate: false
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health, info, flyway, metrics, prometheus"
+  endpoint:
+    health:
+      show-details: "when-authorized"
+logging:
+  level:
+    root: "INFO"
+    com.tungph7.learnpostgres: "INFO"
+    org.hibernate.SQL: "WARN"
+app:
+  security:
+    headers:
+      csp: "default-src 'self'"
+      hsts:
+        preload: false

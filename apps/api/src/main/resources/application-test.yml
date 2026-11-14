@@ -1,0 +1,56 @@
+---
+spring:
+  application:
+    name: "learn-postgresql-api-test"
+  datasource:
+    url: "jdbc:postgresql://localhost:5432/test_placeholder"
+    username: "test"
+    password: "test"
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 5000
+  jpa:
+    hibernate:
+      ddl-auto: "validate"
+    open-in-view: false
+    show-sql: false
+    properties:
+      hibernate.format_sql: false
+  flyway:
+    enabled: true
+    locations: "classpath:db/migration"
+    schemas: "app"
+    default-schema: "app"
+    baseline-on-migrate: false
+    clean-disabled: false
+logging:
+  level:
+    root: "WARN"
+    com.tungph7.learnpostgres: "INFO"
+    org.hibernate.SQL: "WARN"
+    org.testcontainers: "INFO"
+    com.github.dockerjava: "WARN"
+app:
+  errors:
+    base-url: "about:blank"
+  logging:
+    correlation-id-header: "X-Correlation-Id"
+    correlation-id-mdc-key: "correlationId"
+    max-correlation-id-length: 128
+  security:
+    cors:
+      allowed-origins: "http://localhost:5173"
+      allowed-methods: "GET,POST,PUT,DELETE,PATCH,OPTIONS"
+      allowed-headers: "Content-Type,X-Correlation-Id"
+      exposed-headers: "X-Correlation-Id,Location"
+      allow-credentials: false
+      max-age-seconds: 3600
+    headers:
+      csp: "default-src 'self'"
+      referrer-policy: "no-referrer"
+      permissions-policy: "geolocation=()"
+      hsts:
+        max-age: 31536000
+        include-subdomains: true
+        preload: false

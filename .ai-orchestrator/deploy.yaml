@@ -8,12 +8,28 @@ apps:
     health: /en
     public: true
     # From /etc/ao/secrets/shop/<environment>.env: the server checks both when it starts.
-    env: [API_URL, AUTH_SECRET]
+    env: [ API_URL, AUTH_SECRET ]
   admin:
     dockerfile: apps/admin/Dockerfile
     port: 5173
     health: /
     public: true
+  api:
+    dockerfile: apps/api/Dockerfile
+    context: apps/api
+    port: 3001
+    health: /actuator/health
+    memory: 768m
+    start_timeout: 180
+    # From /etc/ao/secrets/shop/<environment>.env: the profile of the environment, and the app user of its database
+    # (docs/vps-setup.md, section 14 of the kit).
+    env: [ SPRING_PROFILES_ACTIVE, DB_HOST, DB_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD ]
+# One PostgreSQL container for each environment, alias db, kept apart from the deploys. Its variables come from
+# /etc/ao/secrets/shop/<environment>.db.env; the init scripts run once, on a new volume.
+database:
+  image: postgres:17-alpine@sha256:d3244e8ce3f165ee3c93d9c4a4b1d0fe48b3a89e2287b717fdcbbde92d405065
+  init: apps/api/docker/postgres/init
+  memory: 256m
 smoke:
   - app: user
     path: /en
@@ -23,3 +39,7 @@ smoke:
     path: /
     expect_status: 200
     expect_text: <html
+  - app: api
+    path: /actuator/health
+    expect_status: 200
+    expect_text: '"status":"UP"'

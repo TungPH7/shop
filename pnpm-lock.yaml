@@ -181,6 +181,8 @@ importers:
         specifier: 4.1.9
         version: 4.1.9(@types/node@24.13.2)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(msw@2.14.6(@types/node@24.13.2)(typescript@6.0.3))(vite@8.3.8(@types/node@24.13.2)(yaml@2.9.1))
 
+  apps/api: {}
+
   apps/user:
     dependencies:
       '@hookform/resolvers':
