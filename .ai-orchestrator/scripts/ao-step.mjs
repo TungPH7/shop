@@ -21,6 +21,7 @@ import { projectSettings, setting } from '../lib/project-settings.mjs';
 import { unquotePath } from '../lib/quality/diff-paths.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
 import { matchesGlob } from '../lib/quality/glob.mjs';
+import { DOCKER_INFO, dockerAnswered } from '../lib/quality/maven.mjs';
 import { markReadyForReview, READY_PERMISSIONS } from '../lib/quality/pr-ready.mjs';
 import { appCredentials, botIdentity, githubRepoOf, installationToken, userVariable } from '../lib/quality/github-app.mjs';
 import { npmCli } from '../lib/quality/npm.mjs';
@@ -258,7 +259,7 @@ async function main() {
   // A Java app needs Docker for the tests be-dev runs (project-scaffold part 3, spec 2.2).
   const projectFile = join(projectDir, '.ai-orchestrator', 'project.yaml');
   const java = existsSync(projectFile) && Object.values(parse(readFileSync(projectFile, 'utf8'))?.apps ?? {}).some((app) => app?.profile === 'spring-boot');
-  const dockerRunning = () => spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'], { encoding: 'utf8', timeout: 20000 }).status === 0;
+  const dockerRunning = () => dockerAnswered(spawnSync('docker', DOCKER_INFO, { encoding: 'utf8', timeout: 20000 }));
   const decision = dockerGate(decideStep(command, facts, options), { java, dockerRunning });
   console.log(formatDecision(decision));
   if (!values.go || !decision.go) return;

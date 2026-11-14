@@ -133,5 +133,10 @@ export function composeUpArgs(composeText) {
   return services.length > 0 ? ['compose', 'up', '--detach', '--wait', ...services] : null;
 }
 
+// Whether Docker runs, for doctor and for ao-step before be-dev on a Java app. Docker 24 on Windows with Docker Desktop
+// stopped exits 0 and prints an empty version (T21), so the version itself is what counts. done: a spawnSync result.
+export const DOCKER_INFO = ['info', '--format', '{{.ServerVersion}}'];
+export const dockerAnswered = (done) => done?.status === 0 && typeof done.stdout === 'string' && done.stdout.trim() !== '';
+
 // What to tell someone whose machine has no JDK of the version the pom asks for.
 export const jdkMissing = (want) => `JDK ${want} was not found: install it, or set JAVA_HOME_${want} to its folder (the one that holds bin/ and release)`;
