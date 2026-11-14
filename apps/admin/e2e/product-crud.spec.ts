@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
+// On an environment (Development, Staging) the tests run against its URL, not the apps started here (SHOP-5).
+const isLocal = (url?: string) => url?.startsWith('http://localhost') === true;
+
 // Full Product CRUD end-to-end against an in-spec STATEFUL mock (Playwright
 // page.route) — no backend, no UI lib. Proves the whole Phase-1.1 stack works
 // together: routing, RBAC gating, TanStack Query cache invalidation, RHF forms,
@@ -94,7 +97,10 @@ async function setupMockedApp(page: Page, initial: MockProduct[]): Promise<void>
   });
 }
 
-test('Product CRUD end-to-end (create → read → update → delete)', async ({ page }) => {
+test('Product CRUD end-to-end (create → read → update → delete)', async ({ page, baseURL }) => {
+  // It mocks the old NestJS API origin in the browser and seeds the auth tokens of the template, so it runs on
+  // the apps started here only. The Epic Danh mục sản phẩm replaces it.
+  test.skip(!isLocal(baseURL), 'reason: old product API and auth mocks (SHOP-5)');
   await setupMockedApp(page, [
     { id: 'p-001', name: 'Seed Widget', priceCents: 1999, inStock: true },
   ]);
