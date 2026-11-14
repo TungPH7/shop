@@ -1,7 +1,7 @@
 // The backups of the databases (project-scaffold part 3, spec 2.4; plan, decision 8). Once a day, as root, a dump in
 // the custom format of each running database (the containers labelled ao.role=database) goes to
-// /var/backups/ao/<project>/<environment>/, readable by root only; the newest dump of each of the 7 newest days and of
-// the 4 newest weeks stay. The restore check restores the newest dump into a container with no network, and compares
+// /var/backups/ao/<project>/<environment>/, readable by root only; every dump of the last 48 hours stays, and the newest
+// of each of the 7 newest days and of the 4 newest weeks. The restore check restores the newest dump into a container with no network, and compares
 // its tables and rows with the live database. Pure, with docker given as run(args) and input(args, file), as in
 // docker.mjs; scripts/ao-backup.mjs runs it.
 import { setTimeout as pause } from 'node:timers/promises';
@@ -33,15 +33,18 @@ function isoWeek(date) {
   return `${day.getUTCFullYear()}-W${Math.ceil(((day - first) / 86400000 + 1) / 7)}`;
 }
 
-// The dumps that stay: the newest of each of the `daily` newest days, and of each of the `weekly` newest weeks.
-export function backupsToKeep(names, { daily = 7, weekly = 4 } = {}) {
+// The dumps that stay: every dump of the `recentHours` before the newest, so a run by hand never removes the night's
+// dump of the same day (T22: it removed the one a restore was to use), then the newest of each of the `daily` newest
+// days, and of each of the `weekly` newest weeks.
+export function backupsToKeep(names, { daily = 7, weekly = 4, recentHours = 48 } = {}) {
   const dated = names.map((name) => ({ name, time: backupTime(name) })).filter(({ time }) => time).sort((a, b) => b.time - a.time);
   const newestOf = (key, count) => {
     const seen = new Map();
     for (const dump of dated) if (!seen.has(key(dump.time))) seen.set(key(dump.time), dump.name);
     return [...seen.values()].slice(0, count);
   };
-  return new Set([...newestOf((time) => time.toISOString().slice(0, 10), daily), ...newestOf(isoWeek, weekly)]);
+  const recent = dated.filter(({ time }) => dated[0].time - time <= recentHours * 3_600_000).map(({ name }) => name);
+  return new Set([...recent, ...newestOf((time) => time.toISOString().slice(0, 10), daily), ...newestOf(isoWeek, weekly)]);
 }
 
 // The running databases, by their label.

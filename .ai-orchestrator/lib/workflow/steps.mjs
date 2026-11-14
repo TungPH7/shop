@@ -898,18 +898,19 @@ function decideRollback(facts) {
 function decidePreview(facts, options = {}) {
   const { item, pr, preview: p } = facts;
   const urls = (apps) => apps.map(({ name, url }) => `${name} ${url}`).join(', ');
+  // A state, not a stop: --stop ends here once the preview is down, and --go ends on "runs" below (Pilot 3, T4).
   if (p.stop) {
-    if (!p.active) return stop('no preview runs', '/ao-status');
+    if (!p.active) return { status: true, lines: ['No preview runs.'], next: '/ao-status' };
     return go([{ action: 'preview-stop', key: p.active.key }], [`The preview of ${p.active.key} runs on ${p.active.branch}: ${urls(p.active.apps)}`]);
   }
   const lines = [itemLine(facts)];
   const key = item.key;
   const out = (decision) => ({ ...decision, lines: [...lines, ...(decision.lines ?? [])] });
   if (item.workType === 'epic' || item.workType === 'sub-task') return out(stop(`${key} is ${item.workType === 'epic' ? 'an Epic' : 'a Sub-task'}: /ao-preview takes the item of a PR`, '/ao-status'));
-  if (p.active) {
-    const runs = p.active.key === key ? `the preview of ${key} runs already: ${urls(p.active.apps)}` : `the preview of ${p.active.key} runs`;
-    return out(stop(runs, `/ao-preview ${p.active.key} --stop, when you are done with it`));
+  if (p.active?.key === key) {
+    return { status: true, lines: [...lines, `The preview of ${key} runs on ${p.active.branch}: ${urls(p.active.apps)}`], next: `/ao-preview ${key} --stop, when you are done with it` };
   }
+  if (p.active) return out(stop(`the preview of ${p.active.key} runs`, `/ao-preview ${p.active.key} --stop, when you are done with it`));
   if (pr?.state !== 'open') return out(stop(`${key} has no open PR to preview`, nextFor(item, pr)));
   // Protected paths, and what steers a session at any depth (CLAUDE.md, AGENTS.md, a nested .claude/, .mcp.json…), which
   // Claude Code would load from the folder during the preview (review of ao-sample PR #21; live-run-fixes spec 2.7).

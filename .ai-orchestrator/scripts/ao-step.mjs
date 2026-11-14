@@ -23,7 +23,7 @@ import { readGates } from '../lib/quality/gates.mjs';
 import { matchesGlob } from '../lib/quality/glob.mjs';
 import { DOCKER_INFO, dockerAnswered } from '../lib/quality/maven.mjs';
 import { markReadyForReview, READY_PERMISSIONS } from '../lib/quality/pr-ready.mjs';
-import { appCredentials, botIdentity, githubRepoOf, installationToken, userVariable } from '../lib/quality/github-app.mjs';
+import { appCredentials, botIdentity, githubRepoOf, installationToken, userSecret } from '../lib/quality/github-app.mjs';
 import { npmCli } from '../lib/quality/npm.mjs';
 import { installArgs, managerFromLockfile, pnpmCli, runManager } from '../lib/quality/package-manager.mjs';
 import { attachEvidence } from '../lib/tracker/attachments.mjs';
@@ -142,7 +142,8 @@ export function homeBranch(command, facts, protectedBranches) {
   return isProtected(pr.base, protectedBranches) ? pr.base : null;
 }
 
-const secret = (name) => process.env[name] || userVariable(name);
+// A token or password of yours: your Windows user variable first, so a changed secret is used at once (Pilot 3, T2).
+const secret = (name) => userSecret(name);
 
 // The file of --note or --answers, which the skills write in .ai/runs/<KEY>/. Its text goes to the agent as the human's
 // words, so a file anywhere else is refused.

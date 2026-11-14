@@ -17,7 +17,7 @@ export const PROJECT_SCRIPTS = [
 ];
 // The scripts that run from the kit only: setting a project up, the deployer on the VPS, the kit's own checks.
 export const KIT_ONLY_SCRIPTS = [
-  'ao-backup.mjs', 'ao-deploy.mjs', 'ao-kit.mjs', 'gh-protect.mjs', 'github-app-create.mjs', 'jira-check.mjs', 'jira-checklist.mjs', 'profiles-check.mjs', 'render-docs.mjs',
+  'ao-backup.mjs', 'ao-backup-pull.mjs', 'ao-deploy.mjs', 'ao-kit.mjs', 'gh-protect.mjs', 'github-app-create.mjs', 'jira-check.mjs', 'jira-checklist.mjs', 'profiles-check.mjs', 'render-docs.mjs',
   'validate-contract.mjs',
   'vendor-skills.mjs',
 ];

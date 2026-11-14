@@ -17,7 +17,7 @@ const json = (result) => {
   }
 };
 
-export function setupGithub({ kitDir, repo, devAppKeyFile, secret, readFile, gh, run }) {
+export function setupGithub({ kitDir, repo, devAppId, devAppKeyFile, secret, readFile, gh, run }) {
   const notes = [];
   const done = [];
   const left = [];
@@ -80,7 +80,8 @@ export function setupGithub({ kitDir, repo, devAppKeyFile, secret, readFile, gh,
   else if (!devAppKeyFile) left.push('AO_DEV_APP_KEY: give the second private key of ao-dev with --dev-app-key-file <path> (docs/github-apps-setup.md, section 2), then run ao-kit setup github again');
   else if (write('the secret AO_DEV_APP_KEY of merge-gate, from the key file', ['secret', 'set', 'AO_DEV_APP_KEY', '--env', 'merge-gate', '--repo', repo], { input: readFile(devAppKeyFile) })) notes.push(`Delete ${devAppKeyFile} now: GitHub holds the key, and no other copy should`);
 
-  const ruleset = run(['node', join(kitDir, 'scripts', 'gh-protect.mjs').replaceAll('\\', '/'), '--repo', repo]);
+  // The ao-dev App bypasses two of the rulesets (lib/quality/ruleset.mjs), so gh-protect needs its id.
+  const ruleset = run(['node', join(kitDir, 'scripts', 'gh-protect.mjs').replaceAll('\\', '/'), '--repo', repo, '--dev-app-id', String(devAppId)]);
   notes.push(`gh:protect: ${`${ruleset.stdout ?? ''}${ruleset.stderr ?? ''}`.trim().split('\n').at(-1) || `exit ${ruleset.status}`}`);
   if (done.length > 0) notes.push(`Already set: ${done.join(', ')}`);
   notes.push(...left);

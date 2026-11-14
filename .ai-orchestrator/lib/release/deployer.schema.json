@@ -11,6 +11,17 @@
     "caddyfile": { "$ref": "#/$defs/path" },
     "basic_auth_file": { "$ref": "#/$defs/path" },
     "jira_token_file": { "$ref": "#/$defs/path" },
+    "backup": {
+      "description": "The encrypted copies of the dumps, which your machine pulls as aobackup (Pilot 3, spec 2.4). ao-backup reads it; the deployer does not.",
+      "type": "object",
+      "required": ["age_recipient"],
+      "additionalProperties": false,
+      "properties": {
+        "age_recipient": { "description": "The X25519 age recipient whose identity only your machine holds.", "type": "string", "pattern": "^age1[02-9ac-hj-np-z]{58}$" },
+        "copies_dir": { "description": "Default /var/backups/ao-offsite: the ChrootDirectory of aobackup.", "$ref": "#/$defs/path" },
+        "copies_group": { "description": "Default aobackup: the group that may read the copies.", "type": "string", "pattern": "^[a-z_][a-z0-9_-]{0,31}$" }
+      }
+    },
     "app": {
       "type": "object",
       "required": ["id", "key_file"],
@@ -46,6 +57,7 @@
           "name": { "type": "string", "maxLength": 20, "pattern": "^[a-z]([a-z0-9-]*[a-z0-9])?$" },
           "repo": { "type": "string", "pattern": "^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+$" },
           "space": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*$" },
+          "production_auth": { "description": "Production asks for the basic auth of Development and Staging too, until the project opens to everyone (Pilot 3, spec 2.2). Only root sets it, on the VPS.", "type": "boolean" },
           "hosts": {
             "description": "One host for each environment, those of the one public app; or one for each environment of each public app (project-scaffold part 2, spec 2.4).",
             "type": "object",

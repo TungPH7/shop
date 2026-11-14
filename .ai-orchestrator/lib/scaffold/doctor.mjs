@@ -43,6 +43,13 @@ export function doctor(facts) {
   const java = facts.java ?? [];
   for (const { app, want, jdk } of java) row('Machine', `JDK ${want} for ${app}`, Boolean(jdk), jdkMissing(want));
   if (java.length > 0) row('Machine', 'Docker is running', facts.docker?.running === true, 'Start Docker Desktop, then run doctor again: the Testcontainers of the Java tests and the database of /ao-preview need it');
+  // The backup copies this machine pulls (Pilot 3, spec 2.4): a row only on a machine set up to pull them.
+  if (facts.backupCopies) {
+    const mine = facts.backupCopies.filter(({ project }) => project === config?.name);
+    const old = mine.filter(({ hours }) => hours > 36);
+    const pull = 'run node <kit>/scripts/ao-backup-pull.mjs pull --host <ssh host> --dest <folder>, and see docs/vps-setup.md section 16';
+    row('Machine', `backup copies of ${config?.name} on this machine are at most 36 h old`, mine.length > 0 && old.length === 0, mine.length === 0 ? `No copy of ${config?.name} on this machine yet: ${pull}` : `Older than 36 h: ${old.map(({ env, hours }) => `${env}: ${hours} h`).join(', ')}. The machine was off, or the pull or the backup failed: ${pull}`);
+  }
   row('Machine', 'ATLASSIAN_AGENT_TOKEN is set', shapeOk(env.ATLASSIAN_AGENT_TOKEN), 'Set the API token of the agents\' Jira account as the user variable ATLASSIAN_AGENT_TOKEN (docs/getting-started.md)');
   row('Machine', 'JIRA_CI_TOKEN is set', shapeOk(env.JIRA_CI_TOKEN), 'Set the API token of the CI Jira account as the user variable JIRA_CI_TOKEN: ao-kit setup github and the QA evidence use it');
   for (const kind of ['DEV', 'REVIEW']) {
