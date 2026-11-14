@@ -4,7 +4,7 @@
 // go to the job summary in CI.
 // In CI the PR comes from the GitHub event; elsewhere: --base <ref> --branch <name> --title "<title>".
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, globSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -13,7 +13,7 @@ import { unquotePath } from '../lib/quality/diff-paths.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
 import { auditArgs, managerFromLockfile, PNPM_MISSING, runManager } from '../lib/quality/package-manager.mjs';
 import { checkDesignFile } from '../lib/quality/design-files.mjs';
-import { auditProblems, checkConventions, designFilesToCheck } from '../lib/quality/policy.mjs';
+import { auditProblems, checkConventions, designFilesToCheck, osvProblems } from '../lib/quality/policy.mjs';
 import { addedLines, deletedTests, findSuppressions, loweredThresholds } from '../lib/quality/suppressions.mjs';
 
 function run(command, args, options = {}) {
@@ -78,6 +78,22 @@ try {
     if (report.error) throw new Error(`${manager} audit: ${report.error.summary ?? report.error.message ?? report.error.code}`);
     sections.push(['Dependencies', auditProblems(report, gates.dependencies, new Date().toISOString().slice(0, 10))]);
   } else notes.push('no package-lock.json or pnpm-lock.yaml: the audit is skipped');
+
+  // A Java app: osv-scanner on its pom.xml, with the dependencies Maven resolves from Maven Central (project-scaffold
+  // part 3, spec 2.3). CI installs the scanner when the repo has apps/*/pom.xml, and OSV_SCANNER names it.
+  const poms = globSync('apps/*/pom.xml', { cwd: root }).map((path) => path.replaceAll('\\', '/')).sort();
+  if (poms.length > 0) {
+    const scanner = process.env.OSV_SCANNER;
+    if (!scanner) throw new Error(`${poms.join(', ')}: osv-scanner is not installed, so the Java dependencies are not checked; set OSV_SCANNER to it`);
+    const problems = [];
+    for (const pom of poms) {
+      // It exits 0 when it finds nothing and 1 when it finds advisories; anything else is a failed scan.
+      const scan = run(scanner, ['scan', 'source', '--format', 'json', '--data-source', 'native', '--lockfile', pom], { cwd: root });
+      if (scan.status !== 0 && scan.status !== 1) throw new Error(`osv-scanner on ${pom}: ${`${scan.stderr ?? scan.error?.message ?? ''}`.trim().split('\n').at(-1)}`);
+      problems.push(...osvProblems(JSON.parse(scan.stdout || '{}'), gates.dependencies, new Date().toISOString().slice(0, 10)));
+    }
+    sections.push(['Java dependencies', problems]);
+  }
 } catch (error) {
   sections.push(['Policy', [error.message]]);
 }

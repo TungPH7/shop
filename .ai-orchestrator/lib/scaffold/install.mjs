@@ -11,13 +11,13 @@ import { OLD_PREVIEW_FILE, readPreviewConfig } from '../workflow/preview.mjs';
 
 // The scripts a project runs from .ai-orchestrator/scripts/: the hooks, the CI jobs, ao-step and its helpers.
 export const PROJECT_SCRIPTS = [
-  'ao-agent.mjs', 'ao-git-credential.mjs', 'ao-pr.mjs', 'ao-step.mjs', 'audit.mjs', 'check-design.mjs', 'check-policy.mjs', 'ci-package-manager.mjs',
+  'ao-agent.mjs', 'ao-git-credential.mjs', 'ao-pr.mjs', 'ao-step.mjs', 'audit.mjs', 'check-design.mjs', 'check-policy.mjs', 'ci-java.mjs', 'ci-package-manager.mjs',
   'commit-msg.mjs',
-  'coverage-diff.mjs', 'install-hooks.mjs', 'jira-sync.mjs', 'merge-gate.mjs', 'pre-commit.mjs', 'pre-push.mjs', 'render-agents.mjs',
+  'coverage-diff.mjs', 'install-hooks.mjs', 'jira-sync.mjs', 'merge-gate.mjs', 'mvnw.mjs', 'pre-commit.mjs', 'pre-push.mjs', 'render-agents.mjs',
 ];
 // The scripts that run from the kit only: setting a project up, the deployer on the VPS, the kit's own checks.
 export const KIT_ONLY_SCRIPTS = [
-  'ao-deploy.mjs', 'ao-kit.mjs', 'gh-protect.mjs', 'github-app-create.mjs', 'jira-check.mjs', 'jira-checklist.mjs', 'profiles-check.mjs', 'render-docs.mjs',
+  'ao-backup.mjs', 'ao-deploy.mjs', 'ao-kit.mjs', 'gh-protect.mjs', 'github-app-create.mjs', 'jira-check.mjs', 'jira-checklist.mjs', 'profiles-check.mjs', 'render-docs.mjs',
   'validate-contract.mjs',
   'vendor-skills.mjs',
 ];

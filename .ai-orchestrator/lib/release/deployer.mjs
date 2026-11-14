@@ -4,11 +4,12 @@
 // and a deployment status on GitHub says how it went. Each environment saves the record before the next one starts, and
 // a deploy under way is kept in the record, so a tick cut short is finished by the next one with the same deployment.
 // Every outside effect is a parameter: git in the mirror, the GitHub client, the audit, the installer, the record store.
-import { chmod, lstat, readdir } from 'node:fs/promises';
+import { chmod, cp, lstat, readdir, rm } from 'node:fs/promises';
 import { posix } from 'node:path';
 import { formatError } from '../contract.mjs';
 import { parseBranch } from '../tracker/conventions.mjs';
 import { readDeployConfig } from './deploy-config.mjs';
+import { ensureDatabase } from './database.mjs';
 import { PRUNE_CACHE, buildArgs, containerEnv, parseSecrets, pruneImages, readableMode, swap, treesToKeep } from './docker.mjs';
 import { hostOf, publicApps, publicUrls } from './hosts.mjs';
 import { hasBaseline, markRequest, recordRun, runningPublic, runsByEnvironment } from './record.mjs';
@@ -252,7 +253,15 @@ export async function openForBuild(dir) {
 // reason, public }: 'success', with the public app and its port for Caddy; 'failure' when the new containers did not start or failed their smoke test, so the old ones
 // still serve; 'error' when nothing ran: no or a broken deploy.yaml, a missing secret, a failed build. An error of
 // Docker itself throws, and the next tick tries again.
-export function createInstaller({ project, git, docker, smoke = (checks, targets) => runSmoke({ checks, targets }), workDir, readSecrets, open = openForBuild }) {
+// The init scripts of a database, copied fresh from the worktree to a folder its container mounts read-only, readable
+// by the user postgres of the container (the deployer runs with UMask=0077).
+export async function copyInitScripts(from, to) {
+  await rm(to, { recursive: true, force: true });
+  await cp(from, to, { recursive: true });
+  await openForBuild(to);
+}
+
+export function createInstaller({ project, git, docker, smoke = (checks, targets, options) => runSmoke({ checks, targets, ...options }), workDir, readSecrets, open = openForBuild, copyInit = copyInitScripts }) {
   const failed = (reason) => ({ outcome: 'error', reason });
   return {
     async install({ env, sha, tree }) {
@@ -276,6 +285,16 @@ export function createInstaller({ project, git, docker, smoke = (checks, targets
       // Found before a build that would be thrown away; swap checks the same again.
       const missing = Object.entries(config.apps).flatMap(([app, spec]) => containerEnv({ app: spec, secrets, publicUrl: urls[app] }).missing.map((name) => `${name} (${app})`));
       if (missing.length > 0) return failed(`missing in /etc/ao/secrets/${project.name}/${env}.env: ${missing.join(', ')}`);
+      // The database has its own file, since POSTGRES_PASSWORD is its superuser there and the app's user in <env>.env
+      // (project-scaffold part 3, spec 2.4). Read before anything is built.
+      let databaseSecrets = null;
+      if (config.database) {
+        try {
+          databaseSecrets = parseSecrets(await readSecrets(`${env}.db`));
+        } catch (error) {
+          return failed(`the database of ${env} needs /etc/ao/secrets/${project.name}/${env}.db.env: ${error.message.split('\n')[0]}`);
+        }
+      }
 
       const dir = posix.join(workDir, tree);
       await git(['worktree', 'remove', '--force', dir]).catch(() => {});
@@ -287,11 +306,27 @@ export function createInstaller({ project, git, docker, smoke = (checks, targets
         } catch (error) {
           return failed(`the build folder could not be opened: ${error.message}`);
         }
-        for (const [app, { dockerfile }] of Object.entries(config.apps)) {
+        for (const [app, { dockerfile, context }] of Object.entries(config.apps)) {
           try {
-            await docker(buildArgs({ project: project.name, app, tree, dockerfile, context: dir }));
+            await docker(buildArgs({ project: project.name, app, tree, dockerfile, context: dir, ...(context && { folder: context }) }));
           } catch (error) {
             return failed(`the build of ${app} failed: ${error.message.slice(-300)}`);
+          }
+        }
+        // The database runs and answers before the new apps start; its init scripts come from this commit, for a new
+        // volume only, while the worktree is still there.
+        if (config.database) {
+          const initDir = posix.join(posix.dirname(workDir), 'db-init', env);
+          try {
+            await ensureDatabase({
+              run: docker, project: project.name, env, database: config.database, secrets: databaseSecrets,
+              prepareInit: async () => {
+                await copyInit(posix.join(dir, config.database.init), initDir);
+                return initDir;
+              },
+            });
+          } catch (error) {
+            return failed(`the database of ${env}: ${error.message.slice(-300)}`);
           }
         }
       } finally {

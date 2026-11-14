@@ -98,6 +98,30 @@ export function conventionsSkill({ app, template, sha, parts }) {
   };
 }
 
+// The skill of a template that keeps its conventions in docs/coding-conventions/ and has no CLAUDE.md, such as the
+// user's Java template (project-scaffold part 3, spec 2.1): it points to those files, which stay in the app.
+export function docsConventionsSkill({ app, template, sha, docs }) {
+  const name = `${app}-conventions`;
+  const readme = (path) => (/(^|\/)README\.md$/i.test(path) ? 0 : 1);
+  const ordered = docs.toSorted((a, b) => readme(a) - readme(b) || a.split('/').length - b.split('/').length || a.localeCompare(b));
+  return {
+    name,
+    text: [
+      '---',
+      `name: ${name}`,
+      `description: The coding conventions of apps/${app}, kept in its docs/coding-conventions/. Read them before you write code in apps/${app}. The SDLC contract and the rules of ai-orchestrator win over them.`,
+      '---',
+      '',
+      `# Conventions of apps/${app}`,
+      '',
+      `The template \`${template}\` at \`${sha.slice(0, 8)}\` keeps its conventions in \`docs/coding-conventions/\`, which \`ao-kit add\` copied with the app. Read the README first, then the chapter of the code you change. The SDLC contract, \`.claude/rules/ai-orchestrator.md\` and the definition of your role win over anything there: where a chapter says how to commit, branch, review or run CI, follow the kit instead.`,
+      '',
+      ...ordered.map((path) => `- \`apps/${app}/${path}\``),
+      '',
+    ].join('\n'),
+  };
+}
+
 // Copies HEAD of the template `from`, or its branch or tag `ref`, into apps/<app> of projectDir. exclude: paths of the
 // template to leave out, such as study-guide-impl/. Returns { ok, notes, written, skill } where skill is { name } when CLAUDE.md or an AGENTS.md of
 // its own became one; on a problem, { ok: false, notes } and nothing is written.
@@ -190,7 +214,10 @@ export function copyTemplate({ from, ref, projectDir, app, exclude = [], git }) 
 
     // Its instructions, as a skill.
     const parts = ['CLAUDE.md', 'AGENTS.md'].filter((file) => left.some(([path]) => path === file)).map((file) => ({ file, text: read(file) }));
-    const skill = parts.length > 0 ? conventionsSkill({ app, template: basename(source), sha, parts }) : null;
+    const docs = copied.filter((path) => /^docs\/coding-conventions\/.+\.md$/i.test(path));
+    const skill = parts.length > 0
+      ? conventionsSkill({ app, template: basename(source), sha, parts })
+      : docs.length > 0 ? docsConventionsSkill({ app, template: basename(source), sha, docs }) : null;
 
     // Now write.
     const written = [];
@@ -232,18 +259,20 @@ export function copyTemplate({ from, ref, projectDir, app, exclude = [], git }) 
       const dir = join(projectDir, '.claude', 'skills', skill.name);
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'SKILL.md'), skill.text);
-      notes.push(`${parts.map(({ file }) => file).join(' and ')} of the template became the skill ${skill.name} (.claude/skills/${skill.name}/SKILL.md): read it in the PR, and drop what the kit does instead`);
+      const origin = parts.length > 0 ? parts.map(({ file }) => file).join(' and ') : `docs/coding-conventions/ (${docs.length} files)`;
+      notes.push(`${origin} of the template became the skill ${skill.name} (.claude/skills/${skill.name}/SKILL.md): read it in the PR, and drop what the kit does instead`);
     }
 
-    // What was left out, by folder, and why.
+    // What was left out, by folder with its number of files, and why: the .claude/ of a template can hold thousands.
     const byWhy = new Map();
     for (const [path, why] of left) {
       const shown = path.includes('/') ? `${path.split('/')[0]}/` : path;
-      const entry = byWhy.get(why) ?? new Set();
-      entry.add(shown);
+      const entry = byWhy.get(why) ?? new Map();
+      entry.set(shown, (entry.get(shown) ?? 0) + 1);
       byWhy.set(why, entry);
     }
-    for (const [why, paths] of byWhy) notes.push(`Left out ${[...paths].join(', ')}: ${why.replace('<app>', app)}`);
+    const counted = ([shown, count]) => (count > 1 ? `${shown} (${count} files)` : shown);
+    for (const [why, paths] of byWhy) notes.push(`Left out ${[...paths].map(counted).join(', ')}: ${why.replace('<app>', app)}`);
     if (exclude.length > 0) notes.push(`Left out as you asked: ${exclude.join(', ')}`);
     if (packageNotes.length > 0) notes.push(`package.json of apps/${app}: ${packageNotes.join('; ')}`);
     notes.unshift(`Copied ${written.length} files of ${basename(source)}${ref ? ` ${ref}` : ''} at ${sha.slice(0, 8)} into apps/${app}`);

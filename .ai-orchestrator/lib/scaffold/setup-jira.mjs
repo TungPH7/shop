@@ -6,8 +6,27 @@
 //   jira(method, path, body)   a REST call on the site, resolving { status, json }
 //   run(argv, cwd)             node for jira-check.mjs, which reads the contract of the kit from cwd: { status, stdout, stderr }
 
-export async function setupJira({ kitDir, space, name, template, mapping, jira, run }) {
+// A failed call of the network, with what to name it; null for any other error, which stays a bug to see.
+const NETWORK_CODES = ['ENOTFOUND', 'EAI_AGAIN', 'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET'];
+export function networkProblem(error) {
+  if (error?.name === 'TimeoutError' || error?.cause?.name === 'TimeoutError') return 'timed out';
+  const code = [error?.code, error?.cause?.code].find((value) => NETWORK_CODES.includes(value));
+  return code ?? null;
+}
+
+// A network error stops the run with what to do, and keeps the steps already done (project-scaffold part 3, spec 2.6).
+export async function setupJira(options) {
   const notes = [];
+  try {
+    return await setup({ ...options, notes });
+  } catch (error) {
+    const problem = networkProblem(error);
+    if (!problem) throw error;
+    return { ok: false, notes: [...notes, `Jira could not be reached (${problem}): check the network, then run ao-kit setup jira again; the steps already done are not repeated`] };
+  }
+}
+
+async function setup({ kitDir, space, name, template, mapping, jira, run, notes }) {
   const me = await jira('GET', '/rest/api/3/myself');
   if (me.status !== 200) return { ok: false, notes: [`Jira cannot sign in with JIRA_ADMIN_EMAIL and JIRA_ADMIN_CLASSIC_TOKEN (${me.status}): make a classic API token as docs/getting-started.md says`] };
 

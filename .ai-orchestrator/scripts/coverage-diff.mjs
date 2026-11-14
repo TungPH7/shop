@@ -1,12 +1,14 @@
 // Coverage of the lines this branch adds or changes since it left <base> (quality-gates spec section 2.4), read from
-// the lcov files that quality/gates.yaml names. Run it after the project's test:coverage script, in CI or before a push.
+// the lcov files and the JaCoCo reports that quality/gates.yaml names, less the coverage_exclude of each app in
+// project.yaml. Run it after the project's test:coverage script, in CI or before a push.
 // Usage: node .ai-orchestrator/scripts/coverage-diff.mjs --base <ref>
 import { spawnSync } from 'node:child_process';
-import { appendFileSync, globSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, globSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { changedLineCoverage, changedLines, parseLcov } from '../lib/quality/coverage.mjs';
+import { parse } from 'yaml';
+import { changedLineCoverage, changedLines, parseJacoco, parseLcov, projectCoverageExcludes } from '../lib/quality/coverage.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
 
 const { values } = parseArgs({ options: { base: { type: 'string' } } });
@@ -35,7 +37,24 @@ try {
     }
   }
 
-  const result = changedLineCoverage({ changed, lcov, coverage });
+  // A Java app: <app>/target/site/jacoco/jacoco.xml, whose files sit in <app>/src/main/java/ (part 3, spec 2.3).
+  for (const file of (coverage.jacoco ?? []).flatMap((glob) => globSync(glob, { cwd: root }))) {
+    const appDir = dirname(dirname(dirname(dirname(file)))).replaceAll('\\', '/');
+    for (const [source, hits] of parseJacoco(readFileSync(join(root, file), 'utf8'), { appDir })) lcov.set(source, hits);
+  }
+  // The coverage_exclude of each app in project.yaml.
+  const projectFile = join(root, '.ai-orchestrator', 'project.yaml');
+  const extra = existsSync(projectFile) ? projectCoverageExcludes(parse(readFileSync(projectFile, 'utf8'))) : [];
+
+  // The text of a changed file, as the tests ran it: a Java interface with no body is in no JaCoCo report (part 3, T20).
+  const read = (file) => {
+    try {
+      return readFileSync(join(root, file), 'utf8');
+    } catch {
+      return null;
+    }
+  };
+  const result = changedLineCoverage({ changed, lcov, coverage: { ...coverage, exclude: [...coverage.exclude, ...extra] }, read });
   const rows = result.files.map(({ file, covered, total, uncovered }) => `${file}  ${covered} of ${total}${uncovered.length ? `  not run: ${uncovered.join(', ')}` : ''}`);
   console.log([...rows, `changed lines covered: ${result.percent}% (${result.covered} of ${result.total}); at least ${coverage.changed_lines_min}%`].join('\n'));
   if (process.env.GITHUB_STEP_SUMMARY) {

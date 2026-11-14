@@ -91,7 +91,7 @@
       "properties": {
         "repo": { "type": "string" },
         "path": { "type": "string", "minLength": 1 },
-        "profile": { "description": "The stack of the app; react since project-scaffold part 2, B3 adds spring-boot.", "enum": ["nextjs", "nestjs", "react"] },
+        "profile": { "description": "The stack of the app; react since project-scaffold part 2, spring-boot since part 3.", "enum": ["nextjs", "nestjs", "react", "spring-boot"] },
         "dev": { "description": "The command that runs the app on this machine, npm, pnpm or node with no shell.", "type": "string" },
         "port": {
           "type": "object",
@@ -103,6 +103,12 @@
           }
         },
         "health": { "description": "The path that answers 200 once the app is up.", "type": "string", "pattern": "^/" },
+        "coverage_exclude": {
+          "description": "Globs of the app folder that the coverage of changed lines leaves out, as the coverage config of the app does, such as src/main/java/**/dto/** (project-scaffold part 3, spec 2.3). This file is a protected path, so only a PR you merge widens the list.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^(?![/\\\\])(?!.*(^|/)\\.\\.(/|$))\\S+$" }
+        },
         "public": { "type": "boolean" },
         "hosts": {
           "description": "The host of a public app in each environment, the same as under projects of /etc/ao/deployer.yaml on the VPS: qa reaches the app there, and ao-kit doctor prints those lines (project-scaffold part 2, spec 2.4).",
