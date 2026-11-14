@@ -18,7 +18,7 @@ import { CLEARED_ENV, READ_PERMISSIONS } from '../lib/agents/launch.mjs';
 import { mergeLocal, readRoster } from '../lib/agents/roster.mjs';
 import { readContract } from '../lib/contract.mjs';
 import { projectSettings, setting } from '../lib/project-settings.mjs';
-import { unquotePath } from '../lib/quality/diff-paths.mjs';
+import { touchedPaths, unquotePath } from '../lib/quality/diff-paths.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
 import { matchesGlob } from '../lib/quality/glob.mjs';
 import { DOCKER_INFO, dockerAnswered } from '../lib/quality/maven.mjs';
@@ -293,7 +293,7 @@ async function main() {
         if (step.action === 'pr-ready') return prReady(step, { repo, settings });
         if (step.action === 'preview-start') return preview.start(step);
         if (step.action === 'preview-stop') return preview.stop().then(({ notes }) => notes);
-        return releaseCut(step, { repo, mapping, settings });
+        return releaseCut(step, { repo, mapping, userToken });
       },
       git: (checkout) => prepareCheckout(checkout),
       // The work a run left uncommitted when it stopped goes aside, and comes back when it goes on (live-run-fixes 2.1).
@@ -555,7 +555,7 @@ function developHistory(tag) {
 // /ao-release <vX.Y.0> <sha>, its one step (release-workflow spec 2.6): the Fix Versions and comments on Jira with the CI
 // token, which only your session holds, then the release branch as the ao-dev App. The branch comes last: once it is
 // there the command stops at "release branch open", so a step cut short before it can be run again.
-async function releaseCut({ version, nextVersion, sha, included, after, cancelled = [] }, { repo, mapping, settings }) {
+async function releaseCut({ version, nextVersion, sha, included, after, cancelled = [] }, { repo, mapping, userToken }) {
   const notes = [];
   const ciToken = secret('JIRA_CI_TOKEN');
   if (!ciToken) throw new Error('JIRA_CI_TOKEN is not set in your session');
@@ -567,10 +567,10 @@ async function releaseCut({ version, nextVersion, sha, included, after, cancelle
   const moved = changes.fixVersions.filter(({ key }) => !included.some((item) => item.key === key)).map(({ key }) => key);
   if (moved.length > 0) notes.push(`Moved to ${nextVersion}: ${moved.join(', ')}.`);
   if (cancelled.length > 0) notes.push(`Cancelled, code in ${version}, commented: ${cancelled.map(({ key }) => key).join(', ')}.`);
-  const devEnv = { ...process.env, AO_DEV_APP: setting('AO_DEV_APP', settings), AO_DEV_APP_ID: setting('AO_DEV_APP_ID', settings) };
-  const { token } = await installationToken({ ...appCredentials('dev', { env: devEnv }), repo, permissions: { contents: 'write' } });
-  await createGitHubClient({ repo, token, write: true }).request('POST', '/git/refs', undefined, { ref: `refs/heads/release/${version}`, sha });
-  notes.push(`Created release/${version} at ${sha.slice(0, 8)} as ${setting('AO_DEV_APP', settings)}[bot].`);
+  // Only you make a release branch (Pilot 3, spec 2.9, review round 2 of shop PR #13): the ruleset ao-release-branches
+  // lets only an admin create release/*, so an agent holding ao-dev cannot cut one at a commit nobody reviewed.
+  await yours(repo, userToken).request('POST', '/git/refs', undefined, { ref: `refs/heads/release/${version}`, sha });
+  notes.push(`Created release/${version} at ${sha.slice(0, 8)} with your gh login.`);
   return notes;
 }
 
@@ -588,8 +588,10 @@ async function contentOf(github, path, branch) {
 // /ao-ship vX.Y.0, its last step (release-workflow spec 2.7, steps 4 and 5; Pilot 3, spec 2.9): as the ao-dev App, one
 // commit with the regression report as docs/releases/<version>.md and the section of the release in CHANGELOG.md, on
 // release-notes/<version> cut from the release branch, and its PR into the release branch, which merge-gate merges with
-// ao-merge: the rulesets let no App push to release/* any more. Once it is merged, the check that the release branch
-// changed nothing else since the regression, then the release PR into main. It waits up to 15 minutes for merge-gate,
+// ao-merge: the rulesets let no App push to release/* any more. A PR of the report that is open already must hold what
+// this step wrote: else its branch is made again (review round 2 of shop PR #13: an agent holding ao-dev could open one
+// first). Once it is merged, the release branch must hold the report and the changelog this step wrote, and have
+// changed nothing else since the regression; then the release PR into main. It waits up to 15 minutes for merge-gate,
 // then stops with what it waits for; run again, it commits nothing new and opens no second PR.
 async function releasePr({ version, branch, regression }, { repo, settings }) {
   const [report, section, body] = ['regression-report.md', 'changelog.md', 'pr-description.md'].map((name) => readRunFile(version, name));
@@ -603,26 +605,35 @@ async function releasePr({ version, branch, regression }, { repo, settings }) {
   const reportPath = `docs/releases/${version}.md`;
   const current = await contentOf(github, 'CHANGELOG.md', branch);
   const changelog = changelogWith(current, section, version);
+  // Whether a branch holds exactly the report and the changelog this step wrote.
+  const holds = async (ref) => (await contentOf(github, reportPath, ref)) === report && (await contentOf(github, 'CHANGELOG.md', ref)) === changelog;
   if (changelog !== current || report !== (await contentOf(github, reportPath, branch))) {
     const want = notesPullRequest(version);
-    let pr = (await github.getAll('/pulls', { state: 'open', base: branch })).find((open) => open.head.ref === want.head);
-    if (pr) notes.push(`PR #${pr.number} of the release report into ${branch} is open already.`);
-    else {
+    // One commit of the report on the release branch's head, on the branch of the report alone, made again when needed.
+    const commitNotes = async () => {
       const head = (await github.get(`/git/ref/heads/${branch}`)).object.sha;
       const { tree } = await github.get(`/git/commits/${head}`);
       const files = [{ path: reportPath, content: report }, { path: 'CHANGELOG.md', content: changelog }].map((file) => ({ ...file, mode: '100644', type: 'blob' }));
       const made = await github.request('POST', '/git/trees', undefined, { base_tree: tree.sha, tree: files });
       const signed = { ...bot, date: new Date().toISOString() };
       const commit = await github.request('POST', '/git/commits', undefined, { message: `docs(release): add the regression report and the changelog of ${version}`, tree: made.sha, parents: [head], author: signed, committer: signed });
-      // The branch belongs to the report alone: a run that needs it again makes it again from the release branch.
       try {
         await github.request('POST', '/git/refs', undefined, { ref: `refs/heads/${want.head}`, sha: commit.sha });
       } catch (error) {
         if (error.status !== 422) throw error;
         await github.request('PATCH', `/git/refs/heads/${want.head}`, undefined, { sha: commit.sha, force: true });
       }
+      return commit.sha;
+    };
+    let pr = (await github.getAll('/pulls', { state: 'open', base: branch })).find((open) => open.head.ref === want.head);
+    if (pr && (await holds(want.head))) notes.push(`PR #${pr.number} of the release report into ${branch} is open already, with the report and the changelog of this run.`);
+    else if (pr) {
+      const sha = await commitNotes();
+      notes.push(`PR #${pr.number} of the release report into ${branch} held another report or changelog: ${want.head} is made again from ${branch} as ${bot.name} (${sha.slice(0, 8)}).`);
+    } else {
+      const sha = await commitNotes();
       pr = await github.request('POST', '/pulls', undefined, { title: want.title, head: want.head, base: branch, body: want.body });
-      notes.push(`Committed ${reportPath} and CHANGELOG.md on ${want.head} as ${bot.name} (${commit.sha.slice(0, 8)}), and opened PR #${pr.number} into ${branch}.`);
+      notes.push(`Committed ${reportPath} and CHANGELOG.md on ${want.head} as ${bot.name} (${sha.slice(0, 8)}), and opened PR #${pr.number} into ${branch}.`);
     }
     const outcome = await waitForMerge(() => github.get(`/pulls/${pr.number}`));
     if (outcome === 'closed') {
@@ -634,10 +645,10 @@ async function releasePr({ version, branch, regression }, { repo, settings }) {
       return notes;
     }
     notes.push(`merge-gate merged PR #${pr.number} of the release report into ${branch}.`);
+    if (!(await holds(branch))) throw new Error(`${branch} does not hold the report and the changelog of this run after PR #${pr.number}: read that PR and the release branch on GitHub, then run /ao-ship ${version} again`);
   }
   const allowed = [reportPath, 'CHANGELOG.md'];
-  const changed = ((await github.get(`/compare/${regression}...${branch}`)).files ?? []).flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename]));
-  const beyond = [...new Set(changed.filter((file) => !allowed.includes(file)))];
+  const beyond = touchedPaths((await github.get(`/compare/${regression}...${branch}`)).files ?? []).filter((file) => !allowed.includes(file));
   if (beyond.length > 0) throw new Error(`${branch} changed ${beyond.join(', ')} since the regression on ${regression.slice(0, 8)}: run /ao-ship ${version} again, and the regression runs again`);
   const open = (await github.getAll('/pulls', { state: 'open', base: 'main' })).find((pr) => pr.head.ref === branch);
   // The notes may have been written again (T21): the description follows them.
@@ -654,7 +665,7 @@ async function releasePr({ version, branch, regression }, { repo, settings }) {
 
 // A writing client of your gh login: GitHub records you as the creator of what it makes (gate ⑤, spec 2.4).
 function yours(repo, userToken) {
-  if (!userToken) throw new Error('log in with gh auth login: the deployment request must be yours');
+  if (!userToken) throw new Error('log in with gh auth login: this step runs with your gh login');
   return createGitHubClient({ repo, token: userToken, write: true });
 }
 

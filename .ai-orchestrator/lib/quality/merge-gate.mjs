@@ -7,6 +7,7 @@ import { adfText, changesRequestedOn, lastDecision, readChecks } from '../tracke
 import { ciAccount, latestFlagComment, needsYouMarker } from '../tracker/flags.mjs';
 import { raiseFlag } from '../tracker/sync.mjs';
 import { docsConditions, docsPullRequest, readDocsFacts } from './docs-pr.mjs';
+import { touchedPaths } from './diff-paths.mjs';
 import { matchesGlob } from './glob.mjs';
 import { checkDescription, openCounts, readReviewReport } from './pull-request.mjs';
 
@@ -48,6 +49,13 @@ export async function runMergeGate({ github, mergeClient, docs, notify, gates, a
       if (dryRun) {
         const then = decision.release ? `, then tag ${decision.release.tag} and merge main back into ${decision.release.backMerge}` : '';
         log(`Would merge #${number}: ${what}${then}`);
+        continue;
+      }
+      // The merge call pins the head, not the base: read the PR again right before it, and leave a PR whose base or head
+      // moved since the facts were read to the next run (review round 2 of shop PR #13, Pilot 3 spec 2.9).
+      const now = await github.get(`/pulls/${number}`);
+      if (now.base?.ref !== facts.pr.base.ref || now.head?.sha !== decision.sha) {
+        log(`Waiting #${number}: the PR changed while merge-gate read it (base ${now.base?.ref}, head ${String(now.head?.sha).slice(0, 7)}); the next run decides again`);
         continue;
       }
       await getWriter();
@@ -226,7 +234,7 @@ export const notesPaths = (version) => [`docs/releases/v${version}.md`, 'CHANGEL
 function skipReason(pr, apps, gates) {
   if (pr.state !== 'open') return 'the PR is not open';
   const openers = isBackMerge(pr) ? writers(apps) : [botLogin(apps.dev)];
-  if (!openers.includes(pr.user?.login)) return `opened by ${pr.user?.login}, not by ${apps.dev}: whoever opened it merges it`;
+  if (!openers.includes(pr.user?.login)) return `opened by ${pr.user?.login}, not by ${openers.map((login) => login.replace(/\[bot\]$/, '')).join(' or ')}: whoever opened it merges it`;
   if (pr.draft) return 'the PR is a draft';
   if (isReleasePr(pr) || notesVersion(pr)) return undefined;
   if (isBackMerge(pr)) {
@@ -283,7 +291,7 @@ export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, 
   const notes = notesVersion(pr);
   if (notes) {
     const allowed = notesPaths(notes);
-    const beyond = [...new Set(files.flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename])))].filter((path) => !allowed.includes(path));
+    const beyond = touchedPaths(files).filter((path) => !allowed.includes(path));
     if (beyond.length > 0) return { action: 'needs-you', paths: beyond, missing: [] };
     const missing = [...(checks.green ? [] : [`CI green ${at}`]), ...conflicts];
     return missing.length > 0 ? { action: 'wait', missing } : { action: 'merge', method: 'squash', sha: pr.head.sha, title: `${pr.title} (#${pr.number})` };
@@ -381,8 +389,7 @@ const protectedGlob = (name, gates) => gates.protected_paths.find(({ path }) => 
 
 // The protected paths among the PR's files; a renamed file counts by its old name too.
 export function protectedPaths(files, gates) {
-  const names = files.flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename]));
-  return [...new Set(names.filter((name) => protectedGlob(name, gates) !== undefined))];
+  return touchedPaths(files).filter((name) => protectedGlob(name, gates) !== undefined);
 }
 
 // The body of the squash commit: the header of each commit of the PR, merge commits left out, so the Sub-task keys

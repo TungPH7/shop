@@ -1,13 +1,14 @@
 // Your machine pulls the encrypted copies of the dumps (Pilot 3, spec 2.4; plan, decision 3). The account aobackup on
 // the VPS only reads, over SFTP, inside /var/backups/ao-offsite (ChrootDirectory, internal-sftp -R), so the paths it
 // lists start at that folder: /<project>/<environment>/<project>-<environment>-<UTC time>.dump.age. The copies land in
-// <dest>/<project>/<environment>/, which keeps the copies the VPS keeps (Pilot 3, spec 2.9). Pure but for localCopies
+// <dest>/<project>/<environment>/, and nothing there is removed: the names come from the VPS, and a VPS taken over could
+// name copies so that a rule of keeping by name lets the real ones go (review round 2 of shop PR #13). Pure but for localCopies
 // and pulledCopyAges, which read the folder and the record; scripts/ao-backup-pull.mjs runs sftp, and ao-kit doctor
 // reads the ages.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { backupTime, backupsToKeep } from './backup.mjs';
+import { backupTime } from './backup.mjs';
 
 const ENVIRONMENTS = ['development', 'staging', 'production'];
 const LINE = /^\/([a-z]([a-z0-9-]*[a-z0-9])?)\/([a-z]+)\/([A-Za-z0-9.-]+\.dump\.age)$/;
@@ -62,18 +63,6 @@ const DRIFT_MS = 5 * 60_000;
 // A copy whose name holds a time later than now, past the drift (Pilot 3, spec 2.9): a VPS taken over could write one to
 // pass for the newest copy for ever. pull leaves it on the VPS and says so; copyAges leaves it out.
 export const isFuture = (file, now) => backupTime(file.name.slice(0, -'.age'.length)) - now > DRIFT_MS;
-
-// The copies of this machine to let go: those the VPS no longer keeps either (backupsToKeep: every copy of the 48 hours
-// before the newest, then the newest of each of the 7 newest days and of the 4 newest weeks), for each project and
-// environment on its own.
-export function toPrune(files) {
-  const groups = new Map();
-  for (const file of files) groups.set(`${file.project}/${file.env}`, [...(groups.get(`${file.project}/${file.env}`) ?? []), file]);
-  return [...groups.values()].flatMap((group) => {
-    const keep = backupsToKeep(group.map(({ name }) => name.slice(0, -'.age'.length)));
-    return group.filter(({ name }) => !keep.has(name.slice(0, -'.age'.length)));
-  });
-}
 
 // The copies not on your machine yet; exists(path) tells.
 export const toPull = (remote, dest, exists) => remote.filter((file) => !exists(localPath(dest, file)));

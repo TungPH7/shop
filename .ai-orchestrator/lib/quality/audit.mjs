@@ -6,12 +6,14 @@
 import { extractKeys, parseBranch } from '../tracker/conventions.mjs';
 import { adfText, readChecks } from '../tracker/facts.mjs';
 import { raiseFlag } from '../tracker/sync.mjs';
+import { touchedPaths } from './diff-paths.mjs';
 import { docsPullRequest, readDocsFacts } from './docs-pr.mjs';
 import { approved, botLogin, docsUnmet, docsVerdict, isBackMerge, notesPaths, notesVersion, protectedPaths, releaseTags, unmetConditions } from './merge-gate.mjs';
 
 // Who may merge a PR that needs no approval of yours, a merge back or the release report: merge-gate, with ao-merge
-// (Pilot 3, spec 2.9) or, in a project with no ao-merge yet, ao-dev; or you.
-const mergers = (apps, approvers) => [...[apps.merge, apps.dev].filter(Boolean).map(botLogin), ...approvers];
+// (Pilot 3, spec 2.9), or with ao-dev only in a project that has no ao-merge yet; or you. In a project with ao-merge, a
+// merge by ao-dev, the App of the agents, fails (review round 2 of shop PR #13).
+const mergers = (apps, approvers) => [botLogin(apps.merge ?? apps.dev), ...approvers];
 
 // The merged PR whose merge commit is `sha`, into `branch`; for a release branch also into develop, since a new
 // release branch is cut from a commit of develop. A PR that only contains the commit is not its merge.
@@ -55,7 +57,7 @@ export function decideAudit({ sha, branch, message, pull, files = [], reviews = 
     // report and the changelog of its version, a file moved away by its old path too, and CI passed.
     missing = checks.green ? [] : [`CI green ${at}`];
     const allowed = notesPaths(notes);
-    const beyond = changedPaths(files).filter((path) => !allowed.includes(path));
+    const beyond = touchedPaths(files).filter((path) => !allowed.includes(path));
     if (beyond.length > 0) problems.push(`PR #${pull.number} is the report of v${notes}, which may only change ${allowed.join(' and ')}, but it changes ${beyond.join(', ')}`);
     if (pull.user?.login !== botLogin(apps.dev)) problems.push(`PR #${pull.number} is the report of v${notes}, which ao-dev opens, but ${pull.user?.login} opened it`);
     if (!mergers(apps, approvers).includes(merger)) problems.push(`PR #${pull.number} is the report of v${notes}, which merge-gate or you merge, but ${merger} merged it`);
@@ -80,9 +82,6 @@ export function decideAudit({ sha, branch, message, pull, files = [], reviews = 
 }
 
 const result = (pr, problems, keys) => ({ ok: problems.length === 0, pr, problems, keys });
-
-// The paths a commit touches; a renamed file counts by its old name too.
-const changedPaths = (files = []) => [...new Set(files.flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename])))];
 
 // Reads the facts of commit `sha` on `branch`, decides, and prints the outcome. When the audit fails, every work item
 // of the project space it names is flagged, with a comment that says why, once per commit and branch. dryRun flags

@@ -31,12 +31,22 @@ const POWERSHELL_ENV = new RegExp(`(?:\\benv:[\\\\/]*|SetEnvironmentVariable\\(\
 // Windows reads them. Matched at the end of a word: an unquoted Windows path loses its backslashes in the shell.
 const ORCHESTRATION = /(ao-step|ao-agent|ao-git-credential)\.mjs$/i;
 const GIT_DIR = ".git/ holds git's own settings and hooks: change them with git commands, not by editing the files";
-const KEY_FILE = /\.pem\b|ao-keys|AO_(?:DEV|REVIEW)_APP_KEY/i;
+const KEY_FILE = /\.pem\b|ao-keys|AO_(?:DEV|REVIEW|MERGE)_APP_KEY/i;
 // The backups of every environment (Pilot 3, spec 2.9): the age identity that opens them, the encrypted copies, the
-// folder your machine pulls them into, and the script that pulls and opens them. An agent runs as your Windows user,
-// so gh-guard stops the plain ways; that the identity stays off the machine is what holds (review of shop PR #13).
+// folder your machine pulls them into, %USERPROFILE%\.ao where the pull keeps its state (and the identity lay before),
+// and the script that pulls and opens them. An agent runs as your Windows user, so gh-guard stops the plain ways; that
+// the identity stays off the machine is what holds (review of shop PR #13).
 const BACKUP = 'do not read the backup copies or the identity that opens them, and do not run ao-backup-pull.mjs: they hold the data of every environment';
-const BACKUP_FILE = /\.agekey\b|\.dump\.age\b|ao-backups|ao-backup-pull/i;
+const BACKUP_FILE = /\.agekey\b|\.dump\.age\b|ao-backups|ao-backup-pull|(?:^|[\\/])\.ao(?:[\\/]|$)/i;
+
+// What a path, or a glob or pattern of Grep and Glob, may not name: keys, the token of gh, the backups. undefined when
+// it names none of them.
+function forbiddenFile(text) {
+  if (KEY_FILE.test(text)) return deny(KEY);
+  if (BACKUP_FILE.test(text)) return deny(BACKUP);
+  if (GH_HOSTS_FILE.test(text)) return deny(TOKEN);
+  return undefined;
+}
 // gh auth token prints your token, and so does gh auth status with -t, alone or in a group such as -at (after -h the
 // rest of the group is the host name); login, switch and the others change it.
 const TOKEN_COMMAND = /\bgh(?:\.exe)?\s+auth\s+(?:token|login|logout|switch|refresh|setup-git|git-credential)\b|\bgh(?:\.exe)?\s+auth\s+status\b[^\n;&|]*\s(?:--show-token\b|-[^-h\s]*t)/;
@@ -54,12 +64,13 @@ export function checkAgentCall(input, { gates, contract, projectDir, roster, tem
   switch (input.tool_name) {
     case 'Bash':
       return checkCommand(args.command ?? '', role, gates, roster);
-    case 'Read': {
-      const file = args.file_path ?? '';
-      if (KEY_FILE.test(file)) return deny(KEY);
-      if (BACKUP_FILE.test(file)) return deny(BACKUP);
-      return GH_HOSTS_FILE.test(file) ? deny(TOKEN) : allow;
-    }
+    case 'Read':
+      return forbiddenFile(args.file_path ?? '') ?? allow;
+    // Grep with output_mode content prints a file, and Glob lists them: the rules of Read, on each path they take
+    // (review round 2 of shop PR #13).
+    case 'Grep':
+    case 'Glob':
+      return [args.path, args.glob, args.pattern].filter((value) => typeof value === 'string').map(forbiddenFile).find(Boolean) ?? allow;
     case 'Edit':
     case 'Write':
     case 'NotebookEdit':

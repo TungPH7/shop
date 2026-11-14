@@ -106,6 +106,29 @@ export function ensureGitignore(projectDir) {
   return [`Added to .gitignore: ${missing.join(', ')}`];
 }
 
+// .github/CODEOWNERS (Pilot 3, spec 2.9, round 2 of the review of shop PR #13): the rulesets count only the approval of a
+// code owner, and this file makes your logins, github.approvers of project.yaml, the owners of every file. An App with
+// write access, such as ao-dev, could otherwise approve a PR in your place.
+export function codeownersText(approvers) {
+  if (!approvers?.length) throw new Error('.github/CODEOWNERS needs at least one approver: github.approvers of project.yaml');
+  return [
+    '# Written by ai-orchestrator from github.approvers of .ai-orchestrator/project.yaml (Pilot 3, spec 2.9). The rulesets',
+    '# count only the approval of a code owner, so no App approves a PR in your place. Change project.yaml, not this file.',
+    `* ${approvers.map((login) => `@${login}`).join(' ')}`,
+    '',
+  ].join('\n');
+}
+
+// Writes .github/CODEOWNERS when it is missing or differs from codeownersText. Returns notes.
+export function ensureCodeowners(projectDir, approvers) {
+  const file = join(projectDir, '.github', 'CODEOWNERS');
+  const text = codeownersText(approvers);
+  if (existsSync(file) && readFileSync(file, 'utf8') === text) return [];
+  mkdirSync(join(projectDir, '.github'), { recursive: true });
+  writeFileSync(file, text);
+  return [`Wrote .github/CODEOWNERS: * ${approvers.map((login) => `@${login}`).join(' ')}, so the rulesets count only your approval`];
+}
+
 const PREPARE = 'node .ai-orchestrator/scripts/install-hooks.mjs';
 
 // Sets the prepare script, so npm install installs the git hooks of the kit; a prepare of the project's own is named,

@@ -7,7 +7,7 @@ import { parse, stringify } from 'yaml';
 import { githubRepoOf } from '../quality/github-app.mjs';
 import { devCommand, MANAGERS } from '../quality/package-manager.mjs';
 import { OLD_PREVIEW_FILE } from '../workflow/preview.mjs';
-import { draftFromOldConfig, ensureGitignore, ensurePrepare, installKit, profileOf } from './install.mjs';
+import { draftFromOldConfig, ensureCodeowners, ensureGitignore, ensurePrepare, installKit, profileOf } from './install.mjs';
 import { copyProfile, projectYaml, readProfile, rosterLocalYaml } from './profile.mjs';
 import { PROJECT_FILE, readProjectConfig, REQUIRED_SCRIPTS } from './project-config.mjs';
 
@@ -174,6 +174,9 @@ export function initProject({ kitDir, projectDir, options, env = process.env, gi
   const { removed } = installKit({ kitDir, projectDir });
   notes.push(`Copied the kit${removed.length > 0 ? `, and removed ${removed.length} files of an older copy` : ''}`);
   notes.push(...ensureGitignore(projectDir), ...ensurePrepare(projectDir), ...ensureOrigin(projectDir, values.repo, git));
+  // The rulesets count only a code owner's approval (Pilot 3, spec 2.9).
+  const approvers = readProjectConfig(text).config?.github?.approvers;
+  if (approvers?.length) notes.push(...ensureCodeowners(projectDir, approvers));
   const todo = todoPaths(readProjectConfig(text).config ?? {});
   const { errors } = readProjectConfig(text);
   if (todo.length > 0 || errors.length > 0) {
@@ -234,6 +237,9 @@ export function syncKit({ kitDir, projectDir, options, git, run }) {
   const { removed } = installKit({ kitDir, projectDir });
   notes.push(`Copied the kit${removed.length > 0 ? `; removed ${removed.length} files the kit no longer has: ${removed.join(', ')}` : ''}`);
   notes.push(...ensureGitignore(projectDir), ...ensurePrepare(projectDir));
+  // The rulesets count only a code owner's approval (Pilot 3, spec 2.9).
+  const approvers = readProjectConfig(readFileSync(file, 'utf8')).config?.github?.approvers;
+  if (approvers?.length) notes.push(...ensureCodeowners(projectDir, approvers));
   const installed = run(KIT_PACKAGES, projectDir);
   if (installed.status !== 0) return { ok: false, notes: [...notes, `${KIT_PACKAGES.join(' ')} failed: ${`${installed.stderr ?? ''}${installed.stdout ?? ''}`.trim().slice(-500)}. Fix it on ${branch}, then commit`] };
   const rendered = run(RENDER, projectDir);

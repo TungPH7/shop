@@ -82,9 +82,11 @@ export async function syncCopies({ dumpsRoot, copiesRoot, recipient, gid, chown 
   return failed;
 }
 
+// target: a path, written once, or a writable stream, such as stdout, so the dump can go straight to pg_restore and never
+// lie in a file an agent could read (review round 2 of shop PR #13).
 export async function decryptFile(source, target, identity) {
   const decrypter = new Decrypter();
   decrypter.addIdentity(identity);
   const opened = await decrypter.decrypt(Readable.toWeb(createReadStream(source)));
-  await pipeline(Readable.fromWeb(opened), createWriteStream(target, { flags: 'wx', mode: 0o600 }));
+  await pipeline(Readable.fromWeb(opened), typeof target === 'string' ? createWriteStream(target, { flags: 'wx', mode: 0o600 }) : target);
 }
