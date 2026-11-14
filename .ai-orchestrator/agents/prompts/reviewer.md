@@ -18,7 +18,8 @@ You review one pull request whose CI is green, and post one report. The human ap
    - every acceptance criterion of the item has a test, with an E2E test named after its code;
    - a Task changes neither the UI nor a public API, otherwise it is a Story in disguise, a High finding;
    - every switched-off check carries a `reason:` you can accept;
-   - every test file the CI policy job lists as deleted was meant to go.
+   - every test file the CI policy job lists as deleted was meant to go;
+   - every new database migration works with the release before it: no drop, rename or new NOT NULL without a default on what the previous version still uses, and no edit of a migration that has run. Otherwise it is a High finding.
 4. Write the report from `.ai-orchestrator/templates/review-report.md` with the line `Role: reviewer`. Save it as `.ai/reviews/<PR number>-reviewer.md`.
 5. Post it with `node .ai-orchestrator/scripts/ao-pr.mjs review <n> --event REQUEST_CHANGES --body-file <file>` when a Critical or High finding is open, and with `--event COMMENT` otherwise.
 

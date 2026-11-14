@@ -19,6 +19,7 @@
       "properties": {
         "changed_lines_min": { "type": "number", "minimum": 0, "maximum": 100 },
         "lcov": { "$ref": "#/$defs/globs" },
+        "jacoco": { "$ref": "#/$defs/globs" },
         "source": { "$ref": "#/$defs/globs" },
         "exclude": { "type": "array", "items": { "$ref": "#/$defs/text" } }
       }

@@ -29,10 +29,13 @@ env:
   BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
 
 jobs:
-  # Conventions, suppressions, lowered thresholds and design.md files of a PR, and npm audit or pnpm audit
-  # (scripts/check-policy.mjs).
+  # Conventions, suppressions, lowered thresholds and design.md files of a PR, and npm audit or pnpm audit, and
+  # osv-scanner on the pom.xml of each Java app (scripts/check-policy.mjs).
   policy:
     runs-on: ubuntu-latest
+    env:
+      OSV_SCANNER_VERSION: 2.7.0
+      OSV_SCANNER_SHA256: 160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
     steps:
       - name: By hand only on develop, main or release/*
         if: github.event_name == 'workflow_dispatch'
@@ -49,6 +52,14 @@ jobs:
         with:
           node-version: 24
       - run: npm ci --prefix .ai-orchestrator
+      # A Java app (project-scaffold part 3, spec 2.3): osv-scanner, pinned and checked against its published checksum.
+      - name: Install osv-scanner
+        if: hashFiles('apps/*/pom.xml') != ''
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/osv-scanner" "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          echo "${OSV_SCANNER_SHA256}  $RUNNER_TEMP/osv-scanner" | sha256sum --check --strict
+          chmod +x "$RUNNER_TEMP/osv-scanner"
+          echo "OSV_SCANNER=$RUNNER_TEMP/osv-scanner" >> "$GITHUB_ENV"
       # npm or pnpm, by the lockfile at the root (project-scaffold part 2, spec 2.1): the audit runs with it.
       - name: npm or pnpm
         run: node .ai-orchestrator/scripts/ci-package-manager.mjs
@@ -79,6 +90,19 @@ jobs:
         with:
           node-version: 24
       - run: npm ci --prefix .ai-orchestrator
+      # A Java app (project-scaffold part 3, spec 2.2): the JDK each apps/*/pom.xml asks for, and the Maven cache. The
+      # app's package.json runs Maven through mvnw.mjs, which finds the JDK by JAVA_HOME_<version>_X64.
+      - name: Java versions
+        id: java
+        if: hashFiles('apps/*/pom.xml') != ''
+        run: node .ai-orchestrator/scripts/ci-java.mjs
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        if: hashFiles('apps/*/pom.xml') != ''
+        with:
+          distribution: temurin
+          java-version: ${{ steps.java.outputs.versions }}
+          cache: maven
+          cache-dependency-path: apps/*/pom.xml
       # npm or pnpm, by the lockfile at the root (project-scaffold part 2, spec 2.1): sets PM and PM_INSTALL.
       - name: npm or pnpm
         run: node .ai-orchestrator/scripts/ci-package-manager.mjs

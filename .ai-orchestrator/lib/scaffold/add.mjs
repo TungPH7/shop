@@ -1,5 +1,5 @@
-// ao-kit add <dir> <app> --stack <nextjs|react> [--from <template> [--ref <branch>]] [--exclude <path>]... [--public] (project-scaffold
-// part 2, spec 2.2): one app more in a pnpm project. Its code is the skeleton of the stack, or HEAD of your template
+// ao-kit add <dir> <app> --stack <nextjs|react|spring-boot> [--from <template> [--ref <branch>]] [--exclude <path>]... [--public]
+// (project-scaffold part 2, spec 2.2; spring-boot from part 3, spec 2.1, with --from only): one app more in a pnpm project. Its code is the skeleton of the stack, or HEAD of your template
 // without what the kit replaces (template.mjs). The app goes into project.yaml, deploy.yaml and roster.local.yaml, the
 // packages of the repo are installed again, settings.json and the agents are rendered again, and ao-kit add says what
 // the code of the app still has to change, without changing it. Nothing is committed. git(args, cwd) and run(argv, cwd)
@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { isCollection, parseDocument, stringify } from 'yaml';
 import { devCommand, managerOf } from '../quality/package-manager.mjs';
 import { appReport } from './app-report.mjs';
+import { nextIntlHealth } from './next-intl.mjs';
 import { copyStack, findSkill, readStack, stackNames } from './profile.mjs';
 import { PROJECT_FILE, readProjectConfig } from './project-config.mjs';
 import { copyTemplate } from './template.mjs';
@@ -54,8 +55,9 @@ export function addApp({ kitDir, projectDir, app, options, git, run }) {
   } catch (error) {
     return stop(error.message);
   }
+  if (stack.requires_template && !options.from) return stop(`the stack ${stack.name} has no skeleton of its own: ao-kit add needs --from <your template>`);
 
-  const used = new Set(Object.values(config.apps ?? {}).map((other) => other.port.default));
+  const used =new Set(Object.values(config.apps ?? {}).map((other) => other.port.default));
   let port = stack.port;
   while (used.has(port)) port += 1;
   const path = `apps/${app}`;
@@ -80,6 +82,13 @@ export function addApp({ kitDir, projectDir, app, options, git, run }) {
     notes.push(`Copied the ${stack.name} skeleton into ${path}: ${written.length} files`);
   }
 
+  // A Next.js app with next-intl and localePrefix 'always' answers / with a redirect, which the smoke test does not
+  // follow: its health path is /<defaultLocale> (part 3, spec 2.6).
+  const read = (name) => (existsSync(join(projectDir, path, name)) ? readFileSync(join(projectDir, path, name), 'utf8') : null);
+  const intl = stack.profile === 'nextjs' ? nextIntlHealth(read) : null;
+  const health = intl?.health ?? stack.health;
+  if (intl?.health) notes.push(`next-intl in apps/${app}/${intl.file} sends / to ${health}: health is ${health} in ${PROJECT_FILE} and ${DEPLOY_FILE}, and the smoke check of ${app} asks for it`);
+
   // The app in project.yaml, deploy.yaml and roster.local.yaml.
   const scripts = JSON.parse(readFileSync(join(projectDir, path, 'package.json'), 'utf8')).scripts ?? {};
   const devScript = scripts[stack.dev_script] ? stack.dev_script : TODO;
@@ -91,14 +100,25 @@ export function addApp({ kitDir, projectDir, app, options, git, run }) {
     profile: stack.profile,
     dev: devCommand('pnpm', path, devScript),
     port: { env: 'PORT', default: port },
-    health: stack.health,
+    health,
     ...(options.public && { public: true }),
   });
-  const deploy = setYaml(join(projectDir, DEPLOY_FILE), ['apps', app], { dockerfile: `${path}/${stack.dockerfile}`, port, health: stack.health, ...(options.public && { public: true }) }, `# How the deployer on the VPS builds, runs and smoke-tests the apps of ${config.name} (docs/release-workflow.md). ao-kit add\n# writes each app here; the smoke checks are yours to add to.\napps: {}\nsmoke: []`);
+  // A Dockerfile made for the app folder builds from it; a JVM app gets a memory cap and time to start (part 3, 2.5).
+  const deployApp = {
+    dockerfile: `${path}/${stack.dockerfile}`,
+    ...(stack.build_context === 'app' && { context: path }),
+    port,
+    health,
+    ...(options.public && { public: true }),
+    ...(stack.memory && { memory: stack.memory }),
+    ...(stack.start_timeout && { start_timeout: stack.start_timeout }),
+  };
+  const deploy = setYaml(join(projectDir, DEPLOY_FILE), ['apps', app], deployApp, `# How the deployer on the VPS builds, runs and smoke-tests the apps of ${config.name} (docs/release-workflow.md). ao-kit add\n# writes each app here; the smoke checks are yours to add to.\napps: {}\nsmoke: []`);
   const smoke = deploy.getIn(['smoke'])?.toJSON?.() ?? [];
   if (!smoke.some((check) => check.app === app)) {
-    // Every page of Next.js and the index.html of Vite hold this text: the app answers with its own page.
-    deploy.setIn(['smoke'], deploy.createNode([...smoke, { app, path: stack.health, expect_status: 200, expect_text: '<html' }]));
+    // Every page of Next.js and the index.html of Vite hold <html: the app answers with its own page. A stack whose
+    // health path answers otherwise, such as the actuator of Spring Boot, names its text.
+    deploy.setIn(['smoke'], deploy.createNode([...smoke, { app, path: health, expect_status: 200, expect_text: stack.smoke_text ?? '<html' }]));
     blockAlong(deploy, ['smoke']);
     writeFileSync(join(projectDir, DEPLOY_FILE), String(deploy));
   }
@@ -128,8 +148,7 @@ export function addApp({ kitDir, projectDir, app, options, git, run }) {
     notes.push(`Ran ${argv.join(' ')}`);
   }
 
-  const read = (name) => (existsSync(join(projectDir, path, name)) ? readFileSync(join(projectDir, path, name), 'utf8') : null);
-  const changes = appReport({ app, profile: stack.profile, read });
+  const changes = [...appReport({ app, profile: stack.profile, read, port }), ...(intl?.problem ? [intl.problem] : [])];
   if (changes.length > 0) notes.push(`The code of ${app} still has to change, through a Task and a PR (SPEC-project-scaffold-2.md 2.3):`, ...changes.map((line) => `  - ${line}`));
   notes.push(`Next: ao-kit check <dir>; ${options.public ? `when two or more apps are public, write the hosts of ${app} in development, staging and production under hosts: in ${PROJECT_FILE}, and ao-kit doctor prints the lines of /etc/ao/deployer.yaml; ` : ''}then the steps of docs/getting-started.md`);
   return { ok: true, notes };

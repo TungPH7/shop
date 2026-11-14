@@ -42,6 +42,27 @@ export function parseLcov(text, { lcovDir, root }) {
   return files;
 }
 
+// { file: Map(line, hits) } of the JaCoCo XML report of one Java app (project-scaffold part 3, spec 2.3). A sourcefile
+// sits in src/main/java/<package>/ of the app; the hits of a line are its covered instructions, so 0 means not run.
+// appDir: the app folder, from the root of the repo.
+export function parseJacoco(text, { appDir, sourceRoot = 'src/main/java' }) {
+  const files = new Map();
+  for (const [, pkg, body] of text.matchAll(/<package name="([^"]*)">([\s\S]*?)<\/package>/g)) {
+    for (const [, name, lines] of body.matchAll(/<sourcefile name="([^"]+)">([\s\S]*?)<\/sourcefile>/g)) {
+      const hits = new Map();
+      for (const [, nr, ci] of lines.matchAll(/<line nr="(\d+)" mi="\d+" ci="(\d+)"/g)) hits.set(Number(nr), Number(ci));
+      files.set(normalize([appDir, sourceRoot, pkg, name].filter(Boolean).join('/')), hits);
+    }
+  }
+  return files;
+}
+
+// The coverage_exclude of each app in project.yaml, from the root of the repo: a glob of the app folder gets its path
+// in front. project.yaml is a protected path, so only a PR you merge widens these (project-scaffold part 3, spec 2.3).
+export function projectCoverageExcludes(config) {
+  return Object.values(config?.apps ?? {}).flatMap((app) => (app.coverage_exclude ?? []).map((glob) => `${app.path.replace(/\/$/, '')}/${glob}`));
+}
+
 // { file: [line numbers] } added or changed in the new version, from `git diff -U0`. Deleted files have none. A path git
 // quotes is read as it is on disk.
 export function changedLines(diff) {
@@ -59,8 +80,29 @@ export function changedLines(diff) {
   return changed;
 }
 
-// coverage: the coverage block of quality/gates.yaml.
-export function changedLineCoverage({ changed, lcov, coverage }) {
+// A Java source with no code to run, which JaCoCo leaves out of its report (project-scaffold part 3, T20):
+// package-info.java, module-info.java, or interfaces and annotations whose methods have no body and whose fields need
+// no initializer to run. A class, an enum or a record always has code. Comments and strings are dropped first, so a
+// brace in a query or a Javadoc does not count.
+export function javaHasNoCode(file, text) {
+  const name = file.split('/').at(-1);
+  if (name === 'package-info.java' || name === 'module-info.java') return true;
+  if (typeof text !== 'string') return false;
+  const code = text
+    .replace(/"""[\s\S]*?"""/g, '""')
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\/\/.*$/gm, ' ')
+    .replace(/"(?:\\.|[^"\\\n])*"/g, '""')
+    .replace(/'(?:\\.|[^'\\\n])'/g, "''");
+  if (/(^|[^.\w])(class|enum|record)\s+[A-Za-z_$]/.test(code)) return false;
+  if (!/(^|[^.\w])@?interface\s+[A-Za-z_$]/.test(code)) return false;
+  // A method body, a static block, a lambda or an object made in a field initializer is code.
+  return !/\)\s*(throws\s+[\w.<>,\s]+)?\{|\bstatic\s*\{|->|\bnew\s+[A-Za-z_$]/.test(code);
+}
+
+// coverage: the coverage block of quality/gates.yaml. read(file), when given, is the text of a changed file, so a
+// Java file with no code to run is not asked for in a report.
+export function changedLineCoverage({ changed, lcov, coverage, read }) {
   const counted = (file) => coverage.source.some((glob) => matchesGlob(glob, file)) && !coverage.exclude.some((glob) => matchesGlob(glob, file));
   const files = [];
   const problems = [];
@@ -68,7 +110,8 @@ export function changedLineCoverage({ changed, lcov, coverage }) {
     if (!counted(file)) continue;
     const hits = lcov.get(file);
     if (!hits) {
-      problems.push(`${file} is not in any lcov file: the coverage of the tests must include every source file`);
+      if (read && file.endsWith('.java') && javaHasNoCode(file, read(file))) continue;
+      problems.push(`${file} is not in any coverage report: the coverage of the tests must include every source file`);
       continue;
     }
     const runnable = lines.filter((line) => hits.has(line));
