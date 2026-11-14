@@ -1,12 +1,12 @@
 // mvnw.mjs (project-scaffold part 3, spec 2.2): runs one script of a Java app with the app's Maven wrapper and the JDK
 // its pom.xml asks for. The package.json of a Java app calls it, so pnpm -r, CI and /ao-preview run the app as a JS one.
-// JAVA_HOME is set for the wrapper only; yours stays as it is. dev reads the app's .env and starts the database of its
-// docker-compose.yml first. The decisions are in lib/quality/maven.mjs.
+// JAVA_HOME is set for the wrapper only; yours stays as it is. dev reads the app's .env and starts the services of its
+// docker-compose.yml that run from an image, such as the database, first. The decisions are in lib/quality/maven.mjs.
 //   node .ai-orchestrator/scripts/mvnw.mjs <app folder> lint|typecheck|test:coverage|build|dev
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { COMPOSE_UP, devEnv, findJdk, javaVersionOf, jdkMissing, mavenArgs, wrapperCommand } from '../lib/quality/maven.mjs';
+import { composeUpArgs, devEnv, findJdk, javaVersionOf, jdkMissing, mavenArgs, wrapperCommand } from '../lib/quality/maven.mjs';
 
 function fail(message) {
   console.error(`mvnw: ${message}`);
@@ -33,8 +33,16 @@ if (script === 'dev') {
   const dotenv = join(app, '.env');
   env = devEnv(env, existsSync(dotenv) ? readFileSync(dotenv, 'utf8') : null);
   if (existsSync(join(app, 'docker-compose.yml'))) {
-    const up = spawnSync('docker', COMPOSE_UP, { cwd: app, env, stdio: 'inherit' });
-    if (up.status !== 0) fail('docker compose up failed: start Docker Desktop, then run the command again');
+    let up;
+    try {
+      up = composeUpArgs(readFileSync(join(app, 'docker-compose.yml'), 'utf8'));
+    } catch (error) {
+      fail(error.message);
+    }
+    if (up) {
+      const done = spawnSync('docker', up, { cwd: app, env, stdio: 'inherit' });
+      if (done.status !== 0) fail(`docker ${up.join(' ')} failed: start Docker Desktop, then run the command again`);
+    }
   }
 }
 
