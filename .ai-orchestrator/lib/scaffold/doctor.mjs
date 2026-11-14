@@ -10,6 +10,7 @@
 import { jdkMissing } from '../quality/maven.mjs';
 import { managerOf } from '../quality/package-manager.mjs';
 import { basicAuthEnv } from '../workflow/qa.mjs';
+import { codeownersText } from './install.mjs';
 
 const MIN_GH = [2, 102, 0];
 const ENVIRONMENTS = ['development', 'staging', 'production', 'merge-gate'];
@@ -43,6 +44,24 @@ export function doctor(facts) {
   const java = facts.java ?? [];
   for (const { app, want, jdk } of java) row('Machine', `JDK ${want} for ${app}`, Boolean(jdk), jdkMissing(want));
   if (java.length > 0) row('Machine', 'Docker is running', facts.docker?.running === true, 'Start Docker Desktop, then run doctor again: the Testcontainers of the Java tests and the database of /ao-preview need it');
+  // Keys that must not stay where agents run (Pilot 3, spec 2.9): an agent runs as your Windows user and reads what you
+  // read. The key of ao-merge lives only in the merge-gate environment; the age identity, in your password manager.
+  // Facts doctor could not read make a question, not a pass (review round 2 of shop PR #13).
+  const stray = facts.strayKeys;
+  if (!stray) rows.push({ group: 'Machine', name: 'no key of ao-merge and no age identity on this machine? doctor could not look', ok: null, fix: 'Look in ao-keys and in %USERPROFILE%\\.ao: no *-ao-merge.pem and no *.agekey should be there (docs/github-apps-setup.md section 8, docs/vps-setup.md section 16)' });
+  else {
+    row('Machine', 'no key of ao-merge on this machine', stray.merge.length === 0, `Delete ${stray.merge.join(', ')}: GitHub holds the key of ao-merge in the merge-gate environment, and no machine an agent uses should`);
+    row('Machine', 'no age identity of the backups on this machine', stray.age.length === 0, `Keep the identity in your password manager, then delete ${stray.age.join(', ')}; to restore, paste it into ao-backup-pull.mjs decrypt --identity - (docs/vps-setup.md section 16)`);
+  }
+  // The backup copies this machine pulls (Pilot 3, spec 2.4): a row only on a machine set up to pull them.
+  if (facts.backupCopies?.broken) {
+    row('Machine', `backup copies of ${config?.name} on this machine are at most 36 h old`, false, `${facts.backupCopies.broken}: run node <kit>/scripts/ao-backup-pull.mjs install --host <ssh host> --dest <folder> again, which writes it (docs/vps-setup.md section 16)`);
+  } else if (facts.backupCopies) {
+    const mine = facts.backupCopies.filter(({ project }) => project === config?.name);
+    const old = mine.filter(({ hours }) => hours > 36);
+    const pull = 'run node <kit>/scripts/ao-backup-pull.mjs pull --host <ssh host> --dest <folder>, and see docs/vps-setup.md section 16';
+    row('Machine', `backup copies of ${config?.name} on this machine are at most 36 h old`, mine.length > 0 && old.length === 0, mine.length === 0 ? `No copy of ${config?.name} on this machine yet: ${pull}` : `Older than 36 h: ${old.map(({ env, hours }) => `${env}: ${hours} h`).join(', ')}. The machine was off, or the pull or the backup failed: ${pull}`);
+  }
   row('Machine', 'ATLASSIAN_AGENT_TOKEN is set', shapeOk(env.ATLASSIAN_AGENT_TOKEN), 'Set the API token of the agents\' Jira account as the user variable ATLASSIAN_AGENT_TOKEN (docs/getting-started.md)');
   row('Machine', 'JIRA_CI_TOKEN is set', shapeOk(env.JIRA_CI_TOKEN), 'Set the API token of the CI Jira account as the user variable JIRA_CI_TOKEN: ao-kit setup github and the QA evidence use it');
   for (const kind of ['DEV', 'REVIEW']) {
@@ -63,11 +82,25 @@ export function doctor(facts) {
   row('Repo', 'settings.json and the agents are rendered from project.yaml', facts.renderCheck.status === 0, `ao-kit render <dir>, then commit: ${facts.renderCheck.text.split('\n')[0]}`);
   row('Repo', 'git hooks are installed', facts.hooksPath === '.githooks', `${manager} install in the project: its prepare script runs .ai-orchestrator/scripts/install-hooks.mjs`);
   row('Repo', '.gitignore has the lines of the kit', facts.gitignoreMissing.length === 0, `ao-kit sync, or add them by hand: ${facts.gitignoreMissing.join(', ')}`);
+  // The rulesets count only a code owner's approval (Pilot 3, spec 2.9).
+  const owners = config?.github?.approvers?.length ? codeownersText(config.github.approvers) : null;
+  row('Repo', '.github/CODEOWNERS makes your logins the owners of every file', owners !== null && facts.codeowners === owners, `ao-kit sync <dir> --key <KEY of a Task> writes it from github.approvers of project.yaml; merge it in its PR. Without it, an App with write access could approve a PR in your place`);
 
   const gh = facts.github;
   row('GitHub', 'default branch develop', gh.defaultBranch === 'develop', 'ao-kit setup github <dir>, once develop is on GitHub');
+  // GitHub reads .github/CODEOWNERS from the base branch of a PR (review round 3 of shop PR #13): where it is missing,
+  // the rule of the code owner has nobody to ask for, and any approval counts.
+  if (owners !== null && gh.codeownersOn) {
+    const lacking = Object.entries(gh.codeownersOn).filter(([, text]) => text !== owners).map(([ref]) => ref);
+    row('GitHub', '.github/CODEOWNERS is on main and on the open release branches', lacking.length === 0, `Missing or different on ${lacking.join(', ')}: GitHub reads it from the base branch of a PR, so any approval counts there. The next release brings it to main (docs/release-workflow.md); bring it to an open release branch through a PR you approve`);
+  }
   row('GitHub', `environments ${ENVIRONMENTS.join(', ')}`, ENVIRONMENTS.every((name) => gh.environments.includes(name)), 'ao-kit setup github <dir>');
-  row('GitHub', 'secrets JIRA_CI_TOKEN, and AO_DEV_APP_KEY of merge-gate', gh.secrets.includes('JIRA_CI_TOKEN') && gh.envSecrets.includes('AO_DEV_APP_KEY'), 'ao-kit setup github <dir> --dev-app-key-file <second key of ao-dev>');
+  // merge-gate merges with ao-merge, the only App the rulesets let merge without your approval (Pilot 3, spec 2.9).
+  if (config?.github?.apps?.merge) {
+    row('GitHub', 'secrets JIRA_CI_TOKEN, and AO_MERGE_APP_KEY of merge-gate', gh.secrets.includes('JIRA_CI_TOKEN') && gh.envSecrets.includes('AO_MERGE_APP_KEY'), 'ao-kit setup github <dir> --merge-app-key-file <the key of ao-merge>, then delete the key file');
+  } else {
+    row('GitHub', 'the ao-merge App, the only one the rulesets let merge without your approval', false, 'node <kit>/scripts/github-app-create.mjs --owner <you> --repo <repo> --apps merge (docs/github-apps-setup.md); write its slug and id as github.apps.merge and merge_id in project.yaml; then ao-kit setup github <dir> --merge-app-key-file <the key>, and delete the key file');
+  }
   for (const kind of ['dev', 'review']) {
     const app = facts.apps[kind];
     row('GitHub', `ao-${kind} installed on ${repo}`, app.ok, `${app.reason ?? 'no token'}: install the App on the repo (docs/getting-started.md)`);

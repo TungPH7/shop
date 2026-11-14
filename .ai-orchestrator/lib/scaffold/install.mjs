@@ -17,7 +17,7 @@ export const PROJECT_SCRIPTS = [
 ];
 // The scripts that run from the kit only: setting a project up, the deployer on the VPS, the kit's own checks.
 export const KIT_ONLY_SCRIPTS = [
-  'ao-backup.mjs', 'ao-deploy.mjs', 'ao-kit.mjs', 'gh-protect.mjs', 'github-app-create.mjs', 'jira-check.mjs', 'jira-checklist.mjs', 'profiles-check.mjs', 'render-docs.mjs',
+  'ao-backup.mjs', 'ao-backup-pull.mjs', 'ao-deploy.mjs', 'ao-kit.mjs', 'gh-protect.mjs', 'github-app-create.mjs', 'jira-check.mjs', 'jira-checklist.mjs', 'profiles-check.mjs', 'render-docs.mjs',
   'validate-contract.mjs',
   'vendor-skills.mjs',
 ];
@@ -104,6 +104,29 @@ export function ensureGitignore(projectDir) {
   if (missing.length === 0) return [];
   writeFileSync(file, `${text}${text && !text.endsWith('\n') ? '\n' : ''}${missing.map((line) => `${line}\n`).join('')}`);
   return [`Added to .gitignore: ${missing.join(', ')}`];
+}
+
+// .github/CODEOWNERS (Pilot 3, spec 2.9, round 2 of the review of shop PR #13): the rulesets count only the approval of a
+// code owner, and this file makes your logins, github.approvers of project.yaml, the owners of every file. An App with
+// write access, such as ao-dev, could otherwise approve a PR in your place.
+export function codeownersText(approvers) {
+  if (!approvers?.length) throw new Error('.github/CODEOWNERS needs at least one approver: github.approvers of project.yaml');
+  return [
+    '# Written by ai-orchestrator from github.approvers of .ai-orchestrator/project.yaml (Pilot 3, spec 2.9). The rulesets',
+    '# count only the approval of a code owner, so no App approves a PR in your place. Change project.yaml, not this file.',
+    `* ${approvers.map((login) => `@${login}`).join(' ')}`,
+    '',
+  ].join('\n');
+}
+
+// Writes .github/CODEOWNERS when it is missing or differs from codeownersText. Returns notes.
+export function ensureCodeowners(projectDir, approvers) {
+  const file = join(projectDir, '.github', 'CODEOWNERS');
+  const text = codeownersText(approvers);
+  if (existsSync(file) && readFileSync(file, 'utf8') === text) return [];
+  mkdirSync(join(projectDir, '.github'), { recursive: true });
+  writeFileSync(file, text);
+  return [`Wrote .github/CODEOWNERS: * ${approvers.map((login) => `@${login}`).join(' ')}, so the rulesets count only your approval`];
 }
 
 const PREPARE = 'node .ai-orchestrator/scripts/install-hooks.mjs';

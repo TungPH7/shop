@@ -292,11 +292,12 @@ export function lastReport({ command, key, made, decision, state }) {
       ...(r.text ? [`## ${r.n}. ${r.role}: its answer`, '', r.text, ''] : []),
       ...(r.notes?.length ? [r.action ? `## ${r.action}` : `## ${r.n}. ${r.role}: notes of the orchestrator`, '', ...r.notes.map((note) => `- ${note}`), ''] : []),
     ]),
-    decision.go ? '## Next' : '## Stopped',
+    // A state, such as the preview that now runs, is not a stop (Pilot 3, T4): formatDecision gives its lines and Next.
+    decision.go || decision.status ? '## Next' : '## Stopped',
     '',
-    decision.go ? formatDecision(decision) : `${decision.reason}.`,
+    decision.go || decision.status ? formatDecision(decision) : `${decision.reason}.`,
     ...(decision.questions?.length ? ['', '## Questions', '', ...decision.questions.map((q) => `- ${q}`)] : []),
-    ...(decision.next ? ['', `Next: ${decision.next}`] : []),
+    ...(decision.next && !decision.status ? ['', `Next: ${decision.next}`] : []),
     '',
   ];
   return text.join('\n');
