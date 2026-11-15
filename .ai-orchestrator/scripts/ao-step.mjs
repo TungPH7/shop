@@ -9,7 +9,7 @@
 // root; the kit is in AO_KIT_DIR when set.
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { freemem, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -44,6 +44,10 @@ import { removeInstructions } from '../lib/workflow/review-tree.mjs';
 import { agentCommand, formatDecision, runGo } from '../lib/workflow/runner.mjs';
 import { CHANGES, decideStep, dockerGate } from '../lib/workflow/steps.mjs';
 import { restoreWip, saveWip } from '../lib/workflow/wip.mjs';
+import { laneKeeper, runsSettings } from '../lib/workflow/lanes.mjs';
+import { checkoutBranch } from '../lib/workflow/places.mjs';
+import { liveLocks, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
+import { lanePorts, portsNote, runsAtOnce } from '../lib/workflow/ports.mjs';
 
 const COMMANDS = ['status', 'intake', 'preview', 'spec', 'plan', 'request', 'build', 'review', 'fix', 'qa', 'release', 'ship', 'rollback'];
 const USAGE = 'usage: node .ai-orchestrator/scripts/ao-step.mjs <status|intake|preview|spec|plan|request|build|review|fix|qa|release|ship|rollback> [<KEY>|<PR>|<vX.Y.0> <sha>|<vX.Y.Z>|<environment> [<sha>]] [--go] [--answers <file>] [--note <file>] [--change <word>] [--stop]';
@@ -53,11 +57,16 @@ const RELEASE_COMMANDS = ['qa', 'release', 'ship', 'rollback', 'status'];
 const kitDir = resolve(process.env.AO_KIT_DIR ?? fileURLToPath(new URL('..', import.meta.url)));
 const projectDir = process.cwd();
 const runsDir = join(projectDir, '.ai', 'runs');
+// The locks of the commands that run agents, one file each (parallel-runs spec 5.1).
+const activeDir = join(runsDir, 'active');
+const lockFs = { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync };
 // The commands that stop a preview before they run: every one that may run an agent or switch the folder. /ao-ship runs
 // devops in the project folder with no checkout of its own (review of ao-sample PR #21), so the release commands too.
 const PREVIEW_STOPS = ['spec', 'plan', 'request', 'build', 'review', 'fix', 'qa', 'release', 'ship', 'rollback'];
 // maxBuffer: the full text of a file or a diff may pass the 1 MiB default, which ends git with ENOBUFS and no output.
 const git = (...args) => spawnSync('git', args, { cwd: projectDir, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+// git in another folder: a lane of an item (parallel-runs spec 4).
+const gitIn = (dir) => (...args) => spawnSync('git', args, { cwd: dir, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 // /ao-preview on this machine (human-loop spec 4.3): its files, the facts it reads, starting and stopping the apps.
 const preview = previewRunner({
   projectDir,
@@ -75,10 +84,7 @@ const preview = previewRunner({
   cliOf: (tool) => (tool === 'pnpm' ? pnpmCli() : npmCli()),
   cleared: CLEARED_ENV,
   // The lock of this very process, taken for --go, is not another run.
-  agentRunning: () => {
-    const holder = readJson(join(runsDir, 'active.json'));
-    return holder && holder.pid !== process.pid && alive(holder.pid) ? holder : null;
-  },
+  agentRunning: () => liveLocks(activeDir, { fs: lockFs, alive }).find(({ pid }) => pid !== process.pid) ?? null,
 });
 const previewActive = preview.paths.active;
 
@@ -154,23 +160,6 @@ export function runsFile(projectDir, file) {
   return path;
 }
 
-// Takes the lock of the runs (one agent at a time) for `holder`, or returns the live holder that has it. The file is
-// created only if it is not there, so two runs started at once cannot both take it; a holder whose process is gone is
-// replaced.
-export function takeLock(lock, holder, alive) {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      writeFileSync(lock, JSON.stringify(holder), { flag: 'wx' });
-      return null;
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      const current = readJson(lock);
-      if (current && alive(current.pid)) return current;
-      rmSync(lock, { force: true });
-    }
-  }
-  throw new Error(`cannot take the lock ${lock}`);
-}
 
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { go: { type: 'boolean', default: false }, answers: { type: 'string' }, note: { type: 'string' }, change: { type: 'string' }, stop: { type: 'boolean', default: false } } });
@@ -227,8 +216,25 @@ async function main() {
   const appEnv = { ...process.env, AO_REVIEW_APP: apps.review, AO_REVIEW_APP_ID: setting('AO_REVIEW_APP_ID', settings) };
   const { token } = await installationToken({ ...appCredentials('review', { env: appEnv }), repo, permissions: READ_PERMISSIONS });
   const github = createGitHubClient({ repo, token });
+  // The lanes of the project (parallel-runs spec 4): off unless project.yaml turns runs.worktrees on.
+  const projectYaml = join(projectDir, '.ai-orchestrator', 'project.yaml');
+  const runs = runsSettings(existsSync(projectYaml) ? parse(readFileSync(projectYaml, 'utf8')) : {});
+  const keeper = laneKeeper({
+    projectDir,
+    gitIn,
+    install: async (dir) => installLane(dir),
+    fs: { existsSync, mkdirSync, copyFileSync, readdirSync },
+    pullsOf: (branch) => pullsOfBranch(github, repo, branch),
+    isProtected: (branch) => isProtected(branch, gates.protected_branches),
+    settings: runs,
+  });
+  if (command === 'preview' && runs.worktrees) {
+    console.log('STOP: /ao-preview runs the apps from the project folder on the PR branch, and with runs.worktrees on that branch is checked out in the lane of the item');
+    console.log('Next: read the screenshots and API samples in .ai/runs/<KEY>/preview/, then /ao-review <PR>; or open the lane in your editor');
+    return;
+  }
   const files = {
-    ledger: (key) => existsSync(join(projectDir, '.ai', 'ledger', `${key}.md`)),
+    ledger: (key) => keeper.ledgerExists(key),
     runState: readRunState,
     runStates: () => (existsSync(runsDir) ? readdirSync(runsDir).map(readRunState).filter(Boolean) : []),
     // The docs branch of an Epic on this checkout, where stage spec commits before it pushes.
@@ -263,26 +269,88 @@ async function main() {
   const dockerRunning = () => dockerAnswered(spawnSync('docker', DOCKER_INFO, { encoding: 'utf8', timeout: 20000 }));
   const decision = dockerGate(decideStep(command, facts, options), { java, dockerRunning });
   console.log(formatDecision(decision));
+  if (command === 'status' && runs.worktrees) {
+    const lanes = keeper.list();
+    console.log(lanes.length > 0 ? `Lanes: ${lanes.map(({ key: k, branch }) => `${k} on ${branch || 'no branch yet'}`).join('; ')}` : 'Lanes: none');
+  }
+  if (command === 'status') {
+    const live = liveLocks(activeDir, { fs: lockFs, alive });
+    if (live.length > 0) console.log(`Running: ${live.map(({ command: c, key: k, slot, startedAt }) => `${c} ${k} in slot ${slot}, ${Math.round((Date.now() - Date.parse(startedAt)) / 60000)} min`).join('; ')}`);
+  }
   if (!values.go || !decision.go) return;
 
   // A release command has no work item: its runs and report go under the release (.ai/runs/v0.1.0/).
   const key = facts.item?.key ?? facts.runKey;
-  const lock = join(runsDir, 'active.json');
   mkdirSync(join(runsDir, key), { recursive: true });
-  const holder = takeLock(lock, { pid: process.pid, command, arg, startedAt: new Date().toISOString() }, alive);
-  if (holder) {
-    console.log(`STOP: ao-step is already running ${holder.command} ${holder.arg} (process ${holder.pid}); agents run one at a time`);
+  // How many commands may run at once, and this one's place among them (parallel-runs spec 5.1).
+  const cap = runsAtOnce(runs.lanesMax, process.env);
+  const firstRun = decision.runs?.[0] ?? {};
+  const taken = await takeRunLock(activeDir, { pid: process.pid, command, arg, key, role: firstRun.role, environment: firstRun.qa?.environment, startedAt: new Date().toISOString() }, { fs: lockFs, alive, cap, sleep: (ms) => new Promise((done) => setTimeout(done, ms)) });
+  if (!taken.ok) {
+    console.log(`STOP: ${taken.reason}`);
     return;
   }
+  const lock = taken.file;
+  // With more than one run at once, this one's apps take the ports of its slot (spec 5.2).
+  const offset = cap > 1 ? taken.slot * runs.portStep : 0;
+  const projectApps = existsSync(projectYaml) ? (parse(readFileSync(projectYaml, 'utf8'))?.apps ?? {}) : {};
   try {
     console.log('');
+    if (runs.worktrees) {
+      // A lane that cannot be checked now is checked at the next command; the runs go on.
+      const pruned = await keeper.prune().catch((error) => [`The lanes were not checked for closed PRs: ${error.message}`]);
+      for (const note of pruned) console.log(note);
+    }
+    // A run in a lane starts there, told so; git and the work put aside go there too (parallel-runs spec 4).
+    const placed = async (run) => {
+      const place = await keeper.placeOf(run, command);
+      // Another agent starts only with enough free RAM (spec 5.1).
+      if (cap > 1) await waitForRam(runs.minFreeRamGb);
+      const ports = cap > 1 ? portsNote(lanePorts(projectApps, offset), offset) : null;
+      const notes = [place && keeper.note(place.dir, place.key), ports].filter(Boolean);
+      return {
+        ...run,
+        ...(place && { cwd: place.dir }),
+        ...(cap > 1 && { env: { ...run.env, AO_PORT_OFFSET: String(offset) } }),
+        ...(notes.length > 0 && { prompt: [...notes, run.prompt].join('\n\n') }),
+      };
+    };
+    const gitOf = async (run) => {
+      const place = await keeper.placeOf(run, command);
+      return place ? gitIn(place.dir) : git;
+    };
+    // A qa run stops at once when another deploy reaches its environment during the run (parallel-runs spec 5.1): its
+    // report would be about a version that no longer runs. The runner decides again, and qa tests the new one, twice at
+    // most; after that the run ends as before, with the note of afterQa.
+    let superseded = 0;
+    const watchQa = async (run, start) => {
+      if (!run.qa?.sha || !deploys || superseded >= 2) return start(run);
+      let pid = null;
+      let changed = null;
+      const timer = setInterval(async () => {
+        if (pid === null || changed) return;
+        const now = (await readRunning(deploys, mapping).catch(() => ({})))[run.qa.environment]?.sha;
+        if (now && now !== run.qa.sha) {
+          changed = now;
+          killTree(pid, { spawnSync, kill: (target, signal) => process.kill(target, signal) });
+        }
+      }, 30000);
+      try {
+        const result = await start(run, (started) => (pid = started));
+        if (!changed) return result;
+        superseded += 1;
+        return { ...result, superseded: `${run.qa.environment} ran ${run.qa.sha.slice(0, 8)} when qa started, and ${changed.slice(0, 8)} came during the run: qa was stopped before its report, and runs again on the new version` };
+      } finally {
+        clearInterval(timer);
+      }
+    };
     const { decision: final, facts: last } = await runGo({
       command,
       arg,
       options,
       gather,
       // qa on Development or Staging gets the basic auth from AO_ENV_AUTH, as variables, never as arguments.
-      agent: (run, { log }) => startAgent(run.qa?.auth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run, join(runsDir, key, log)),
+      agent: async (run, { log }) => watchQa(await placed(run.qa?.auth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run), (ready, onStart) => startAgent(ready, join(runsDir, key, log), onStart)),
       // A defect you reported is checked like a QA run: its evidence goes to the item too (human-loop spec 5.1).
       after: (run, { tree }) => (['qa', 'qa-defect'].includes(run.purpose) ? afterQa(run, tree, { deploys, mapping }) : []),
       act: (step) => {
@@ -295,11 +363,11 @@ async function main() {
         if (step.action === 'preview-stop') return preview.stop().then(({ notes }) => notes);
         return releaseCut(step, { repo, mapping, userToken });
       },
-      git: (checkout) => prepareCheckout(checkout),
+      git: (checkout, run) => keeper.checkout(checkout, run, command),
       // The work a run left uncommitted when it stopped goes aside, and comes back when it goes on (live-run-fixes 2.1).
       wip: {
-        save: (run) => saveWip({ git, run, isProtected: (branch) => isProtected(branch, gates.protected_branches) }),
-        restore: (aside) => restoreWip({ git, wip: aside }),
+        save: async (run) => saveWip({ git: await gitOf(run), run, isProtected: (branch) => isProtected(branch, gates.protected_branches) }),
+        restore: async (aside, run) => restoreWip({ git: await gitOf(run), wip: aside }),
       },
       dispatch: (action) => dispatchJiraSync(action.key),
       pack: reviewPackWriter({ github, jira }),
@@ -358,14 +426,19 @@ function alive(pid) {
 }
 
 // One run: ao-agent.mjs with its stream-json output appended to the log as it comes; resolves with the lines.
-function startAgent(run, logFile) {
+function startAgent(run, logFile, onStart) {
   const { command, args, env } = agentCommand(run, kitDir);
   return startAgentProcess({
-    spawn,
+    // onStart gets the pid, for a watch that may stop the run (watchQa).
+    spawn: (...args) => {
+      const child = spawn(...args);
+      onStart?.(child.pid);
+      return child;
+    },
     command,
     args,
     env: { ...process.env, ...env },
-    cwd: projectDir,
+    cwd: run.cwd ?? projectDir,
     append: (stream, chunk) => appendFileSync(stream === 'stdout' ? logFile : `${logFile}.stderr`, chunk),
     kill: (pid) => killTree(pid, { spawnSync, kill: (target, signal) => process.kill(target, signal) }),
   });
@@ -444,24 +517,8 @@ const savePack = (dir) => (name, text) => {
 
 // Puts the checkout on `branch` before a run: from origin when it is there, else new from origin/<from>. A checkout with
 // changes is left alone.
-function prepareCheckout({ branch, from, pull }) {
-  const dirty = git('status', '--porcelain', '--untracked-files=no').stdout.trim();
-  if (dirty) return { ok: false, reason: `the checkout has changes not committed (${dirty.split('\n').length} files): commit or stash them, then run the command again` };
-  const fetched = git('fetch', '--quiet', 'origin');
-  if (fetched.status !== 0) return { ok: false, reason: `git fetch failed: ${fetched.stderr.trim()}` };
-  const onOrigin = git('rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`).status === 0;
-  const local = git('rev-parse', '--verify', '--quiet', `refs/heads/${branch}`).status === 0;
-  let result;
-  if (local) result = git('switch', '--quiet', branch);
-  else if (onOrigin) result = git('switch', '--quiet', '--track', `origin/${branch}`);
-  // --no-track: the new branch must not take origin/develop as its upstream, or the agent's push would go there.
-  else result = git('switch', '--quiet', '--no-track', '-c', branch, `origin/${from ?? 'develop'}`);
-  if (result.status !== 0) return { ok: false, reason: `git could not switch to ${branch}: ${result.stderr.trim()}` };
-  if ((pull || local) && onOrigin) {
-    const merged = git('merge', '--ff-only', '--quiet', `origin/${branch}`);
-    if (merged.status !== 0) return { ok: false, reason: `${branch} has commits that are not on origin/${branch}: ${merged.stderr.trim()}` };
-  }
-  return { ok: true };
+function prepareCheckout(spec) {
+  return checkoutBranch(git, spec);
 }
 
 // The worktree of a PR for its review (Pilot 1, T10): the code at the head the review is on, never committed. It is in
@@ -761,6 +818,46 @@ function removeWorktree({ name }) {
 function dispatchJiraSync(key) {
   const result = spawnSync('gh', ['workflow', 'run', 'jira-sync.yml', '-f', `item=${key}`], { cwd: projectDir, encoding: 'utf8' });
   if (result.status !== 0) throw new Error(`gh workflow run jira-sync.yml failed: ${(result.stderr || result.stdout).trim()}`);
+}
+
+// Installs the packages of a new lane (parallel-runs spec 4.2): those of the project by its lockfile, with the install
+// scripts the project folder ran too, since the lane starts at origin/develop; and those of the kit copy, which agents run
+// from the lane (ao-pr.mjs). None of your secrets is in the environment of an install.
+function installLane(dir) {
+  const env = { ...process.env };
+  for (const name of CLEARED_ENV) delete env[name];
+  const notes = [];
+  const manager = managerFromLockfile((file) => existsSync(join(dir, file)));
+  if (manager) {
+    const done = runManager(manager, installArgs(manager), { cwd: dir, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    if (done.status !== 0) return { ok: false, reason: `${manager} ${installArgs(manager)[0]} failed: ${(done.stderr || done.error?.message || '').trim().slice(-500)}` };
+    notes.push(`Installed the packages of the project with ${manager}.`);
+  }
+  if (existsSync(join(dir, '.ai-orchestrator', 'package-lock.json'))) {
+    const kit = runManager('npm', [...installArgs('npm', { ignoreScripts: true }), '--prefix', '.ai-orchestrator'], { cwd: dir, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    if (kit.status !== 0) return { ok: false, reason: `npm ci of .ai-orchestrator failed: ${(kit.stderr || kit.error?.message || '').trim().slice(-500)}` };
+    notes.push('Installed the packages of the kit copy.');
+  }
+  return { ok: true, notes };
+}
+
+// Waits until the machine has the free RAM of runs.min_free_ram_gb before another agent starts (parallel-runs spec 5.1),
+// looking again every 30 seconds; after 30 minutes the command stops with the reason.
+async function waitForRam(minGb) {
+  if (!minGb) return;
+  const need = minGb * 1024 ** 3;
+  for (let waited = 0; freemem() < need; waited += 30) {
+    if (waited === 0) console.log(`Waiting for RAM: ${(freemem() / 1024 ** 3).toFixed(1)} GB free, ${minGb} GB needed before another agent starts`);
+    if (waited >= 1800) throw new Error(`the machine stayed under ${minGb} GB of free RAM for 30 minutes: close what you can, or lower runs.lanes_max`);
+    await new Promise((done) => setTimeout(done, 30000));
+  }
+}
+
+// The PRs whose head is a branch of this repository: [{ number, state }], state open, closed or merged.
+async function pullsOfBranch(github, repo, branch) {
+  const [owner] = repo.split('/');
+  const pulls = await github.getAll('/pulls', { state: 'all', head: `${owner}:${branch}` });
+  return pulls.map((pr) => ({ number: pr.number, state: pr.merged_at ? 'merged' : pr.state }));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

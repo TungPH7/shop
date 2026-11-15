@@ -40,9 +40,12 @@ const BACKUP = 'do not read the backup copies or the identity that opens them, a
 // .ao counts where a path starts: at the start, after a slash, a space, a quote or = (review round 3 of shop PR #13:
 // `cd ~ && cat .ao/backup-pull.json` passed).
 const BACKUP_FILE = /\.agekey\b|\.dump\.age\b|ao-backups|ao-backup-pull|(?:^|[\s'"=\\/])\.ao(?:[\\/\s'"]|$)/i;
-// The marks a private key starts with (review round 3 of shop PR #13): a search for them, over your user folder, prints
-// the keys of the Apps whatever the files are called.
-const KEY_MARK = /PRIVATE KEY|AGE-SECRET-KEY/i;
+// The marks a private key starts with (review round 3 of shop PR #13): a search for them over your user folder prints
+// the keys of the Apps, whatever the files are called. Any character may stand between the words, as a regex has it.
+// Inside the project such a search is a scan for committed keys, which security runs, so only a command that also names
+// your user folder is refused (review round 4); Grep and Glob are kept in the project by their path already.
+const KEY_MARK = /PRIVATE.{0,3}KEY|AGE.{0,2}SECRET.{0,2}KEY/i;
+const HOME_FOLDER = /(?:^|[\s'"=(])~(?=[\\/\s'")]|$)|\$\{?HOME\b|%USERPROFILE%|%HOMEPATH%|\$env:(?:USERPROFILE|HOMEPATH|HOME)\b|\b[A-Za-z]:[\\/]+Users\b|(?:^|[\s'"=])\/(?:[A-Za-z]\/)?(?:Users|home)\b/i;
 const KEY_SEARCH = 'do not search for a private key: ao-pr.mjs and git get the tokens of your role for you';
 
 // What a path, or a glob or pattern of Grep and Glob, may not name: keys, the token of gh, the backups. undefined when
@@ -79,10 +82,10 @@ export function checkAgentCall(input, { gates, contract, projectDir, roster, tem
     case 'Glob': {
       const named = [args.path, args.glob, args.pattern].filter((value) => typeof value === 'string').map(forbiddenFile).find(Boolean);
       if (named) return named;
-      const roots = [args.path, ...(input.tool_name === 'Glob' && ABSOLUTE.test(args.pattern ?? '') ? [args.pattern] : [])];
+      // The pattern of Glob is a path too: an absolute one, or one that climbs out with .. (review round 4).
+      const roots = [args.path, ...(input.tool_name === 'Glob' ? [args.pattern] : [])];
       const outside = roots.find((value) => outsideProject(value, projectDir, tempDir));
-      if (outside !== undefined) return deny(`${outside} is outside the project: Grep and Glob read only in the project and the temp folder`);
-      return input.tool_name === 'Grep' && KEY_MARK.test(args.pattern ?? '') ? deny(KEY_SEARCH) : allow;
+      return outside === undefined ? allow : deny(`${outside} is outside the project: Grep and Glob read only in the project and the temp folder`);
     }
     case 'Edit':
     case 'Write':
@@ -96,7 +99,7 @@ export function checkAgentCall(input, { gates, contract, projectDir, roster, tem
 function checkCommand(command, role, gates, roster, depth = 0) {
   if (TOKEN_COMMAND.test(command) || GH_HOSTS_FILE.test(command)) return deny(TOKEN);
   if (KEY_FILE.test(command)) return deny(KEY);
-  if (KEY_MARK.test(command)) return deny(KEY_SEARCH);
+  if (KEY_MARK.test(command) && HOME_FOLDER.test(command)) return deny(KEY_SEARCH);
   if (BACKUP_FILE.test(command)) return deny(BACKUP);
   if (POWERSHELL_ENV.test(command)) return deny(IDENTITY);
   for (const words of segments(command)) {
@@ -448,8 +451,6 @@ function checkEdit(file, role, gates, projectDir, roster, tempDir) {
   return refusal ? deny(refusal) : allow;
 }
 
-// A path or glob that starts at a drive, a slash or your home folder.
-const ABSOLUTE = /^(?:[A-Za-z]:|[\\/]|~)/;
 
 // Whether the path of a Grep or Glob reaches outside the project and the temp folder: your home folder (~) does, and no
 // path at all is the working folder, which is the project's or its worktree's.
