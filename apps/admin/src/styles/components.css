@@ -462,3 +462,56 @@ textarea.input {
     animation: none;
   }
 }
+
+/* --- Placeholder tile ----------------------------------------------------------- */
+
+/* <PlaceholderTile> (components/ui/placeholder-tile.tsx). The group colour comes from
+   data-group, set from the product id; the tile is decorative (aria-hidden). */
+.tile {
+  --tile-from: var(--group-blue-from);
+  --tile-to: var(--group-blue-to);
+
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: var(--tile-thumb);
+  height: var(--tile-thumb);
+  color: var(--tile-text, var(--group-blue-text));
+  font-family: var(--font);
+  font-size: calc(var(--tile-thumb) * 0.4);
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  background: linear-gradient(160deg, var(--tile-from), var(--tile-to));
+  border-radius: var(--r-thumb);
+  user-select: none;
+}
+
+.tile[data-group='coral'] {
+  --tile-from: var(--group-coral-from);
+  --tile-to: var(--group-coral-to);
+  --tile-text: var(--group-coral-text);
+}
+
+.tile[data-group='green'] {
+  --tile-from: var(--group-green-from);
+  --tile-to: var(--group-green-to);
+  --tile-text: var(--group-green-text);
+}
+
+.tile[data-group='orange'] {
+  --tile-from: var(--group-orange-from);
+  --tile-to: var(--group-orange-to);
+  --tile-text: var(--group-orange-text);
+}
+
+.tile[data-group='teal'] {
+  --tile-from: var(--group-teal-from);
+  --tile-to: var(--group-teal-to);
+  --tile-text: var(--group-teal-text);
+}
+
+.tile[data-group='ink'] {
+  --tile-from: var(--group-ink-from);
+  --tile-to: var(--group-ink-to);
+  --tile-text: var(--group-ink-text);
+}
