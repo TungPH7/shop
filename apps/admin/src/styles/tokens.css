@@ -69,6 +69,8 @@
     color-mix(in srgb, #7aaef0 16%, transparent)
   );
   --focus-halo: color-mix(in srgb, var(--accent) 18%, transparent);
+  /* Scrim behind a modal dialog (S3), with --blur-thick. */
+  --scrim: light-dark(#0f172466, #00000099);
 
   /* Group colours of the placeholder tile: the same in both themes. */
   --group-blue-from: #354a6a;
@@ -118,6 +120,7 @@
   --space-3-5: 14px;
   --space-4: 16px;
   --space-4-5: 18px;
+  --space-5-5: 22px;
   --space-6: 24px;
   --space-7: 28px;
   --gap: 16px;
@@ -135,6 +138,8 @@
   /* --- Sizes ---------------------------------------------------------------- */
   /* Placeholder tile of a table row (S1.6); its letter is 40% of it. */
   --tile-thumb: 40px;
+  /* Round icon button: the close button of the dialog (S3.2) and of a toast. */
+  --icon-btn: 40px;
 
   /* --- Glass ---------------------------------------------------------------- */
   --blur: 14px;

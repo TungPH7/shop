@@ -39,6 +39,20 @@ class ResizeObserverStub {
 }
 vi.stubGlobal('ResizeObserver', ResizeObserverStub);
 
+// jsdom has <dialog> but not its modal API; <Dialog> (components/ui/dialog.tsx) calls
+// it. The stub only toggles `open` and fires `close` like a browser. Esc, the inert
+// page behind and the focus restore are checked in a real browser (E2E, devtools).
+Object.assign(HTMLDialogElement.prototype, {
+  showModal(this: HTMLDialogElement) {
+    this.setAttribute('open', '');
+  },
+  close(this: HTMLDialogElement) {
+    if (!this.hasAttribute('open')) return;
+    this.removeAttribute('open');
+    this.dispatchEvent(new Event('close'));
+  },
+});
+
 // MSW: mock the network for the whole suite; fail loudly on any unhandled request
 // so a missing handler is obvious instead of a silent hang.
 beforeAll(() => {

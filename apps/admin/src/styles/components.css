@@ -736,3 +736,93 @@ textarea.input {
   color: var(--hint);
   text-align: center;
 }
+
+/* --- Dialog ------------------------------------------------------------------------- */
+
+/* <Dialog> (components/ui/dialog.tsx), S3: a native <dialog> opened with showModal(). */
+.dialog {
+  width: min(92vw, 560px);
+  max-width: none;
+  padding: var(--space-5-5);
+  color: var(--text);
+  background: var(--dialog);
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  border: 0;
+  border-radius: var(--r-dialog);
+  box-shadow: var(--card-shadow);
+}
+
+.dialog[open] {
+  animation: dialog-in var(--dur) var(--ease);
+}
+
+.dialog::backdrop {
+  background: var(--scrim);
+  backdrop-filter: blur(var(--blur-thick));
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-2)) scale(0.98);
+  }
+}
+
+.dialog__header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.dialog__title {
+  margin: var(--space-1) 0 var(--space-3);
+  overflow-wrap: anywhere;
+}
+
+/* Round icon button: the close button of the dialog (S3.2) and of a toast. */
+.dialog__close,
+.toast__close {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: var(--icon-btn);
+  height: var(--icon-btn);
+  padding: 0;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.dialog__close:hover:not([aria-disabled='true']),
+.toast__close:hover {
+  background: var(--line-2);
+}
+
+.dialog__close[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog__body {
+  color: var(--muted);
+}
+
+.dialog__body > :last-child {
+  margin-bottom: 0;
+}
+
+.dialog__error {
+  margin: var(--space-4) 0 0;
+}
+
+.dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2-5);
+  justify-content: flex-end;
+  margin-top: var(--space-6);
+}
