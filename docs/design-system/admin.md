@@ -20,7 +20,7 @@ Design system của `admin` là CSS variables và CSS thường, không có Tail
 
 - Mặc định theo giao diện của hệ thống (`prefers-color-scheme`). Store `theme` mặc định là `system`, và `system` nghĩa là `<html>` không có `data-theme`.
 - Ô chọn Giao diện (Sáng, Tối, Hệ thống) ở viên thuốc bên phải đặt `data-theme="light"` hay `"dark"`, hoặc gỡ nó với Hệ thống. Lựa chọn lưu ở `localStorage` (`tungph7.theme`) và được gắn vào `<html>` trước lần render đầu, nên không nháy giao diện.
-- Token màu viết bằng `light-dark(sáng, tối)`, theo `color-scheme` của `:root`. Bản build chuyển nó sang biến `--lightningcss-light` và `--lightningcss-dark` cho trình duyệt cũ hơn. Hai token bóng không phải màu, nên đổi ở khối `[data-theme='dark']` và `@media (prefers-color-scheme: dark)` cuối `tokens.css`.
+- Token màu viết bằng `light-dark(sáng, tối)`, theo `color-scheme` của `:root`. Bản build chuyển nó sang biến `--lightningcss-light` và `--lightningcss-dark` cho trình duyệt cũ hơn. Hai token bóng không phải màu, nên giá trị tối của chúng khai báo một lần ở `--card-shadow-dark` và `--button-shadow-dark`; khối `[data-theme='dark']` và `@media (prefers-color-scheme: dark)` cuối `tokens.css` chỉ trỏ `--card-shadow` và `--button-shadow` tới đó.
 
 ## Tokens
 
