@@ -1,15 +1,9 @@
 import { useAppDispatch, useAppSelector } from '@/stores/hooks';
-import {
-  selectTheme,
-  setTheme as setThemeAction,
-  toggleTheme as toggleThemeAction,
-  type Theme,
-} from '@/stores/theme/theme-slice';
+import { selectTheme, setTheme as setThemeAction, type Theme } from '@/stores/theme/theme-slice';
 
 export interface UseThemeResult {
   theme: Theme;
   setTheme: (theme: Theme) => void;
-  toggle: () => void;
 }
 
 // Domain-hook FACADE: components depend on this, never on react-redux or the
@@ -23,6 +17,5 @@ export function useTheme(): UseThemeResult {
   return {
     theme,
     setTheme: (next) => dispatch(setThemeAction(next)),
-    toggle: () => dispatch(toggleThemeAction()),
   };
 }

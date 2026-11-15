@@ -19,9 +19,6 @@ export const themeSlice = createSlice({
     setTheme: (state, action: PayloadAction<Theme>) => {
       state.theme = action.payload;
     },
-    toggleTheme: (state) => {
-      state.theme = state.theme === 'dark' ? 'light' : 'dark';
-    },
   },
   // Slice selectors receive the slice state; RTK wires them to read root state
   // at `state[name]` (the slice is mounted under the `theme` key, see store.ts).
@@ -30,6 +27,6 @@ export const themeSlice = createSlice({
   },
 });
 
-export const { setTheme, toggleTheme } = themeSlice.actions;
+export const { setTheme } = themeSlice.actions;
 export const { selectTheme } = themeSlice.selectors;
 export const themeReducer = themeSlice.reducer;

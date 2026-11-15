@@ -72,7 +72,7 @@ Hover/focus vào link danh sách → `prefetchQuery(queryOptions)` để tránh 
 
 Chỉ `src/stores/**` được import hai thư viện này. Mọi nơi khác dùng **facade hook** theo domain.
 
-✅ `const { theme, toggleTheme } = useTheme();`
+✅ `const { theme, setTheme } = useTheme();`
 ❌ `const theme = useSelector((s) => s.ui.theme);`
 
 **Enforce:** `no-restricted-imports` → `pnpm lint`

@@ -142,7 +142,7 @@ export default tseslint.config(
   },
 
   // 3b) Client-state seam: ONLY src/stores/** may import the Redux libraries.
-  //     Everywhere else must consume domain-hook facades (useTheme, useSidebar…)
+  //     Everywhere else must consume domain-hook facades (useTheme…)
   //     so the store implementation stays swappable (locked decision: Zustand).
   {
     files: ['src/**/*.{ts,tsx}'],
