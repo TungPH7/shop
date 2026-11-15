@@ -40,3 +40,12 @@ test('security headers include CSP + HSTS + nosniff + Referrer + frame-options +
     ]),
   );
 });
+
+test('CSP keeps fonts and images on this origin: next/font self-hosts Be Vietnam Pro (SHOP-10, NFR13)', () => {
+  for (const isDev of [false, true]) {
+    const csp = buildContentSecurityPolicy(isDev);
+    expect(csp).toContain("font-src 'self';");
+    expect(csp).toContain("img-src 'self' blob: data:;");
+    expect(csp).not.toMatch(/fonts\.(googleapis|gstatic)\.com/);
+  }
+});

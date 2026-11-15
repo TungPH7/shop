@@ -31,6 +31,25 @@ test.describe('accessibility (axe, WCAG A/AA)', () => {
     expect(violations).toEqual([]);
   });
 
+  // The design system of SHOP-10 in both themes (Checkpoint "Design system" of the plan of SHOP-7). The theme follows
+  // the system by default, so emulating prefers-color-scheme picks it, and next-themes puts .dark on <html>.
+  for (const colorScheme of ['light', 'dark'] as const) {
+    for (const [name, path] of [
+      ['home page', '/vi'],
+      ['About page', '/vi/about'],
+    ] as const) {
+      test(`the ${name} has no violation in the ${colorScheme} theme`, async ({ page }) => {
+        await page.emulateMedia({ colorScheme });
+        await page.goto(path);
+        await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+        const html = expect(page.locator('html'));
+        await (colorScheme === 'dark' ? html : html.not).toHaveClass(/\bdark\b/);
+        const { violations } = await scan(page);
+        expect(violations).toEqual([]);
+      });
+    }
+  }
+
   test('trang Products (mocked) không vi phạm — quét sau khi stream xong', async ({
     page,
     baseURL,

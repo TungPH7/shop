@@ -20,6 +20,7 @@ import { organizationLd, webSiteLd } from '~/lib/seo/structured-data';
 import { siteConfig } from '~/lib/site-config';
 
 import '~/styles/tokens.css';
+import '~/styles/components.css';
 import '~/app/globals.css';
 
 // Map locale app → cặp og:locale (định dạng OG `ll_CC`). Đủ cho 2 locale; thêm locale → thêm dòng.
