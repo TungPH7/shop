@@ -1,12 +1,13 @@
 // The lanes of a project on this machine (parallel-runs spec, part 1): each a worktree of the repository at
 // <parent>/<project>-wt/<KEY>, made at the first run of an item that needs one, with the packages of the project and of
 // the kit installed, the untracked files project.yaml lists copied in, and the ledger of the item. A lane goes once the
-// PR of its branch is merged or closed and it holds no work that is not pushed; its ledgers come back to the project
-// folder first. Every effect is a parameter, so tests run it on real repositories with no network.
+// PR of its branch is merged or closed and it holds no work that is not pushed; its ledgers and the preview of its item
+// come back to the project folder first. Every effect is a parameter, so tests run it on real repositories with no
+// network.
 //   projectDir
 //   gitIn(dir)                  (...args) => { status, stdout, stderr }: git in a folder
 //   install(dir)                installs the packages of the project and of the kit in a lane: { ok, reason, notes }
-//   fs                          { existsSync, mkdirSync, copyFileSync, readdirSync }
+//   fs                          { existsSync, mkdirSync, copyFileSync, cpSync, readdirSync, writeFileSync }
 //   pullsOf(branch)             resolves the PRs whose head is the branch: [{ number, state }], state open, closed or merged
 //   isProtected(branch)
 //   settings                    { worktrees, copy } of project.yaml (runsSettings)
@@ -14,11 +15,15 @@ import { dirname, join } from 'node:path';
 import { checkoutBranch, laneDir, laneNote, laneOf, laneRoot, lanesToPrune } from './places.mjs';
 
 const KEY = /^[A-Z][A-Z0-9_]*-\d+$/;
+// Written in a lane once its packages are installed and its files copied: git ignores .ai/. A lane without it was cut
+// short, so the next run finishes it (review of shop PR #21: one whose install failed was taken as ready).
+const READY = join('.ai', 'lane-ready');
 
 export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtected, settings }) {
   const git = gitIn(projectDir);
   const root = laneRoot(projectDir);
   const exists = (dir) => fs.existsSync(join(dir, '.git'));
+  const ready = (dir) => fs.existsSync(join(dir, READY));
 
   // The lanes there are: [{ key, dir, branch }].
   function list() {
@@ -43,20 +48,29 @@ export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtecte
   }
 
   // The lane of an item, made when it is not there: detached at origin/develop, its packages installed, the files of
-  // runs.copy and the ledger of the item copied in. Resolves { ok, dir, made, notes } or { ok: false, reason }.
+  // runs.copy and the ledger of the item copied in. A lane cut short before that is finished, with the files of the
+  // project folder: an agent that worked in it wrote its own ledger there. Resolves { ok, dir, made, notes } or
+  // { ok: false, reason }.
   async function ensure(key) {
     const dir = laneDir(projectDir, key);
-    if (exists(dir)) return { ok: true, dir, made: false, notes: [] };
-    fs.mkdirSync(root, { recursive: true });
-    const fetched = git('fetch', '--quiet', 'origin');
-    if (fetched.status !== 0) return { ok: false, reason: `git fetch failed: ${fetched.stderr.trim()}` };
-    const added = git('worktree', 'add', '--detach', '--quiet', dir, 'origin/develop');
-    if (added.status !== 0) return { ok: false, reason: `git could not add the lane of ${key} at ${dir}: ${(added.stderr || added.stdout).trim()}` };
+    if (exists(dir) && ready(dir)) return { ok: true, dir, made: false, notes: [] };
+    const made = !exists(dir);
+    if (made) {
+      fs.mkdirSync(root, { recursive: true });
+      const fetched = git('fetch', '--quiet', 'origin');
+      if (fetched.status !== 0) return { ok: false, reason: `git fetch failed: ${fetched.stderr.trim()}` };
+      const added = git('worktree', 'add', '--detach', '--quiet', dir, 'origin/develop');
+      if (added.status !== 0) return { ok: false, reason: `git could not add the lane of ${key} at ${dir}: ${(added.stderr || added.stdout).trim()}` };
+    }
     const installed = await install(dir);
     if (!installed.ok) return { ok: false, reason: `the lane of ${key} is at ${dir}, but its packages are not installed: ${installed.reason}` };
-    const copied = [...settings.copy, join('.ai', 'ledger', `${key}.md`)].map((path) => copyIn(dir, path)).filter(Boolean);
-    const notes = [`Made the lane of ${key} at ${dir}.`, ...(installed.notes ?? []), ...(copied.length > 0 ? [`Copied into it: ${copied.join(', ')}.`] : [])];
-    return { ok: true, dir, made: true, notes };
+    const ledger = join('.ai', 'ledger', `${key}.md`);
+    const copied = [...settings.copy, ...(made || !fs.existsSync(join(dir, ledger)) ? [ledger] : [])].map((path) => copyIn(dir, path)).filter(Boolean);
+    fs.mkdirSync(join(dir, '.ai'), { recursive: true });
+    fs.writeFileSync(join(dir, READY), `${new Date().toISOString()}\n`);
+    const first = made ? `Made the lane of ${key} at ${dir}.` : `Finished the lane of ${key} at ${dir}: its packages were not installed before.`;
+    const notes = [first, ...(installed.notes ?? []), ...(copied.length > 0 ? [`Copied into it: ${copied.join(', ')}.`] : [])];
+    return { ok: true, dir, made, notes };
   }
 
   // The lane a run works in: { key, dir } once it is there, or null for the project folder.
@@ -112,8 +126,13 @@ export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtecte
         fs.mkdirSync(join(projectDir, '.ai', 'ledger'), { recursive: true });
         fs.copyFileSync(join(ledgers, name), join(projectDir, '.ai', 'ledger', name));
       }
+      // The screenshots and API samples of the item's dev agents (review of shop PR #21).
+      const preview = join('.ai', 'runs', lane.key, 'preview');
+      const previewBack = fs.existsSync(join(lane.dir, preview));
+      if (previewBack) fs.cpSync(join(lane.dir, preview), join(projectDir, preview), { recursive: true });
+      const kept = [...(back.length > 0 ? ['its ledgers are back in .ai/ledger/'] : []), ...(previewBack ? [`its preview in .ai/runs/${lane.key}/preview/`] : [])];
       const removed = git('worktree', 'remove', '--force', lane.dir);
-      notes.push(removed.status === 0 ? `Removed the lane of ${lane.key}: its PR is ${merged ? 'merged' : 'closed'}${back.length > 0 ? '; its ledgers are back in .ai/ledger/' : ''}.` : `The lane of ${lane.key} could not be removed: ${(removed.stderr || removed.stdout).trim()}`);
+      notes.push(removed.status === 0 ? `Removed the lane of ${lane.key}: its PR is ${merged ? 'merged' : 'closed'}${kept.length > 0 ? `; ${kept.join(', ')}` : ''}.` : `The lane of ${lane.key} could not be removed: ${(removed.stderr || removed.stdout).trim()}`);
     }
     git('worktree', 'prune');
     return notes;
@@ -122,7 +141,7 @@ export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtecte
   return { list, ensure, placeOf, checkout, ledgerExists, prune, note: laneNote };
 }
 
-// The runs part of project.yaml, checked: { worktrees, lanesMax, minFreeRamGb, portStep, copy }. Off and one lane when
+// The runs part of project.yaml, checked: { worktrees, lanesMax, minFreeRamGb, portStep, copy, laneEnv }. Off and one lane when
 // absent. lanes_max is also how many agents run at once (spec 6, Lượt 25 and 29); from 2 it needs worktrees. A path of
 // runs.copy is relative and stays inside the project, since it is copied out of it and into a lane.
 export function runsSettings(config) {
@@ -143,5 +162,23 @@ export function runsSettings(config) {
       throw new Error(`runs.copy of project.yaml has ${JSON.stringify(path)}: each path is relative and stays inside the project`);
     }
   }
-  return { worktrees, lanesMax, minFreeRamGb, portStep, copy };
+  return { worktrees, lanesMax, minFreeRamGb, portStep, copy, laneEnv: laneEnvSettings(runs.lane_env) };
+}
+
+// runs.lane_env (review of shop PR #21): ports, variables whose port each lane moves, below 59536 so six lanes 1000
+// apart stay under 65536; names, variables each lane ends with -s<slot>, in the letters Docker Compose takes for a
+// project name.
+const VARIABLE = /^[A-Z_][A-Z0-9_]*$/;
+const NAME = /^[a-z0-9][a-z0-9_.-]{0,60}$/;
+function laneEnvSettings(laneEnv = {}) {
+  const ports = laneEnv.ports ?? {};
+  const names = laneEnv.names ?? {};
+  for (const [name, port] of Object.entries(ports)) {
+    if (!VARIABLE.test(name) || !Number.isInteger(port) || port < 1 || port > 59535) throw new Error(`runs.lane_env.ports of project.yaml has ${name}: ${JSON.stringify(port)}: a variable in capitals, and a port from 1 to 59535`);
+  }
+  for (const [name, value] of Object.entries(names)) {
+    if (!VARIABLE.test(name) || typeof value !== 'string' || !NAME.test(value)) throw new Error(`runs.lane_env.names of project.yaml has ${name}: ${JSON.stringify(value)}: a variable in capitals, and a name of lower-case letters, digits, -, _ and .`);
+    if (name in ports) throw new Error(`runs.lane_env of project.yaml: ${name} is both a port and a name`);
+  }
+  return { ports, names };
 }

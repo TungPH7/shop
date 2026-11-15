@@ -9,6 +9,11 @@
 import { join } from 'node:path';
 
 const ENVIRONMENTS = ['development', 'staging', 'production'];
+// The environments that hold secrets, each with the branches and tags that may use it, as type:name.
+const GUARDED = {
+  'merge-gate': ['branch:develop'],
+  'jira-sync': ['branch:develop', 'branch:main', 'branch:release/*', 'tag:v*'],
+};
 const json = (result) => {
   try {
     return JSON.parse(result.stdout || 'null');
@@ -57,28 +62,46 @@ export function setupGithub({ kitDir, repo, mergeAppId, mergeAppKeyFile, secret,
   } else notes.push(`${repo} is private: it needs no interaction limit and no approval of the workflows of forks`);
 
   // merge-gate reads the key of ao-merge from its environment, which only develop may use (docs/quality-gates.md).
+  // jira-sync, merge-gate and audit read JIRA_CI_TOKEN from theirs, never from the repository: every workflow of a PR
+  // from a branch of the repo can read a repository secret, and an agent's branch could take it (review of shop PR
+  // #21). jira-sync runs on develop, main and release/* (pull_request_target runs on the base branch, deployments come
+  // from those), and audit for a v* tag a deploy workflow may run on.
   const envs = new Set((json(gh(['api', `repos/${repo}/environments`]))?.environments ?? []).map(({ name }) => name));
-  const missingEnvs = [...ENVIRONMENTS, 'merge-gate'].filter((name) => !envs.has(name));
+  const missingEnvs = [...ENVIRONMENTS, ...Object.keys(GUARDED)].filter((name) => !envs.has(name));
   if (missingEnvs.length === 0) done.push('environments');
   for (const name of missingEnvs) {
-    if (name === 'merge-gate') write('the environment merge-gate, for develop only', ['api', '-X', 'PUT', `repos/${repo}/environments/merge-gate`, '--input', '-'], { input: JSON.stringify({ deployment_branch_policy: { protected_branches: false, custom_branch_policies: true } }) });
+    if (name in GUARDED) write(`the environment ${name}, for the branches it names only`, ['api', '-X', 'PUT', `repos/${repo}/environments/${name}`, '--input', '-'], { input: JSON.stringify({ deployment_branch_policy: { protected_branches: false, custom_branch_policies: true } }) });
     else write(`the environment ${name}`, ['api', '-X', 'PUT', `repos/${repo}/environments/${name}`]);
   }
-  const policies = (json(gh(['api', `repos/${repo}/environments/merge-gate/deployment-branch-policies`]))?.branch_policies ?? []).map(({ name }) => name);
-  if (policies.includes('develop')) done.push('the branch rule of merge-gate');
-  else write('the branch rule of merge-gate: develop', ['api', '-X', 'POST', `repos/${repo}/environments/merge-gate/deployment-branch-policies`, '-f', 'name=develop', '-f', 'type=branch']);
+  for (const [name, rules] of Object.entries(GUARDED)) {
+    const have = new Set((json(gh(['api', `repos/${repo}/environments/${name}/deployment-branch-policies`]))?.branch_policies ?? []).map(({ name: ref, type = 'branch' }) => `${type}:${ref}`));
+    const lacking = rules.filter((rule) => !have.has(rule));
+    if (lacking.length === 0) done.push(`the branch rules of ${name}`);
+    for (const rule of lacking) {
+      const [type, ref] = rule.split(':');
+      write(`the ${type} rule of ${name}: ${ref}`, ['api', '-X', 'POST', `repos/${repo}/environments/${name}/deployment-branch-policies`, '-f', `name=${ref}`, '-f', `type=${type}`]);
+    }
+  }
 
-  const secrets = new Set((json(gh(['secret', 'list', '--repo', repo, '--json', 'name'])) ?? []).map(({ name }) => name));
-  if (secrets.has('JIRA_CI_TOKEN')) done.push('JIRA_CI_TOKEN');
+  const held = (env) => new Set((json(gh(['secret', 'list', '--env', env, '--repo', repo, '--json', 'name'])) ?? []).map(({ name }) => name));
+  const envSecrets = Object.fromEntries(Object.keys(GUARDED).map((env) => [env, held(env)]));
+  const tokenless = ['jira-sync', 'merge-gate'].filter((env) => !envSecrets[env].has('JIRA_CI_TOKEN'));
+  if (tokenless.length === 0) done.push('JIRA_CI_TOKEN');
   else {
     const token = secret('JIRA_CI_TOKEN');
     if (!token) left.push('JIRA_CI_TOKEN is not set on this machine: set it as a user variable (docs/getting-started.md), then run ao-kit setup github again');
-    else write('the secret JIRA_CI_TOKEN, from your variable', ['secret', 'set', 'JIRA_CI_TOKEN', '--repo', repo], { input: token });
+    else for (const env of tokenless) write(`the secret JIRA_CI_TOKEN of ${env}, from your variable`, ['secret', 'set', 'JIRA_CI_TOKEN', '--env', env, '--repo', repo], { input: token });
+  }
+  // A repo set up before keeps its repository secret: setup deletes nothing, so it says how.
+  const repoSecrets = new Set((json(gh(['secret', 'list', '--repo', repo, '--json', 'name'])) ?? []).map(({ name }) => name));
+  if (repoSecrets.has('JIRA_CI_TOKEN')) {
+    left.push(
+      `Delete the repository secret JIRA_CI_TOKEN: gh secret delete JIRA_CI_TOKEN --repo ${repo}; or on GitHub, the repo → Settings → Secrets and variables → Actions → tab Secrets → under Repository secrets, the bin icon beside JIRA_CI_TOKEN → Yes, remove this secret. The environments jira-sync and merge-gate hold it now, and every workflow of a PR from a branch of the repo can read a repository secret`,
+    );
   }
   // The key of ao-merge lives only here (Pilot 3, spec 2.9): an agent holds the key of ao-dev on your machine, so the
   // App the rulesets let merge without your approval is another one, whose key no machine keeps.
-  const envSecrets = new Set((json(gh(['secret', 'list', '--env', 'merge-gate', '--repo', repo, '--json', 'name'])) ?? []).map(({ name }) => name));
-  if (envSecrets.has('AO_MERGE_APP_KEY')) done.push('AO_MERGE_APP_KEY');
+  if (envSecrets['merge-gate'].has('AO_MERGE_APP_KEY')) done.push('AO_MERGE_APP_KEY');
   else if (!mergeAppKeyFile) left.push('AO_MERGE_APP_KEY: give the private key of ao-merge with --merge-app-key-file <path> (docs/github-apps-setup.md, section 2), then run ao-kit setup github again');
   else if (write('the secret AO_MERGE_APP_KEY of merge-gate, from the key file', ['secret', 'set', 'AO_MERGE_APP_KEY', '--env', 'merge-gate', '--repo', repo], { input: readFile(mergeAppKeyFile) })) notes.push(`Delete ${mergeAppKeyFile} now: GitHub holds the key of ao-merge, and no machine an agent uses should`);
 

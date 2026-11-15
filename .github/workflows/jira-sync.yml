@@ -1,18 +1,22 @@
 # jira-sync (ai-orchestrator, tracker-integration spec section 2.7): on PR, review, CI, deployment and manual events,
 # moves the Jira work items whose guards hold, with the token of the automation account. Runs the kit copy in
 # .ai-orchestrator/. GitHub runs the workflow_run and deployment_status triggers only from the default branch.
+#
+# The code of a PR never holds the CI token (review of shop PR #21): an agent's branch could change the kit copy, or the
+# packages npm ci installs, and move any item with that token. So PR events come through pull_request_target, whose
+# workflow and checkout are those of the base branch, and reviews through the run of the workflow PR review, which
+# holds no secret; there is no pull_request or pull_request_review trigger, whose workflows run from the PR. The token is
+# a secret of the environment jira-sync, which only the protected branches may use, so no workflow of a PR reaches it.
 name: jira-sync
 
 on:
-  pull_request:
+  pull_request_target:
     # closed only clears the Needs you flag merge-gate raised for the PR (dev-workflow spec 2.7).
     types: [opened, reopened, synchronize, ready_for_review, closed]
-  # Every review: changes asked send the item back; an approval can let a merged and deployed item go to QA.
-  pull_request_review:
-    types: [submitted]
   workflow_run:
-    # The name of the project's CI workflow.
-    workflows: [CI]
+    # The name of the project's CI workflow, and PR review: every review, since changes asked send the item back and an
+    # approval can let a merged and deployed item go to QA.
+    workflows: [CI, PR review]
     types: [completed]
   deployment_status:
   workflow_dispatch:
@@ -32,7 +36,13 @@ jobs:
   # The job id is the check run name, which lib/tracker/facts.mjs leaves out of CI.
   jira-sync:
     runs-on: ubuntu-latest
+    # The environment holds JIRA_CI_TOKEN, for develop, main, release/* and v* only. No deployment: its deployment_status
+    # event would start jira-sync again.
+    environment:
+      name: jira-sync
+      deployment: false
     steps:
+      # The base branch's commit on pull_request_target: never the head of the PR.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:

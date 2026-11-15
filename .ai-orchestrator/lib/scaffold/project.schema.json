@@ -93,6 +93,23 @@
         "copy": {
           "type": "array",
           "items": { "type": "string", "minLength": 1, "pattern": "^(?![\\\\/])(?![A-Za-z]:)(?!(.*[\\\\/])?\\.\\.([\\\\/]|$)).+$" }
+        },
+        "lane_env": {
+          "description": "Variables each lane gets its own value of, before the .env files: ports moved like the ports of the apps, names ending in -s<slot>, such as the project, container and port of a database in Docker Compose",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ports": {
+              "type": "object",
+              "propertyNames": { "pattern": "^[A-Z_][A-Z0-9_]*$" },
+              "additionalProperties": { "type": "integer", "minimum": 1, "maximum": 59535 }
+            },
+            "names": {
+              "type": "object",
+              "propertyNames": { "pattern": "^[A-Z_][A-Z0-9_]*$" },
+              "additionalProperties": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_.-]{0,60}$" }
+            }
+          }
         }
       }
     }

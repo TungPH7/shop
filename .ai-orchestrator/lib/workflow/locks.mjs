@@ -9,6 +9,8 @@ import { join } from 'node:path';
 export const PARALLEL = ['build', 'fix', 'review', 'qa'];
 // The commands of a dev agent: one at a time per role, as the WIP limit of the contract has it.
 const DEV_COMMANDS = ['build', 'fix'];
+// Whether each run of a command puts its role on the lock first (claimRole).
+export const claimsRole = (command) => DEV_COMMANDS.includes(command);
 const PROJECT = '_project';
 
 // Whether a command may start next to the live ones: { ok: true, name, slot } or { ok: false, reason }. live: the locks
@@ -59,15 +61,15 @@ export function liveLocks(dir, { fs, alive }) {
   return live;
 }
 
-// Takes a lock for a command: under a mutex file, reads the live locks, admits or refuses, and writes the lock.
-// Resolves { ok: true, file, slot } or { ok: false, reason }. fs adds writeFileSync and mkdirSync; sleep(ms).
-export async function takeLock(dir, holder, { fs, alive, cap, sleep, tries = 50 }) {
+// Runs decide() under the mutex file of the folder, so two commands cannot both read the locks before either writes.
+// Resolves what decide returns, or { ok: false, reason } when the mutex stays busy.
+async function underMutex(dir, pid, decide, { fs, alive, sleep, tries = 50 }) {
   fs.mkdirSync(dir, { recursive: true });
   const mutex = join(dir, '.admit');
   let held = false;
   for (let attempt = 0; attempt < tries && !held; attempt++) {
     try {
-      fs.writeFileSync(mutex, String(holder.pid), { flag: 'wx' });
+      fs.writeFileSync(mutex, String(pid), { flag: 'wx' });
       held = true;
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
@@ -79,12 +81,52 @@ export async function takeLock(dir, holder, { fs, alive, cap, sleep, tries = 50 
   }
   if (!held) return { ok: false, reason: `the lock of the runs in ${dir} stayed busy` };
   try {
-    const decided = admit({ live: liveLocks(dir, { fs, alive }), ...holder, cap });
-    if (!decided.ok) return decided;
-    const file = join(dir, `${decided.name}.json`);
-    fs.writeFileSync(file, `${JSON.stringify({ ...holder, slot: decided.slot })}\n`);
-    return { ok: true, file, slot: decided.slot };
+    return decide();
   } finally {
     fs.rmSync(mutex, { force: true });
   }
+}
+
+// Takes a lock for a command: under a mutex file, reads the live locks, admits or refuses, and writes the lock.
+// Resolves { ok: true, file, slot } or { ok: false, reason }. fs adds writeFileSync and mkdirSync; sleep(ms).
+export async function takeLock(dir, holder, { fs, alive, cap, sleep, tries = 50 }) {
+  return underMutex(
+    dir,
+    holder.pid,
+    () => {
+      const decided = admit({ live: liveLocks(dir, { fs, alive }), ...holder, cap });
+      if (!decided.ok) return decided;
+      const file = join(dir, `${decided.name}.json`);
+      fs.writeFileSync(file, `${JSON.stringify({ ...holder, slot: decided.slot })}\n`);
+      return { ok: true, file, slot: decided.slot };
+    },
+    { fs, alive, sleep, tries },
+  );
+}
+
+// Puts the role of the next run of build or fix on the command's lock (review of shop PR #21: /ao-build of a Story runs
+// be-dev, then fe-dev, and the lock named only the first). A dev agent builds one item at a time, so while another
+// command's run holds that role this one waits, looking again every poll ms, most times at most; its lock holds no role
+// meanwhile, so two commands that wait for each other's role cannot both wait. onWait(busy) is told once. Resolves
+// { ok: true, waited } or { ok: false, reason }.
+export async function claimRole(dir, file, role, { fs, alive, sleep, poll = 30_000, most = 240, onWait = () => {} }) {
+  for (let attempt = 0; attempt <= most; attempt++) {
+    const result = await underMutex(
+      dir,
+      process.pid,
+      () => {
+        if (!fs.existsSync(file)) return { ok: false, reason: `the lock ${file} is gone` };
+        const own = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const busy = liveLocks(dir, { fs, alive }).find((lock) => join(dir, `${lock.name}.json`) !== file && DEV_COMMANDS.includes(lock.command) && lock.role === role);
+        fs.writeFileSync(file, `${JSON.stringify({ ...own, role: busy ? null : role })}\n`);
+        return busy ? { ok: false, busy } : { ok: true, waited: attempt > 0 };
+      },
+      { fs, alive, sleep },
+    );
+    if (!result.busy) return result;
+    if (attempt === 0) onWait(result.busy);
+    if (attempt === most) return { ok: false, reason: `${role} stayed at work on ${result.busy.key} (process ${result.busy.pid}) while this command waited for it: a dev agent builds one item at a time` };
+    await sleep(poll);
+  }
+  return { ok: false, reason: `${role} stayed busy` };
 }

@@ -40,13 +40,39 @@ const BACKUP = 'do not read the backup copies or the identity that opens them, a
 // .ao counts where a path starts: at the start, after a slash, a space, a quote or = (review round 3 of shop PR #13:
 // `cd ~ && cat .ao/backup-pull.json` passed).
 const BACKUP_FILE = /\.agekey\b|\.dump\.age\b|ao-backups|ao-backup-pull|(?:^|[\s'"=\\/])\.ao(?:[\\/\s'"]|$)/i;
-// The marks a private key starts with (review round 3 of shop PR #13): a search for them over your user folder prints
-// the keys of the Apps, whatever the files are called. Any character may stand between the words, as a regex has it.
-// Inside the project such a search is a scan for committed keys, which security runs, so only a command that also names
-// your user folder is refused (review round 4); Grep and Glob are kept in the project by their path already.
-const KEY_MARK = /PRIVATE.{0,3}KEY|AGE.{0,2}SECRET.{0,2}KEY/i;
-const HOME_FOLDER = /(?:^|[\s'"=(])~(?=[\\/\s'")]|$)|\$\{?HOME\b|%USERPROFILE%|%HOMEPATH%|\$env:(?:USERPROFILE|HOMEPATH|HOME)\b|\b[A-Za-z]:[\\/]+Users\b|(?:^|[\s'"=])\/(?:[A-Za-z]\/)?(?:Users|home)\b/i;
-const KEY_SEARCH = 'do not search for a private key: ao-pr.mjs and git get the tokens of your role for you';
+// The marks a private key starts with (review round 3 of shop PR #13), and the five dashes of any PEM block (review of
+// shop PR #21): a search for them over your user folder prints the keys of the Apps, whatever the files are called.
+// Any character may stand between the words, as a regex has it. Round 4 refused only a command that also named your
+// user folder, and Git Bash names it in more ways than a list holds ($USERPROFILE, $HOMEDRIVE$HOMEPATH, a bare cd, /c),
+// so a command with a mark now passes only where every part that holds it stays in the repository (repoOnly): a
+// message of git commit, or a search of git grep or git log. security scans the project with Grep, which its path keeps
+// in the project.
+const KEY_MARK = /PRIVATE.{0,3}KEY|AGE.{0,2}SECRET.{0,2}KEY|-{5}BEGIN/i;
+const KEY_SEARCH = 'do not search for a private key: ao-pr.mjs and git get the tokens of your role for you; to scan the project for committed keys, use Grep or git grep';
+// git grep options that read outside the files git tracks (--no-index, --untracked) or start a program
+// (--open-files-in-pager, -O alone or in a group such as -nO), by any start git takes for them.
+const GREP_OUTSIDE = /^--(?:no-in|u|op)|^-[A-Za-z]*O/;
+
+// A part of a command line that holds a mark of a private key, and stays in the repository: git with no option of its
+// own (-c, -C, --work-tree), no variable set before it and no command run inside a word ($( or a backtick), running
+// commit, log, or grep without GREP_OUTSIDE.
+function repoOnly(words) {
+  if (words.env.length > 0 || words.some((word) => word.includes('$(') || word.includes('`'))) return false;
+  if (programOf(words[0]) !== 'git') return false;
+  const { index } = gitSubcommand(words);
+  if (index !== 1) return false;
+  const [sub, ...rest] = words.slice(1);
+  if (sub === 'commit' || sub === 'log') return true;
+  return sub === 'grep' && !rest.some((word) => GREP_OUTSIDE.test(word));
+}
+
+// Whether a command line searches for a private key: it holds a mark, and some part that holds it, or none of them when
+// the mark only shows across parts, is not repoOnly.
+function searchesForKey(command) {
+  if (!KEY_MARK.test(command)) return false;
+  const marked = segments(command).filter((words) => KEY_MARK.test([...words.env, ...words].join(' ')));
+  return marked.length === 0 || !marked.every(repoOnly);
+}
 
 // What a path, or a glob or pattern of Grep and Glob, may not name: keys, the token of gh, the backups. undefined when
 // it names none of them.
@@ -99,7 +125,7 @@ export function checkAgentCall(input, { gates, contract, projectDir, roster, tem
 function checkCommand(command, role, gates, roster, depth = 0) {
   if (TOKEN_COMMAND.test(command) || GH_HOSTS_FILE.test(command)) return deny(TOKEN);
   if (KEY_FILE.test(command)) return deny(KEY);
-  if (KEY_MARK.test(command) && HOME_FOLDER.test(command)) return deny(KEY_SEARCH);
+  if (searchesForKey(command)) return deny(KEY_SEARCH);
   if (BACKUP_FILE.test(command)) return deny(BACKUP);
   if (POWERSHELL_ENV.test(command)) return deny(IDENTITY);
   for (const words of segments(command)) {

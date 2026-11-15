@@ -3,8 +3,8 @@
 // never printed. The VPS row is a question: doctor does not reach the VPS, so it prints the lines deployer.yaml needs.
 // facts: { config, projectProblems, nodeVersion, versions: { gh, claude, git, pnpm }, pnpmWanted (the version
 // packageManager names, or null), env, files (the paths that exist),
-// kitDrift, renderCheck, hooksPath, gitignoreMissing, github: { defaultBranch, environments, secrets, envSecrets,
-// workflows (how many GitHub knows), ciRuns (on develop), public, interactionLimit ({ expires_at } or {}) }, apps: { dev,
+// kitDrift, renderCheck, hooksPath, gitignoreMissing, github: { defaultBranch, environments, secrets (of the
+// repository), envSecrets ({ 'merge-gate': names, 'jira-sync': names }), workflows (how many GitHub knows), ciRuns (on develop), public, interactionLimit ({ expires_at } or {}) }, apps: { dev,
 // review }, jiraCheck, claude: { trusted, mcp }, now (an ISO time), java ([{ app, want, jdk }] for each Java app, jdk
 // being findJdk's answer or null), docker ({ running }, read when there is a Java app) }
 import { jdkMissing } from '../quality/maven.mjs';
@@ -13,7 +13,7 @@ import { basicAuthEnv } from '../workflow/qa.mjs';
 import { codeownersText } from './install.mjs';
 
 const MIN_GH = [2, 102, 0];
-const ENVIRONMENTS = ['development', 'staging', 'production', 'merge-gate'];
+const ENVIRONMENTS = ['development', 'staging', 'production', 'merge-gate', 'jira-sync'];
 const MCP = ['atlassian', 'chrome-devtools'];
 const newer = (version, min) => {
   const parts = (version ?? '').match(/(\d+)\.(\d+)\.(\d+)/)?.slice(1).map(Number);
@@ -95,9 +95,14 @@ export function doctor(facts) {
     row('GitHub', '.github/CODEOWNERS is on main and on the open release branches', lacking.length === 0, `Missing or different on ${lacking.join(', ')}: GitHub reads it from the base branch of a PR, so any approval counts there. The next release brings it to main (docs/release-workflow.md); bring it to an open release branch through a PR you approve`);
   }
   row('GitHub', `environments ${ENVIRONMENTS.join(', ')}`, ENVIRONMENTS.every((name) => gh.environments.includes(name)), 'ao-kit setup github <dir>');
+  // The CI token is a secret of the environments jira-sync and merge-gate, which only protected branches may use: every
+  // workflow of a PR from a branch of the repo can read a repository secret (review of shop PR #21).
+  const envSecret = (env, name) => (gh.envSecrets?.[env] ?? []).includes(name);
+  row('GitHub', 'secret JIRA_CI_TOKEN of the environments jira-sync and merge-gate', envSecret('jira-sync', 'JIRA_CI_TOKEN') && envSecret('merge-gate', 'JIRA_CI_TOKEN'), 'ao-kit setup github <dir>, with JIRA_CI_TOKEN set on this machine');
+  row('GitHub', 'no secret JIRA_CI_TOKEN of the repository', !gh.secrets.includes('JIRA_CI_TOKEN'), `Once the row above passes, delete it: gh secret delete JIRA_CI_TOKEN --repo ${repo}; or on GitHub, the repo → Settings → Secrets and variables → Actions → tab Secrets → under Repository secrets, the bin icon beside JIRA_CI_TOKEN → Yes, remove this secret. Every workflow of a PR from a branch of the repo can read a repository secret`);
   // merge-gate merges with ao-merge, the only App the rulesets let merge without your approval (Pilot 3, spec 2.9).
   if (config?.github?.apps?.merge) {
-    row('GitHub', 'secrets JIRA_CI_TOKEN, and AO_MERGE_APP_KEY of merge-gate', gh.secrets.includes('JIRA_CI_TOKEN') && gh.envSecrets.includes('AO_MERGE_APP_KEY'), 'ao-kit setup github <dir> --merge-app-key-file <the key of ao-merge>, then delete the key file');
+    row('GitHub', 'secret AO_MERGE_APP_KEY of merge-gate', envSecret('merge-gate', 'AO_MERGE_APP_KEY'), 'ao-kit setup github <dir> --merge-app-key-file <the key of ao-merge>, then delete the key file');
   } else {
     row('GitHub', 'the ao-merge App, the only one the rulesets let merge without your approval', false, 'node <kit>/scripts/github-app-create.mjs --owner <you> --repo <repo> --apps merge (docs/github-apps-setup.md); write its slug and id as github.apps.merge and merge_id in project.yaml; then ao-kit setup github <dir> --merge-app-key-file <the key>, and delete the key file');
   }

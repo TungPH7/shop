@@ -426,7 +426,8 @@ function decideBuild(facts, options) {
   // The draft PR of a build waits for your preview (human-loop spec 4.2); red CI goes to /ao-fix first.
   if (pr?.state === 'open' && pr.draft) {
     if (pr.ci.failed) return out(stop(`CI is red on the draft PR #${pr.number} of ${key}`, `/ao-fix ${pr.number}`));
-    return out(stop(`the draft PR #${pr.number} of ${key} waits for your preview${pr.ci.pending ? ' (CI still running)' : ''}: the screenshots and API samples of its dev agents are in .ai/runs/${key}/preview/`, `/ao-preview ${key}, or /ao-review ${pr.number} to skip the preview`));
+    // facts.previewDir: where the preview is when the item has a lane (review of shop PR #21).
+    return out(stop(`the draft PR #${pr.number} of ${key} waits for your preview${pr.ci.pending ? ' (CI still running)' : ''}: the screenshots and API samples of its dev agents are in ${facts.previewDir ?? `.ai/runs/${key}/preview/`}`, `/ao-preview ${key}, or /ao-review ${pr.number} to skip the preview`));
   }
   if (pr?.state === 'open') return out(stop(`PR #${pr.number} of ${key} is open: the build is done`, pr.ci.failed || pr.changesRequested ? `/ao-fix ${pr.number}` : `/ao-review ${pr.number}`));
   // A Story split into Sub-tasks goes on through them: their agents keep the ledgers, one per Sub-task. Any other item

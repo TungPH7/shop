@@ -13,13 +13,21 @@ const FLAG = 'flag-needs-you';
 // The only option of Jira's Flagged field.
 const FLAG_VALUE = 'Impediment';
 
+// The PR events jira-sync reads. The workflow of jira-sync runs on pull_request_target, from the base branch, so the
+// code of a PR never holds the CI token (review of shop PR #21); a review comes through the run of the secretless
+// workflow PR review, as a workflow_run. pull_request and pull_request_review stay for the copies of the workflow made
+// before.
+const PR_EVENTS = ['pull_request', 'pull_request_target'];
+
 // The keys of the items in the project space that an event concerns. A PR event concerns the item of its branch and
-// title; a successful deployment, every item in a state that a deployment can move on, found with JQL.
+// title; a run of CI or PR review, the item of its branch; a successful deployment, every item in a state that a
+// deployment can move on, found with JQL.
 export async function itemsOf(event, payload, { jira, contract, mapping, space }) {
   const inSpace = (keys) => [...new Set(keys.filter(Boolean))].filter((key) => key.startsWith(`${space}-`));
   const ofBranch = (name) => parseBranch(name ?? '')?.key;
   switch (event) {
     case 'pull_request':
+    case 'pull_request_target':
     case 'pull_request_review':
       return inSpace([ofBranch(payload.pull_request.head.ref), ...extractKeys(payload.pull_request.title ?? '')]);
     case 'workflow_run':
@@ -55,7 +63,7 @@ export async function syncEvent({ event, payload, jira, github, contract, mappin
   const waiting = [];
   const kept = [];
   const failures = [];
-  const closing = event === 'pull_request' && payload.action === 'closed';
+  const closing = PR_EVENTS.includes(event) && payload.action === 'closed';
   for (const key of keys) {
     try {
       if (closing) {

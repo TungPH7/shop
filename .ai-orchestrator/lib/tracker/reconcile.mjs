@@ -12,10 +12,11 @@ const CHILDREN_EFFECT = 'refine-children';
 const CHILD_TRANSITION = 'refine';
 
 // guards: ids of the guards that hold; reworkCount: before these moves; flagged: the item has the needs-you label;
-// flaggedAt: the count jira-sync last raised that flag for, by its own comment. Returns the moves [{ transition, from,
-// to }], the state and rework count after them, flag when the item must get flag-needs-you: the count has reached the
-// limit of policies.yaml and the item is not flagged yet (plan, decision 2), unless that count was flagged before and
-// you cleared it: only one more rework raises it again (review round 4 of shop PR #13),
+// flaggedAt: the count jira-sync last raised that flag for, by its own comment, when you removed the label after it
+// (clearedByYou). Returns the moves [{ transition, from, to }], the state and rework count after them, flag when the
+// item must get flag-needs-you: the count has reached the limit of policies.yaml and the item is not flagged yet (plan,
+// decision 2), unless that count was flagged before and you cleared it: only one more rework raises it again (review
+// round 4 of shop PR #13),
 // and waiting: the transitions of automation from the last state that some guard allows already, with the guards
 // still missing.
 export function planMoves(contract, workType, { state, guards, reworkCount = 0, flagged = false, flaggedAt }) {
@@ -62,7 +63,8 @@ export async function reconcile(key, { jira, github, contract, mapping, approver
   ];
   const reworkCount = countRework(histories, { contract, mapping, workType });
   const flagged = item.labels.includes(mapping.needs_you_label);
-  const flaggedAt = reworkCount >= contract.rework.limit && !flagged ? await lastReworkFlag(jira, item.key, mapping) : undefined;
+  const lastFlag = reworkCount >= contract.rework.limit && !flagged ? await lastReworkFlag(jira, item.key, mapping) : undefined;
+  const flaggedAt = lastFlag && clearedByYou(histories, lastFlag.at, mapping) ? lastFlag.count : undefined;
   const plan = planMoves(contract, workType, { state, guards, reworkCount, flagged, flaggedAt });
 
   const nameOf = (id) => mapping.workflows[workflowId].transitions[id].name;
@@ -106,7 +108,7 @@ function workflowOf(contract, workType) {
   return found;
 }
 
-// The rework count of jira-sync's newest flag comment on the item ("jira-sync: <KEY> went back N times"), or undefined.
+// jira-sync's newest flag comment on the item ("jira-sync: <KEY> went back N times"): { at, count }, or undefined.
 // Only the comments of the CI token's account count: an agent could write the same words.
 async function lastReworkFlag(jira, key, mapping) {
   const author = ciAccount(mapping);
@@ -116,5 +118,23 @@ async function lastReworkFlag(jira, key, mapping) {
     const count = (typeof body === 'string' ? body : adfText(body)).trim().match(/^jira-sync: \S+ went back (\d+) times\b/)?.[1];
     if (count && (!latest || jiraTime(created) >= latest.at)) latest = { at: jiraTime(created), count: Number(count) };
   }
-  return latest?.count;
+  return latest;
+}
+
+// Whether you removed the needs-you label after `since`: the newest change of the labels in the changelog that takes it
+// away is by an account that is none of the kit's identities (review of shop PR #21). An agent can remove the label
+// through editJiraIssue, and with it jira-guard's block on its transitions; automation never removes this flag. When an
+// identity of the kit has no account_id in tracker/jira.yaml, no removal can be told to be yours.
+function clearedByYou(histories, since, mapping) {
+  const kit = mapping.identities.filter(({ roles }) => !roles.includes('human'));
+  if (kit.some(({ account_id: id }) => !id)) return false;
+  const label = mapping.needs_you_label;
+  const holds = (list) => (list ?? '').split(/\s+/).includes(label);
+  let newest;
+  for (const { created, author, items = [] } of histories) {
+    const at = jiraTime(created);
+    if (at <= since || !items.some(({ field, fromString, toString }) => field === 'labels' && holds(fromString) && !holds(toString))) continue;
+    if (!newest || at >= newest.at) newest = { at, by: author?.accountId };
+  }
+  return Boolean(newest?.by) && !kit.some(({ account_id: id }) => id === newest.by);
 }

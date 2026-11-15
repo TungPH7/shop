@@ -113,9 +113,10 @@ export function adfText(node) {
 const GITHUB_GUARDS = ['branch-created', 'dependencies-merged', 'pr-open', 'ci-green', 'changes-requested', 'merge-approved', 'pr-merged', 'qa-deployed', 'work-committed'];
 const BRANCH_KINDS = ['feature', 'bugfix', 'hotfix'];
 const PASSED = ['success', 'neutral', 'skipped'];
-// The job of kit/.github/workflows/jira-sync.yml: it runs on pull_request too, so it is a check run on the PR head, but
-// it is not CI.
-const SYNC_CHECK = 'jira-sync';
+// The jobs of the kit that are check runs on a PR head but not CI: that of kit/.github/workflows/jira-sync.yml, which ran
+// on pull_request in the copies made before, and that of pr-review.yml, which relays a review to jira-sync (review of
+// shop PR #21). A failed relay must not send an item back.
+const NOT_CI = ['jira-sync', 'pr-review-relay'];
 const FAILED = ['failure', 'timed_out'];
 // Review states that decide; COMMENTED does not.
 const DECISIVE = ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'];
@@ -208,9 +209,9 @@ export function changesRequestedOn(reviews, sha) {
 }
 
 // Green: at least one check, every check run finished and passed, and no commit status other than success. The check
-// run of jira-sync itself does not count.
+// runs of NOT_CI do not count.
 export async function readChecks(github, sha) {
-  const runs = (await github.getAll(`/commits/${sha}/check-runs`, {}, 'check_runs')).filter(({ name }) => name !== SYNC_CHECK);
+  const runs = (await github.getAll(`/commits/${sha}/check-runs`, {}, 'check_runs')).filter(({ name }) => !NOT_CI.includes(name));
   const status = await github.get(`/commits/${sha}/status`);
   const statusState = status.total_count > 0 ? status.state : null;
   return {

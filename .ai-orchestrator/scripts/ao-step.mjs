@@ -8,7 +8,7 @@
 // Jira is read with ATLASSIAN_AGENT_TOKEN, GitHub with a read-only token of the ao-review App. Run it from the project
 // root; the kit is in AO_KIT_DIR when set.
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { freemem, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -45,9 +45,10 @@ import { agentCommand, formatDecision, runGo } from '../lib/workflow/runner.mjs'
 import { CHANGES, decideStep, dockerGate } from '../lib/workflow/steps.mjs';
 import { restoreWip, saveWip } from '../lib/workflow/wip.mjs';
 import { laneKeeper, runsSettings } from '../lib/workflow/lanes.mjs';
-import { checkoutBranch } from '../lib/workflow/places.mjs';
-import { liveLocks, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
-import { lanePorts, portsNote, runsAtOnce } from '../lib/workflow/ports.mjs';
+import { installLane, pullsOfBranch, qaWatcher, runPlacer, waitForRam } from '../lib/workflow/lane-runs.mjs';
+import { checkoutBranch, laneDir } from '../lib/workflow/places.mjs';
+import { claimRole, claimsRole, liveLocks, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
+import { runsAtOnce } from '../lib/workflow/ports.mjs';
 
 const COMMANDS = ['status', 'intake', 'preview', 'spec', 'plan', 'request', 'build', 'review', 'fix', 'qa', 'release', 'ship', 'rollback'];
 const USAGE = 'usage: node .ai-orchestrator/scripts/ao-step.mjs <status|intake|preview|spec|plan|request|build|review|fix|qa|release|ship|rollback> [<KEY>|<PR>|<vX.Y.0> <sha>|<vX.Y.Z>|<environment> [<sha>]] [--go] [--answers <file>] [--note <file>] [--change <word>] [--stop]';
@@ -219,18 +220,26 @@ async function main() {
   // The lanes of the project (parallel-runs spec 4): off unless project.yaml turns runs.worktrees on.
   const projectYaml = join(projectDir, '.ai-orchestrator', 'project.yaml');
   const runs = runsSettings(existsSync(projectYaml) ? parse(readFileSync(projectYaml, 'utf8')) : {});
+  // A lane installs with none of your secrets in its environment (spec 4.2).
+  const installEnv = () => {
+    const env = { ...process.env };
+    for (const name of CLEARED_ENV) delete env[name];
+    return env;
+  };
   const keeper = laneKeeper({
     projectDir,
     gitIn,
-    install: async (dir) => installLane(dir),
-    fs: { existsSync, mkdirSync, copyFileSync, readdirSync },
+    install: async (dir) => installLane(dir, { env: installEnv(), exists: existsSync, manager: managerFromLockfile, args: installArgs, run: runManager }),
+    fs: { existsSync, mkdirSync, copyFileSync, cpSync, readdirSync, writeFileSync },
     pullsOf: (branch) => pullsOfBranch(github, repo, branch),
     isProtected: (branch) => isProtected(branch, gates.protected_branches),
     settings: runs,
   });
   if (command === 'preview' && runs.worktrees) {
+    // The dev agents wrote the preview in the lane of the item (review of shop PR #21).
+    const lanePreview = arg && /^[A-Z][A-Z0-9_]*-\d+$/.test(arg) ? join(laneDir(projectDir, arg), '.ai', 'runs', arg, 'preview') : join(laneDir(projectDir, '<KEY>'), '.ai', 'runs', '<KEY>', 'preview');
     console.log('STOP: /ao-preview runs the apps from the project folder on the PR branch, and with runs.worktrees on that branch is checked out in the lane of the item');
-    console.log('Next: read the screenshots and API samples in .ai/runs/<KEY>/preview/, then /ao-review <PR>; or open the lane in your editor');
+    console.log(`Next: read the screenshots and API samples in ${lanePreview}, then /ao-review <PR>; or open the lane in your editor`);
     return;
   }
   const files = {
@@ -255,7 +264,10 @@ async function main() {
   const gatherAll = () => gatherFacts({ command, arg, extra, jira, github, deploys, history: developHistory, local: files, contract, mapping, roster, gates, apps, approvers, space, kitCopy });
   // /ao-preview also reads this machine: project.yaml, the preview that runs, the folder and the ports (spec 4.3).
   const gather = async () => {
-    const facts = await gatherAll();
+    const gathered = await gatherAll();
+    // With lanes on, the dev agents write the preview of an item in its lane (review of shop PR #21).
+    const itemKey = gathered.item?.key;
+    const facts = runs.worktrees && itemKey ? { ...gathered, previewDir: `${join(laneDir(projectDir, itemKey), '.ai', 'runs', itemKey, 'preview').replaceAll('\\', '/')}/` } : gathered;
     if (command === 'status') return { ...facts, previewRunning: readJson(previewActive) };
     return command === 'preview' ? { ...facts, preview: await preview.facts(values.stop, facts.pr) } : facts;
   };
@@ -291,9 +303,8 @@ async function main() {
     return;
   }
   const lock = taken.file;
-  // With more than one run at once, this one's apps take the ports of its slot (spec 5.2).
-  const offset = cap > 1 ? taken.slot * runs.portStep : 0;
   const projectApps = existsSync(projectYaml) ? (parse(readFileSync(projectYaml, 'utf8'))?.apps ?? {}) : {};
+  const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
   try {
     console.log('');
     if (runs.worktrees) {
@@ -301,48 +312,32 @@ async function main() {
       const pruned = await keeper.prune().catch((error) => [`The lanes were not checked for closed PRs: ${error.message}`]);
       for (const note of pruned) console.log(note);
     }
-    // A run in a lane starts there, told so; git and the work put aside go there too (parallel-runs spec 4).
-    const placed = async (run) => {
-      const place = await keeper.placeOf(run, command);
-      // Another agent starts only with enough free RAM (spec 5.1).
-      if (cap > 1) await waitForRam(runs.minFreeRamGb);
-      const ports = cap > 1 ? portsNote(lanePorts(projectApps, offset), offset) : null;
-      const notes = [place && keeper.note(place.dir, place.key), ports].filter(Boolean);
-      return {
-        ...run,
-        ...(place && { cwd: place.dir }),
-        ...(cap > 1 && { env: { ...run.env, AO_PORT_OFFSET: String(offset) } }),
-        ...(notes.length > 0 && { prompt: [...notes, run.prompt].join('\n\n') }),
-      };
-    };
+    // A run in a lane starts there, told so, with the ports and services of its slot; git and the work put aside go
+    // there too (parallel-runs spec 4 and 5.2). lib/workflow/lane-runs.mjs has the how.
+    const placed = runPlacer({
+      keeper,
+      command,
+      cap,
+      slot: taken.slot,
+      runs,
+      apps: projectApps,
+      waitForRam: (gb) => waitForRam(gb, { freeBytes: freemem, sleep, log: (line) => console.log(line) }),
+      log: (line) => console.log(line),
+    });
     const gitOf = async (run) => {
       const place = await keeper.placeOf(run, command);
       return place ? gitIn(place.dir) : git;
     };
-    // A qa run stops at once when another deploy reaches its environment during the run (parallel-runs spec 5.1): its
-    // report would be about a version that no longer runs. The runner decides again, and qa tests the new one, twice at
-    // most; after that the run ends as before, with the note of afterQa.
-    let superseded = 0;
-    const watchQa = async (run, start) => {
-      if (!run.qa?.sha || !deploys || superseded >= 2) return start(run);
-      let pid = null;
-      let changed = null;
-      const timer = setInterval(async () => {
-        if (pid === null || changed) return;
-        const now = (await readRunning(deploys, mapping).catch(() => ({})))[run.qa.environment]?.sha;
-        if (now && now !== run.qa.sha) {
-          changed = now;
-          killTree(pid, { spawnSync, kill: (target, signal) => process.kill(target, signal) });
-        }
-      }, 30000);
-      try {
-        const result = await start(run, (started) => (pid = started));
-        if (!changed) return result;
-        superseded += 1;
-        return { ...result, superseded: `${run.qa.environment} ran ${run.qa.sha.slice(0, 8)} when qa started, and ${changed.slice(0, 8)} came during the run: qa was stopped before its report, and runs again on the new version` };
-      } finally {
-        clearInterval(timer);
-      }
+    // A qa run stops at once when another deploy reaches its environment during the run (spec 5.1); the runner decides
+    // again, and qa tests the new version, twice at most.
+    const watchQa = deploys
+      ? qaWatcher({ readSha: async (environment) => (await readRunning(deploys, mapping))[environment]?.sha ?? null, kill: (pid) => killTree(pid, { spawnSync, kill: (target, signal) => process.kill(target, signal) }) })
+      : (run, start) => start(run);
+    // Each run of build or fix takes its dev agent on the lock first: one item at a time per agent (review of shop PR #21).
+    const claim = async (run) => {
+      if (!claimsRole(command) || !run.role) return;
+      const claimed = await claimRole(activeDir, lock, run.role, { fs: lockFs, alive, sleep, onWait: (busy) => console.log(`Waiting for ${run.role}: it is at work on ${busy.key} (process ${busy.pid}), and builds one item at a time`) });
+      if (!claimed.ok) throw new Error(claimed.reason);
     };
     const { decision: final, facts: last } = await runGo({
       command,
@@ -350,7 +345,10 @@ async function main() {
       options,
       gather,
       // qa on Development or Staging gets the basic auth from AO_ENV_AUTH, as variables, never as arguments.
-      agent: async (run, { log }) => watchQa(await placed(run.qa?.auth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run), (ready, onStart) => startAgent(ready, join(runsDir, key, log), onStart)),
+      agent: async (run, { log }) => {
+        await claim(run);
+        return watchQa(await placed(run.qa?.auth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run), (ready, onStart) => startAgent(ready, join(runsDir, key, log), onStart));
+      },
       // A defect you reported is checked like a QA run: its evidence goes to the item too (human-loop spec 5.1).
       after: (run, { tree }) => (['qa', 'qa-defect'].includes(run.purpose) ? afterQa(run, tree, { deploys, mapping }) : []),
       act: (step) => {
@@ -818,46 +816,6 @@ function removeWorktree({ name }) {
 function dispatchJiraSync(key) {
   const result = spawnSync('gh', ['workflow', 'run', 'jira-sync.yml', '-f', `item=${key}`], { cwd: projectDir, encoding: 'utf8' });
   if (result.status !== 0) throw new Error(`gh workflow run jira-sync.yml failed: ${(result.stderr || result.stdout).trim()}`);
-}
-
-// Installs the packages of a new lane (parallel-runs spec 4.2): those of the project by its lockfile, with the install
-// scripts the project folder ran too, since the lane starts at origin/develop; and those of the kit copy, which agents run
-// from the lane (ao-pr.mjs). None of your secrets is in the environment of an install.
-function installLane(dir) {
-  const env = { ...process.env };
-  for (const name of CLEARED_ENV) delete env[name];
-  const notes = [];
-  const manager = managerFromLockfile((file) => existsSync(join(dir, file)));
-  if (manager) {
-    const done = runManager(manager, installArgs(manager), { cwd: dir, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-    if (done.status !== 0) return { ok: false, reason: `${manager} ${installArgs(manager)[0]} failed: ${(done.stderr || done.error?.message || '').trim().slice(-500)}` };
-    notes.push(`Installed the packages of the project with ${manager}.`);
-  }
-  if (existsSync(join(dir, '.ai-orchestrator', 'package-lock.json'))) {
-    const kit = runManager('npm', [...installArgs('npm', { ignoreScripts: true }), '--prefix', '.ai-orchestrator'], { cwd: dir, env, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-    if (kit.status !== 0) return { ok: false, reason: `npm ci of .ai-orchestrator failed: ${(kit.stderr || kit.error?.message || '').trim().slice(-500)}` };
-    notes.push('Installed the packages of the kit copy.');
-  }
-  return { ok: true, notes };
-}
-
-// Waits until the machine has the free RAM of runs.min_free_ram_gb before another agent starts (parallel-runs spec 5.1),
-// looking again every 30 seconds; after 30 minutes the command stops with the reason.
-async function waitForRam(minGb) {
-  if (!minGb) return;
-  const need = minGb * 1024 ** 3;
-  for (let waited = 0; freemem() < need; waited += 30) {
-    if (waited === 0) console.log(`Waiting for RAM: ${(freemem() / 1024 ** 3).toFixed(1)} GB free, ${minGb} GB needed before another agent starts`);
-    if (waited >= 1800) throw new Error(`the machine stayed under ${minGb} GB of free RAM for 30 minutes: close what you can, or lower runs.lanes_max`);
-    await new Promise((done) => setTimeout(done, 30000));
-  }
-}
-
-// The PRs whose head is a branch of this repository: [{ number, state }], state open, closed or merged.
-async function pullsOfBranch(github, repo, branch) {
-  const [owner] = repo.split('/');
-  const pulls = await github.getAll('/pulls', { state: 'all', head: `${owner}:${branch}` });
-  return pulls.map((pr) => ({ number: pr.number, state: pr.merged_at ? 'merged' : pr.state }));
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
