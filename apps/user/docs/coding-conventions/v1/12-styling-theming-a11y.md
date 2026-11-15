@@ -90,7 +90,7 @@ Design system của `user` là CSS variables và CSS thường, không Tailwind 
 | `src/styles/components.css` | Class dùng chung: nút, huy hiệu, thẻ kính, ô "well", ô nhập, ô chọn, ô tìm, khung xương, ô giữ chỗ        |
 | `src/app/globals.css`       | Reset, nền trang, chữ thân, h1, h2, liên kết, vòng focus; style của các trang demo cũ, chờ các Story thay |
 
-- **[MUST]** `app/[locale]/layout.tsx` nạp ba file theo đúng thứ tự `tokens.css`, `components.css`, `globals.css`. ❌ Không `@import` một file CSS trong file CSS khác: Turbopack ở chế độ dev tách file đó ra chunk riêng và preload mà không dùng.
+- **[MUST]** Hai gốc `<html>` của app, `app/[locale]/layout.tsx` và `app/global-error.tsx`, cùng nạp ba file theo đúng thứ tự `tokens.css`, `components.css`, `globals.css`, và cùng đặt `sans.variable` lên `<html>`. Khi layout gốc lỗi ở server, Next chỉ gửi CSS mà `global-error.tsx` tự nạp. `src/app/global-error.test.tsx` kiểm điều này. ❌ Không `@import` một file CSS trong file CSS khác: Turbopack ở chế độ dev tách file đó ra chunk riêng và preload mà không dùng.
 - **[MUST]** Màn hình chỉ dùng **token semantic** và **class của `components.css`**. ❌ Không tự đặt màu, cỡ chữ, độ đậm, khoảng cách, bo góc, bóng hay thời lượng chuyển động. Cần một giá trị mới thì thêm token vào `tokens.css` và một dòng vào `docs/design-system/user.md`, trong cùng PR.
   ✅ `color: var(--muted-foreground); padding: var(--space-3);` ❌ `color: #3b475a; padding: 13px;`
 - **[MUST]** Dùng class của `components.css` trước khi viết CSS mới. Biến thể mới khai ở `components.css`, cạnh class gốc, không rải ở từng màn hình. Trạng thái lấy từ thuộc tính ngữ nghĩa khi có (`[aria-current='page']`, `[aria-invalid='true']`, `:disabled`), không thêm class `--active` song song.

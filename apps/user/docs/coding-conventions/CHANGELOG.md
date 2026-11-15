@@ -17,7 +17,7 @@ Design system của `user` (SHOP-10, mục 14 của plan `docs/specs/SHOP-7/plan
 
 **Changed**
 
-- `12-styling-theming-a11y.md` §12.6 từ `[SHOULD]` thành `[MUST]`: bỏ câu "không dựng file CSS 'global' thứ hai" và "`globals.css` = reset + base + import `tokens.css`". Thay bằng: layout nạp `tokens.css`, `components.css`, `globals.css` theo thứ tự đó, không `@import`; màn hình chỉ dùng token semantic và class của `components.css`; không Tailwind hay thư viện UI; nghĩa của hậu tố `-foreground`, `-text`, `-tint`. Minh chứng: `src/styles/components.css`, `src/styles/tokens.test.ts`, PR #19.
+- `12-styling-theming-a11y.md` §12.6 từ `[SHOULD]` thành `[MUST]`: bỏ câu "không dựng file CSS 'global' thứ hai" và "`globals.css` = reset + base + import `tokens.css`". Thay bằng: layout gốc và `global-error.tsx` cùng nạp `tokens.css`, `components.css`, `globals.css` theo thứ tự đó và cùng đặt class font lên `<html>`, không `@import`; màn hình chỉ dùng token semantic và class của `components.css`; không Tailwind hay thư viện UI; nghĩa của hậu tố `-foreground`, `-text`, `-tint`. Minh chứng: `src/styles/components.css`, `src/styles/tokens.test.ts`, `src/app/global-error.test.tsx`, PR #19.
 - `15-performance.md` §15.5: font là Be Vietnam Pro 500, 600, 700, ba subset, font dự phòng chỉnh cỡ, không truyền `fallback`, thay Inter variable. Minh chứng: `src/config/fonts.ts`, `e2e/design-system.spec.ts`.
 
 **Added**

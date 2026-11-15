@@ -79,8 +79,9 @@
 
   /* ---------- Type ---------- */
   /* --font-sans comes from next/font (src/config/fonts.ts): Be Vietnam Pro, its size-adjusted fallback, then the
-     system fonts. */
-  --font: var(--font-sans), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+     system fonts. The fallback of the var() keeps the font shorthands valid on a root without the font class. */
+  --font:
+    var(--font-sans, system-ui), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --fs-2xs: 0.6875rem; /* 11px */
   --fs-xs: 0.75rem; /* 12px */
   --fs-sm: 0.78125rem; /* 12.5px */

@@ -59,10 +59,11 @@ export default defineConfig({
         // route shell/page/layout/error/sitemap/robots/og — async RSC + Next conventions → E2E. src/app/api/** stays in:
         // a route handler is a plain function a unit test calls, and the CI of ai-orchestrator needs every file a PR
         // changes in coverage/lcov.info (SHOP-1). The root layout stays in for the same reason: its generateMetadata and
-        // generateStaticParams are plain functions, tested in layout.test.tsx (SHOP-10).
+        // generateStaticParams are plain functions, tested in layout.test.tsx (SHOP-10). global-error.tsx stays in too:
+        // a client component, rendered in global-error.test.tsx (SHOP-10).
         'src/app/*locale*/*/**',
         'src/app/*locale*/!(layout).{ts,tsx}',
-        'src/app/*.{ts,tsx}',
+        'src/app/!(global-error).{ts,tsx}',
         'src/instrumentation.ts', // boot glue (nhánh E2E cover) — không unit-worthy
         'src/proxy.ts', // middleware next-intl — E2E cover (curl/Playwright)
       ],

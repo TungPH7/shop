@@ -183,6 +183,12 @@ describe.each(['./components.css', '../app/globals.css'])('%s', (path) => {
   });
 });
 
+// A var() with no fallback makes the whole `font` shorthand of body, h1 and h2 invalid when --font-sans is missing, so
+// the page would take the serif of the browser. --font-sans comes from the class next/font puts on <html>.
+test('--font still names a sans-serif font when --font-sans is missing', () => {
+  expect(tokens.value('--font', 'light')).toMatch(/^var\(--font-sans, [^)]+\)/);
+});
+
 // The image zoom box sits on .zoom-overlay with no backdrop-filter. --surface is glass since SHOP-10 and needs the blur
 // of .card: without it the box turns a cloudy grey (light) or shows the page behind (dark).
 test.each(THEMES)(

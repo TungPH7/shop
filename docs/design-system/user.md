@@ -15,6 +15,7 @@ Design system của `user` là CSS variables và CSS thường, không có Tailw
 | `apps/user/src/config/fonts.ts` | Be Vietnam Pro qua `next/font/google` |
 | `apps/user/src/components/ui/placeholder-tile.tsx` | `PlaceholderTile`, `placeholderGroup`, `placeholderInitial` |
 | `apps/user/src/app/[locale]/layout.tsx` | Nạp `tokens.css`, `components.css`, `globals.css` theo thứ tự đó; gắn `--font-sans` vào `<html>` |
+| `apps/user/src/app/global-error.tsx` | Gốc `<html>` thay layout khi layout lỗi: nạp cùng ba file, cùng thứ tự, và gắn `--font-sans`, vì khi đó Next chỉ gửi CSS mà file này nạp. `--font` có dự phòng `system-ui` nếu thiếu `--font-sans` |
 
 `components.css` được nạp từ layout, không bằng `@import` trong `globals.css`: với `@import`, Turbopack ở chế độ dev tách file ra một chunk riêng và preload nó mà không dùng, nên console có cảnh báo.
 
