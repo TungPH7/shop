@@ -182,3 +182,14 @@ describe.each(['./components.css', '../app/globals.css'])('%s', (path) => {
     expect(used.filter((name) => !known.has(name))).toEqual([]);
   });
 });
+
+// The image zoom box sits on .zoom-overlay with no backdrop-filter. --surface is glass since SHOP-10 and needs the blur
+// of .card: without it the box turns a cloudy grey (light) or shows the page behind (dark).
+test.each(THEMES)(
+  'the image zoom box of globals.css has an opaque background in the %s theme',
+  (theme) => {
+    const rule = /\.zoom-content\s*\{([^}]*)\}/.exec(read('../app/globals.css'))?.[1] ?? '';
+    const background = /background:\s*var\((--[\w-]+)\)/.exec(rule)?.[1] ?? 'none';
+    expect(color(background, theme).a).toBe(1);
+  },
+);

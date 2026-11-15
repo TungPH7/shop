@@ -125,8 +125,9 @@ main {
   max-width: 90vw;
   padding: 0.75rem;
   border-radius: 8px;
-  background: var(--surface);
-  color: var(--surface-foreground);
+  /* --solid, not the glass --surface: this box has no backdrop-filter (docs/design-system/user.md, --solid). */
+  background: var(--solid);
+  color: var(--foreground);
 }
 .zoom-img {
   width: 100%;
