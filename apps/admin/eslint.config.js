@@ -193,6 +193,12 @@ export default tseslint.config(
     languageOptions: { globals: globals.node },
   },
 
+  // 4a) Classic scripts that index.html loads from public/ (theme-init.js): browser.
+  {
+    files: ['public/**/*.js'],
+    languageOptions: { globals: globals.browser },
+  },
+
   // 4b) Test files & test utilities are never fast-refreshed (not in the app
   //     render tree) → exempt them from react-refresh. A test-util module like
   //     render.tsx legitimately exports helpers (and defines a local provider

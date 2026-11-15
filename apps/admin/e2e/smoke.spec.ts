@@ -36,4 +36,22 @@ test.describe('app smoke', () => {
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });
+
+  test('puts a stored theme on <html> before any script of the app runs', async ({ page }) => {
+    await page.addInitScript({
+      content: `localStorage.setItem('tungph7.theme', JSON.stringify({ v: 1, theme: 'dark' }));`,
+    });
+    // Only theme-init.js may load: with the app scripts blocked, data-theme can only
+    // come from the classic script in <head>, which runs before the first paint.
+    await page.route('**/*', (route) => {
+      const request = route.request();
+      const appScript =
+        request.resourceType() === 'script' && !request.url().endsWith('/theme-init.js');
+      return appScript ? route.abort() : route.continue();
+    });
+
+    await page.goto('/');
+
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  });
 });

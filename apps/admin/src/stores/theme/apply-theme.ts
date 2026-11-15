@@ -16,8 +16,9 @@ interface ThemeStore {
   subscribe: (listener: () => void) => () => void;
 }
 
-// Called once in main.tsx before the first render, so a stored theme paints with
-// the first frame instead of flashing the system one. Returns the unsubscribe.
+// Called once in main.tsx before the first render. public/theme-init.js has already
+// put the stored theme on <html> before the first paint; this keeps <html> in step
+// with the store from then on. Returns the unsubscribe.
 export function syncThemeToDocument(store: ThemeStore): () => void {
   let current = store.getState().theme.theme;
   applyTheme(current);

@@ -29,7 +29,8 @@ export default defineConfig({
       // The default reporters plus lcov: the CI of ai-orchestrator reads coverage/lcov.info to measure the lines a PR
       // changes.
       reporter: ['text', 'html', 'clover', 'json', 'lcov'],
-      include: ['src/**/*.{ts,tsx}'],
+      // public/theme-init.js runs in the browser before the app, and has its own tests.
+      include: ['src/**/*.{ts,tsx}', 'public/**/*.js'],
       // Exclude what is not meaningfully UNIT-testable so the % reflects tested
       // logic, not boilerplate: test files/utils, type decls, the entry, env +
       // env-coupled singletons, app composition/bootstrap + route shells (E2E

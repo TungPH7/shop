@@ -11,7 +11,8 @@ Design system của `admin` là CSS variables và CSS thường, không có Tail
 | `apps/admin/src/styles/tokens.css` | Mọi token: màu, chữ, khoảng cách, bo góc, bóng, kính, chuyển động; font dự phòng |
 | `apps/admin/src/styles/global.css` | Nền trang, chữ thân, h1–h3, liên kết, vòng focus |
 | `apps/admin/src/styles/components.css` | Class dùng chung: nút, huy hiệu, thẻ kính, ô nhập, bảng, banner, khung xương, khung trang |
-| `apps/admin/src/main.tsx` | Nạp font, rồi `tokens.css`, `global.css`, `components.css` theo thứ tự đó; gắn giao diện vào `<html>` |
+| `apps/admin/public/theme-init.js` | Script thường, chặn render, trong `<head>` của `index.html`: đặt giao diện đã lưu lên `<html>` trước khung hình đầu tiên |
+| `apps/admin/src/main.tsx` | Nạp font, rồi `tokens.css`, `global.css`, `components.css` theo thứ tự đó; cho `<html>` theo mọi lần đổi giao diện của store |
 | `apps/admin/src/stores/theme/apply-theme.ts` | `applyTheme`, `syncThemeToDocument`: đặt hay gỡ `data-theme` trên `<html>` theo store |
 | `apps/admin/src/components/theme/theme-switcher.tsx` | Ô chọn Sáng, Tối, Hệ thống ở khung trang |
 | `apps/admin/src/app/layouts/root-layout.tsx` | Khung trang S1.1 |
@@ -19,7 +20,7 @@ Design system của `admin` là CSS variables và CSS thường, không có Tail
 ## Theme
 
 - Mặc định theo giao diện của hệ thống (`prefers-color-scheme`). Store `theme` mặc định là `system`, và `system` nghĩa là `<html>` không có `data-theme`.
-- Ô chọn Giao diện (Sáng, Tối, Hệ thống) ở viên thuốc bên phải đặt `data-theme="light"` hay `"dark"`, hoặc gỡ nó với Hệ thống. Lựa chọn lưu ở `localStorage` (`tungph7.theme`) và được gắn vào `<html>` trước lần render đầu, nên không nháy giao diện.
+- Ô chọn Giao diện (Sáng, Tối, Hệ thống) ở viên thuốc bên phải đặt `data-theme="light"` hay `"dark"`, hoặc gỡ nó với Hệ thống. Lựa chọn lưu ở `localStorage` (`tungph7.theme`). Khi tải trang, `public/theme-init.js` đọc nó và đặt `data-theme` trước khung hình đầu tiên, vì nó là script thường trong `<head>`, chạy trước khi trình duyệt vẽ; module script `main.tsx` chỉ chạy sau khi trang đã parse xong. Script là file riêng, không viết inline, để CSP `script-src 'self'` (`apps/admin/docs/conventions.md`) vẫn cho chạy. Nó đọc đúng khóa, số version và giá trị mà `saveTheme` ghi; đổi `persistence.ts` thì đổi cả nó (test `src/theme-init.test.ts` ghi bằng `saveTheme` rồi đọc lại).
 - Token màu viết bằng `light-dark(sáng, tối)`, theo `color-scheme` của `:root`. Bản build chuyển nó sang biến `--lightningcss-light` và `--lightningcss-dark` cho trình duyệt cũ hơn. Hai token bóng không phải màu, nên giá trị tối của chúng khai báo một lần ở `--card-shadow-dark` và `--button-shadow-dark`; khối `[data-theme='dark']` và `@media (prefers-color-scheme: dark)` cuối `tokens.css` chỉ trỏ `--card-shadow` và `--button-shadow` tới đó.
 
 ## Tokens

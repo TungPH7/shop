@@ -18,8 +18,9 @@ import '@/styles/components.css';
 
 // Wire cross-cutting seams once, before anything renders or fetches (Vercel
 // `advanced-init-once`). Observability first so errors during the rest of
-// bootstrap are captured; then the API auth seam (folder 07); then the theme, so
-// a stored one paints with the first frame.
+// bootstrap are captured; then the API auth seam (folder 07); then the theme:
+// public/theme-init.js already put the stored one on <html> before the first
+// paint, and from here <html> follows every change of the store.
 setupObservability();
 setupAuth();
 syncThemeToDocument(store);
