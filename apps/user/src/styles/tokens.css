@@ -144,6 +144,7 @@
   --solid: var(--white);
   --dialog: var(--white-a94);
   --muted: var(--slate-950-a5);
+  /* The one exception to the suffix rule: an old name of user, the secondary text on any background, not only --muted. */
   --muted-foreground: var(--slate-700);
   --hint: var(--slate-600);
   --border: var(--slate-950-a10);
