@@ -18,6 +18,7 @@ export function ThemeSwitcher() {
       <span className="visually-hidden">{t('theme.label')}</span>
       <select
         className="pill__select"
+        name="theme"
         value={theme}
         onChange={(event) => {
           if (isTheme(event.target.value)) {

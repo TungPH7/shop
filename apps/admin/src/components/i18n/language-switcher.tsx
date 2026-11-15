@@ -14,6 +14,7 @@ export function LanguageSwitcher() {
       <span className="visually-hidden">{t('language.label')}</span>
       <select
         className="pill__select"
+        name="language"
         value={locale}
         onChange={(event) => {
           if (isLocale(event.target.value)) {
