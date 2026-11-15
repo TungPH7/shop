@@ -622,9 +622,12 @@ textarea.input {
 
 /* <SegmentedFilter> and <SegmentedChoice> (components/ui/segmented-control.tsx). The
    chosen segment comes from aria-pressed (filter) or the checked radio (choice). */
+/* fit-content: a grid or flex parent must not stretch the group. */
 .segmented {
   display: inline-flex;
   flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
   gap: 2px;
   padding: 3px;
   background: var(--surface-2);
