@@ -23,8 +23,8 @@ interface PlaceholderTileProps {
 const graphemes = new Intl.Segmenter('vi', { granularity: 'grapheme' });
 
 function groupOf(id: string): PlaceholderGroup {
-  const value = Number.parseInt(id.slice(-8), 16);
-  return Number.isNaN(value) ? GROUPS[0] : GROUPS[value % GROUPS.length];
+  // An id that is not hex gives NaN, and GROUPS[NaN] falls back to the first group.
+  return GROUPS[Number.parseInt(id.slice(-8), 16) % GROUPS.length] ?? GROUPS[0];
 }
 
 function initialOf(name: string): string {
