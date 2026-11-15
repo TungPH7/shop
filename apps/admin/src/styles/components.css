@@ -1,6 +1,7 @@
 /* Shared classes of admin, built only from the tokens of tokens.css. Each class is
    listed in docs/design-system/admin.md with the block of design.md that uses it.
-   Components with behaviour (Field, SegmentedControl, Dialog, Toast…) come in SHOP-9. */
+   The components with behaviour (src/components/ui, feedback/notifications.tsx) draw
+   themselves with the classes from the Placeholder tile section on. */
 
 /* --- Utilities -------------------------------------------------------------- */
 
