@@ -1,7 +1,3 @@
 {
-  "title": "Sản phẩm",
-  "loading": "Đang tải sản phẩm…",
-  "count_other": "{{count}} sản phẩm",
-  "empty": "Chưa có sản phẩm nào.",
-  "create": "Tạo sản phẩm"
+  "title": "Sản phẩm"
 }
