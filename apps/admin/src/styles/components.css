@@ -515,3 +515,105 @@ textarea.input {
   --tile-to: var(--group-ink-to);
   --tile-text: var(--group-ink-text);
 }
+
+/* --- Field ------------------------------------------------------------------------ */
+
+/* <InputField>, <TextAreaField>, <SelectField> (components/ui/field.tsx): the label,
+   the control, then a row with the messages on the left and the counter on the right. */
+.field {
+  min-width: 0;
+}
+
+.field__meta {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.field__messages {
+  flex: 1;
+  min-width: 0;
+}
+
+.field__messages > p,
+.field__messages > [role='status'] > p {
+  margin-bottom: 0;
+}
+
+.field-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+}
+
+.field-warning {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: var(--space-1);
+  color: var(--warn-text);
+  font: var(--fw-regular) var(--fs-sm) / 18.1px var(--font);
+}
+
+.field-counter {
+  flex: none;
+  margin: var(--space-1) 0 0;
+  color: var(--hint);
+  font: var(--fw-regular) var(--fs-sm) / 18.1px var(--font);
+  font-variant-numeric: tabular-nums;
+}
+
+.field-counter[data-over='true'] {
+  color: var(--bad-text);
+}
+
+.input--select {
+  cursor: pointer;
+}
+
+/* An input with a fixed prefix or suffix: the frame is the .input, the real input
+   inside it has no frame of its own, so the frame shows focus and errors. */
+.input-group {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.input-group:focus-within {
+  border-color: var(--accent-line);
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px var(--focus-halo);
+}
+
+.input-group:has([aria-invalid='true']) {
+  border-color: var(--bad-text);
+}
+
+.input-group:has(:disabled) {
+  opacity: 0.5;
+}
+
+.input-group__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+.input-group__input::placeholder {
+  color: var(--hint);
+  opacity: 1;
+}
+
+.input-group__affix {
+  flex: none;
+  color: var(--hint);
+  white-space: nowrap;
+}
