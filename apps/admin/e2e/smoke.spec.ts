@@ -17,6 +17,22 @@ test.describe('app smoke', () => {
     await expect(page).toHaveURL(/\/about$/);
   });
 
+  test('shows only the title S1.2 on the products page', async ({ page }) => {
+    await page.goto('/products');
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Products' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+    await expect(page.getByRole('searchbox')).toHaveCount(0);
+  });
+
+  test('has no product detail or edit page of the template', async ({ page }) => {
+    await page.goto('/products/p-001');
+    await expect(page.getByRole('heading', { name: '404 — Page not found' })).toBeVisible();
+
+    await page.goto('/admin/products/p-001/edit');
+    await expect(page.getByRole('heading', { name: '404 — Page not found' })).toBeVisible();
+  });
+
   test('switches language at runtime (en → vi)', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
