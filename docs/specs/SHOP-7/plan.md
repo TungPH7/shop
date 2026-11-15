@@ -18,7 +18,30 @@ Plan có bốn chặng:
 
 Mỗi Story giữ mã AC của SPEC. US5 tách dọc thành hai Story và US6 thành ba, để mỗi Sub-task còn khoảng 5 file code. Bản `v0.3.0` mang cả Epic lên Production. Bước contract, bỏ cột giá cũ, ở một bản sau, sớm nhất `v0.4.0`.
 
-Mã item trong plan (T1…T11, US1…US6c) là mã tạm: `ba` thay bằng key Jira khi tạo item.
+Mã item trong plan (T1…T11, US1…US6c) là mã tạm. `ba` đã tạo các item ngày 2026-11-15: Task List ghi key Jira trước mã tạm, và bảng dưới cho key của mỗi mã.
+
+| Mã | Key | Sub-task |
+|---|---|---|
+| T1 | SHOP-8 | Không có |
+| T2 | SHOP-9 | Không có |
+| T3 | SHOP-10 | Không có |
+| T4 | SHOP-11 | Không có |
+| T5 | SHOP-12 | Không có |
+| T6 | SHOP-13 | Không có |
+| T7 | SHOP-14 | Không có |
+| T8 | SHOP-15 | Không có |
+| T9 | SHOP-16 | Không có |
+| T10 | SHOP-17 | Không có |
+| T11 | SHOP-18 | Không có |
+| US1 | SHOP-19 | Không có |
+| US2 | SHOP-20 | Không có |
+| US6a | SHOP-21 | BE SHOP-22, FE SHOP-23 |
+| US6b | SHOP-24 | Không có |
+| US5a | SHOP-25 | BE SHOP-26, FE SHOP-27 |
+| US5b | SHOP-28 | BE SHOP-29, FE SHOP-30 |
+| US6c | SHOP-31 | BE SHOP-32, FE SHOP-33 |
+| US3 | SHOP-34 | BE SHOP-35, FE SHOP-36 |
+| US4 | SHOP-37 | Không có |
 
 ## Architecture Decisions
 
@@ -317,14 +340,14 @@ Mỗi item ghi AC, khối của `design.md`, NFR, file code dự kiến (không 
 
 ### Phase 1: Design system
 
-- [ ] T1: Design system của admin (1/2): token, font, khung trang · fe-dev
+- [ ] SHOP-8 (T1): Design system của admin (1/2): token, font, khung trang · fe-dev
   - Token sáng và tối của bảng Design System: màu, chữ, khoảng cách, bo góc, bóng, kính, chuyển động. Mặc định theo giao diện của hệ thống; nút đổi giao diện đặt `data-theme`.
   - Be Vietnam Pro qua `@fontsource/be-vietnam-pro` 5.3.0, ghim, OFL-1.1, lý do ghi trong mô tả PR; font dự phòng có `size-adjust`.
   - Class CSS cho nút chính, phụ và nguy hiểm, huy hiệu, thẻ kính, ô nhập, bảng, banner, khung xương.
   - Khung trang S1.1 (ba viên thuốc); gỡ nút "thanh bên" demo (mục 14). Viết `docs/design-system/admin.md`.
   - NFR5, NFR13. File: `apps/admin/src/styles/tokens.css` (mới), `src/styles/components.css` (mới), `src/styles/global.css`, `src/main.tsx`, `src/app/layouts/root-layout.tsx`.
   - Phụ thuộc: không.
-- [ ] T2: Design system của admin (2/2): component · fe-dev
+- [ ] SHOP-9 (T2): Design system của admin (2/2): component · fe-dev
   - Component có hành vi, dùng token của T1, mỗi component có test cho các trạng thái của nó:
     - Field: nhãn, gợi ý, lỗi gắn `aria-describedby`, bộ đếm; ô nhập, vùng văn bản, ô chọn;
     - SegmentedControl: kiểu lọc với `aria-pressed` cho S1.4; kiểu chọn là nhóm radio trong `fieldset` cho S2.11 và S2.12;
@@ -334,18 +357,18 @@ Mỗi item ghi AC, khối của `design.md`, NFR, file code dự kiến (không 
     - PlaceholderTile (mục 15).
   - Cập nhật `docs/design-system/admin.md`.
   - File: `apps/admin/src/components/ui/field.tsx`, `ui/segmented-control.tsx`, `ui/pagination.tsx`, `ui/dialog.tsx`, `ui/placeholder-tile.tsx` (đều mới), `src/components/feedback/notifications.tsx`. Sáu file, đều là component trình bày nhỏ.
-  - Phụ thuộc: T1.
-- [ ] T3: Design system của user (1/2): token, font, component · fe-dev
+  - Phụ thuộc: SHOP-8 (T1).
+- [ ] SHOP-10 (T3): Design system của user (1/2): token, font, component · fe-dev
   - Giữ tên các vai trò semantic của `tokens.css` (OKLCH), đổi giá trị theo bảng Design System, cả sáng lẫn tối.
   - Be Vietnam Pro qua `next/font/google` thay Inter: 500, 600, 700; `latin`, `latin-ext`, `vietnamese`; `display: 'swap'`; font dự phòng chỉnh cỡ.
   - Class CSS cho nút, huy hiệu, thẻ kính, ô "well", ô nhập, ô chọn, khung xương; PlaceholderTile (mục 15).
   - Viết `docs/design-system/user.md`. `fe-dev` đối chiếu bằng chrome-devtools các giá trị "ước lượng" của `design.md` với trang mẫu, và ghi số đo vào file đó.
   - NFR5, NFR13 (CSP giữ `font-src 'self'`). File: `apps/user/src/styles/tokens.css`, `src/styles/components.css` (mới), `src/config/fonts.ts`, `src/app/globals.css`, `src/components/ui/placeholder-tile.tsx` (mới).
   - Phụ thuộc: không.
-- [ ] T4: Design system của user (2/2): khung trang · fe-dev
+- [ ] SHOP-11 (T4): Design system của user (2/2): khung trang · fe-dev
   - Thanh điều hướng S4.1, dùng cho mọi trang của `user`: Trang chủ, Sản phẩm, Giới thiệu; tài khoản, VI/EN, Sáng/Tối/Hệ thống; hai hàng dưới 768 px, không có menu ẩn. Chân trang S4.11. Ở 320 px không có thanh cuộn ngang.
   - File: `apps/user/src/app/[locale]/layout.tsx`, `src/features/site/components/site-nav.tsx` (mới), `src/components/language-switcher.tsx`, `src/components/theme-switcher.tsx`, `src/features/site/components/site-footer.tsx`.
-  - Phụ thuộc: T3.
+  - Phụ thuộc: SHOP-10 (T3).
 
 ### Checkpoint: Design system
 - [ ] `docs/design-system/admin.md` và `docs/design-system/user.md` có mọi dòng "mới" của bảng Design System, với giá trị đã đối chiếu.
@@ -353,7 +376,7 @@ Mỗi item ghi AC, khối của `design.md`, NFR, file code dự kiến (không 
 
 ### Phase 2: Nền
 
-- [ ] T5: Năm sản phẩm thử trên Staging và Production (TW6) · devops · effort xhigh: ghi lên Production đang chạy, bằng basic auth của host `shop-admin`.
+- [ ] SHOP-12 (T5): Năm sản phẩm thử trên Staging và Production (TW6) · devops · effort xhigh: ghi lên Production đang chạy, bằng basic auth của host `shop-admin`.
   - Sau gate ② và trước gate ④ của `v0.3.0`, thêm năm sản phẩm dưới đây qua `POST /api/products` của `v0.2.0`, qua `/api` của `shop-admin-staging` rồi của `shop-admin`. Ghi `id` trả về vào comment của Task. Staging cũng có chúng, nên lần deploy `v0.3.0` lên Staging là lần chạy thử V4 trên cùng dữ liệu, trước Production. Basic auth chỉ nằm trong biến môi trường của lệnh, không vào file, log hay comment.
   - Basic auth, theo đề xuất bạn đồng ý ngày 2026-11-15: với Staging, `devops` dùng basic auth mà `/ao-qa` đã có; với Production, bạn đặt basic auth vào biến môi trường của phiên `devops` khi chạy T5. Phiên không có nó thì `devops` đánh dấu T5 "Needs you", và bạn đặt biến đó hay tự chạy năm lệnh dưới đây.
   - `Áo thun cổ tròn` · slug `ao-thun-co-tron` · giá `250000.00` · mô tả `Áo thun cotton 100%.` xuống dòng `Cổ tròn, tay ngắn.`: tên có dấu, mô tả nhiều dòng.
@@ -362,11 +385,11 @@ Mỗi item ghi AC, khối của `design.md`, NFR, file code dự kiến (không 
   - `Combo 3 áo thun` · `combo-3-ao` · `399000.00` · mô tả `Ba áo thun basic.`: slug do người gõ, khác slug sinh từ tên.
   - `Bao tay len` · `bao-tay-len` · `0.00` · không có mô tả: giá 0 thành Ẩn khi nâng database.
   - Phụ thuộc: gate ②.
-- [ ] T6: Schema V4 của `app.products` (expand) · be-dev · effort xhigh: nâng database Production đã có dữ liệu, và `v0.2.0` phải chạy đúng trên schema mới cho tới khi bỏ được rollback.
+- [ ] SHOP-13 (T6): Schema V4 của `app.products` (expand) · be-dev · effort xhigh: nâng database Production đã có dữ liệu, và `v0.2.0` phải chạy đúng trên schema mới cho tới khi bỏ được rollback.
   - Theo mục Database Changes, kể cả các integration test ở đó, với năm sản phẩm của T5 trong dữ liệu V3.
   - TW1, NFR14–NFR17, NFR22. File: `apps/api/src/main/resources/db/migration/V4__expand_products_catalog.sql` (mới).
   - Phụ thuộc: không.
-- [ ] T7: api: domain sản phẩm mới, sinh slug và tìm không dấu; gỡ endpoint cũ · be-dev · effort xhigh: câu SQL dựng từ từ khóa của người dùng (injection, thoát `LIKE`) và bộ lọc sản phẩm Ẩn (NFR9, NFR10).
+- [ ] SHOP-14 (T7): api: domain sản phẩm mới, sinh slug và tìm không dấu; gỡ endpoint cũ · be-dev · effort xhigh: câu SQL dựng từ từ khóa của người dùng (injection, thoát `LIKE`) và bộ lọc sản phẩm Ẩn (NFR9, NFR10).
   - Entity `Product` map `price_vnd`, `compare_at_price_vnd`, `status` và `availability`, với enum `ProductStatus` và `ProductAvailability` lồng trong entity; không map `price` cũ.
   - `ProductSlugs`: sinh slug và kiểm định dạng, unit test với các ví dụ của Product Rules.
   - `ProductSearchTerms`: gấp từ khóa như `app.search_fold`, tách từ, thoát `LIKE`.
@@ -375,23 +398,23 @@ Mỗi item ghi AC, khối của `design.md`, NFR, file code dự kiến (không 
   - TW5: `ActuatorProbesIntegrationTest` kiểm thêm `/actuator/health/db` trả 401.
   - Integration test (Testcontainers): tìm không dấu (`đ` khớp `d`, `ao` không ra "Bao tay len"); ba nhóm Liên quan nhất (AC19); phân trang không lặp hay sót với sản phẩm cùng giá và cùng `created_at` (NFR18); với 10.000 sản phẩm, trung vị của mỗi kiểu truy vấn không quá 200 ms (NFR2); từ khóa `%`, `_`, `\` và `'` (NFR10); ghi bằng entity mới thì cột `price` bằng `price_vnd`; `ProductSearchTerms` và `app.search_fold` cho cùng kết quả trên cùng bộ tên.
   - NFR2, NFR10, NFR14, NFR18. File: `feature/product/domain/Product.java`, `domain/ProductSlugs.java` (mới), `repository/ProductSearchTerms.java` (mới), `repository/ProductQueryRepository.java` (mới), `repository/ProductRepository.java`.
-  - Phụ thuộc: T6.
-- [ ] T8: API quản trị sản phẩm (1/2): thêm sản phẩm · be-dev
+  - Phụ thuộc: SHOP-13 (T6).
+- [ ] SHOP-15 (T8): API quản trị sản phẩm (1/2): thêm sản phẩm · be-dev
   - `POST /api/admin/products` theo API Contract: kiểm Product Rules, slug tự sinh với `-2`, `-3`…, slug tự gõ mà trùng là 409, log INFO.
   - WebMvc test: 400 cho từng giá trị sai của AC6, với mọi trường sai trong một phản hồi (AC7); 409; tên trường của phản hồi. Integration test: hậu tố slug, và hai lần thêm cùng lúc ra cùng slug.
   - AC7 và AC8 phía `api`; NFR10, NFR12. File: `feature/product/controller/AdminProductController.java`, `service/AdminProductService.java`, `dto/CreateProductRequest.java`, `dto/AdminProduct.java`, `validation/ValidCompareAtPrice.java` (annotation và validator), đều mới.
-  - Phụ thuộc: T7.
-- [ ] T9: API quản trị sản phẩm (2/2): danh sách và xóa · be-dev
+  - Phụ thuộc: SHOP-14 (T7).
+- [ ] SHOP-16 (T9): API quản trị sản phẩm (2/2): danh sách và xóa · be-dev
   - `GET /api/admin/products` (tìm, lọc trạng thái, phân trang) và `DELETE /api/admin/products/{id}` (204, idempotent), log INFO khi xóa.
   - `GlobalExceptionHandler` trả 400 `INVALID_PARAMETER` kèm `parameter` cho lỗi kiểm tham số (`HandlerMethodValidationException`) và giá trị enum sai, thay vì 500 như hiện nay. WebMvc test 400 cho từng tham số sai (NFR3).
   - NFR3, NFR12, NFR20. File: `controller/AdminProductController.java`, `service/AdminProductService.java`, `dto/AdminProductSummary.java` (mới), `dto/ProductPage.java` (mới), `common/error/GlobalExceptionHandler.java`.
-  - Phụ thuộc: T8.
-- [ ] T10: admin: gỡ phần sản phẩm cũ của template (TW4, TW5) · fe-dev
+  - Phụ thuộc: SHOP-15 (T8).
+- [ ] SHOP-17 (T10): admin: gỡ phần sản phẩm cũ của template (TW4, TW5) · fe-dev
   - Gỡ model `priceCents`, các hàm API, form thêm và sửa, trang chi tiết và nút xóa cũ; route `/products/:productId` và `/admin/products/:productId/edit`; `ProductCreateForm` trong `admin-route.tsx`; handler MSW sản phẩm cũ; `e2e/product-crud.spec.ts` với mock origin `ecom-nest.t2g.io.vn`. Tới US1, `/products` chỉ có tiêu đề S1.2.
   - TW5: `isLocal` vào `apps/admin/e2e/support/env.ts`.
   - File: `src/app/routes.tsx`, `src/config/paths.ts`, `src/app/routes/admin/admin-route.tsx`, `src/features/product/components/product-list.tsx` (chỉ còn tiêu đề).
   - Phụ thuộc: không.
-- [ ] T11: user: gỡ phần sản phẩm cũ của template, nền đọc catalog (TW4, TW5) · fe-dev
+- [ ] SHOP-18 (T11): user: gỡ phần sản phẩm cũ của template, nền đọc catalog (TW4, TW5) · fe-dev
   - Gỡ (TW4): DAL, model và mock MSW sản phẩm của API NestJS; Server Action và nút xóa; route `api/products/count`, hook và badge đếm; nút mật độ, lưới hay danh sách, làm mới, phóng ảnh; `images.remotePatterns` của `picsum.photos`; các test cũ trong `e2e/products.spec.ts` và phần Products cũ của `e2e/accessibility.spec.ts`; hai test xóa trong `e2e/auth.spec.ts`. Tới US5a, trang `/[locale]/products` giữ shell tĩnh (tiêu đề S4.2, BreadcrumbList) và một `<Suspense>` rỗng.
   - Nền: `request()` dựng URL bằng `new URL(path, env.API_URL)` và có thời hạn 5 s (mục 12); profile `catalog` của `cacheLife` (mục 8).
   - TW5: `isLocal` vào `apps/user/e2e/support/env.ts`; `reason:` của hai test đăng nhập và đăng xuất còn bỏ qua ghi "login Epic".
@@ -406,50 +429,50 @@ Mỗi item ghi AC, khối của `design.md`, NFR, file code dự kiến (không 
 
 ### Phase 3: Thêm và xem sản phẩm
 
-- [ ] US1: Quản trị viên xem và tìm danh sách sản phẩm · fe-dev
+- [ ] SHOP-19 (US1): Quản trị viên xem và tìm danh sách sản phẩm · fe-dev
   - AC1–AC4; S1.2–S1.11. S1.3 và S1.7 là liên kết tới route của US2 và US3, nên trước khi chúng xong, hai liên kết này mở trang Not found trên Development. NFR6.
   - Model Zod theo API Contract, và `formatPrice`. Hook `?q=&status=&page=` qua nuqs; gõ xong 300 ms thì đổi `q` và về trang 1. Bảng S1.6 với PlaceholderTile, huy hiệu, khung xương và trạng thái lỗi; trạng thái trống S1.9 và S1.10; phân trang S1.11.
   - E2E: helper `apps/admin/e2e/support/products.ts`; `products-list.spec.ts` cho AC1–AC4; axe của S1, sáng lẫn tối. `admin` thêm devDependency `@axe-core/playwright` 4.12.1, cùng phiên bản `user` đang có trong `pnpm-lock.yaml`, nên không phải gói mới của repo.
   - File: `src/features/product/model/product.ts`, `api/get-products.ts`, `hooks/use-product-filters.ts`, `components/product-list.tsx`, `src/config/paths.ts`.
-  - Phụ thuộc: T2, T9, T10.
-- [ ] US2: Quản trị viên thêm sản phẩm · fe-dev
+  - Phụ thuộc: SHOP-9 (T2), SHOP-16 (T9), SHOP-17 (T10).
+- [ ] SHOP-20 (US2): Quản trị viên thêm sản phẩm · fe-dev
   - AC5–AC8; S2 ở chế độ thêm (S2.1–S2.14), S1.3, S1.12 ("Đã thêm sản phẩm").
   - Schema Zod của form theo cùng quy tắc với `api`. Ô giá: `250.000` là 250000, `250000,5` là lỗi, rời ô thì hiện lại có dấu nhóm. Ô slug tự điền bằng bản TypeScript của thuật toán sinh slug, kiểm bằng các ví dụ của Product Rules, cho tới khi quản trị viên sửa tay; chưa sửa tay thì form gửi `slug: null`. Lỗi của API hiện theo mục API Contract.
   - E2E `product-create.spec.ts` cho AC5–AC8, trong đó AC7 gửi thẳng bằng request fixture; axe của S2.
   - File: `src/features/product/model/product-form.ts` (mới), `components/product-form.tsx` (mới), `api/create-product.ts` (mới), `src/app/routes/products/product-new-route.tsx` (mới), `src/app/routes.tsx`.
-  - Phụ thuộc: US1, T8.
-- [ ] US6a: Khách xem chi tiết sản phẩm · be-dev, fe-dev (Sub-task)
+  - Phụ thuộc: SHOP-19 (US1), SHOP-15 (T8).
+- [ ] SHOP-21 (US6a): Khách xem chi tiết sản phẩm · be-dev, fe-dev (Sub-task)
   - AC24, AC25; S5. NFR4: `qa` đo LCP và CLS của S5 trên Staging. NFR7, NFR11, NFR26.
-  - BE: `GET` và `HEAD /api/products/{slug}`, chỉ sản phẩm Đang bán. WebMvc test so ba phản hồi 404 (NFR9) và tên trường. File: `controller/StoreProductController.java`, `service/StoreProductService.java`, `dto/StoreProduct.java`, đều mới.
-  - FE: model Zod của mọi kiểu `Store…` và `Page`, dùng luôn cho US5a và US6c; `formatPrice`, `discountPercent`. DAL `getStoreProduct(slug)` với `'use cache'` và `cacheLife('catalog')`; 404 thì trả `null`. Trang S5 trong `<Suspense>`; mô tả là text node với `white-space: pre-line` (AC25, NFR11). E2E: helper `apps/user/e2e/support/products.ts`; `product-detail.spec.ts` cho AC24, AC25; axe của S5 ở hai ngôn ngữ, sáng lẫn tối. File: `src/features/product/model/product.ts`, `server/get-product.ts` (mới), `components/product-detail.tsx` (mới), `src/app/[locale]/products/[slug]/page.tsx` (mới).
-  - Phụ thuộc: T3, T4, T8, T9, T11.
-- [ ] US6b: Khách gặp trang "Không tìm thấy sản phẩm" với mã 404 · fe-dev
+  - BE (SHOP-22): `GET` và `HEAD /api/products/{slug}`, chỉ sản phẩm Đang bán. WebMvc test so ba phản hồi 404 (NFR9) và tên trường. File: `controller/StoreProductController.java`, `service/StoreProductService.java`, `dto/StoreProduct.java`, đều mới.
+  - FE (SHOP-23): model Zod của mọi kiểu `Store…` và `Page`, dùng luôn cho US5a và US6c; `formatPrice`, `discountPercent`. DAL `getStoreProduct(slug)` với `'use cache'` và `cacheLife('catalog')`; 404 thì trả `null`. Trang S5 trong `<Suspense>`; mô tả là text node với `white-space: pre-line` (AC25, NFR11). E2E: helper `apps/user/e2e/support/products.ts`; `product-detail.spec.ts` cho AC24, AC25; axe của S5 ở hai ngôn ngữ, sáng lẫn tối. File: `src/features/product/model/product.ts`, `server/get-product.ts` (mới), `components/product-detail.tsx` (mới), `src/app/[locale]/products/[slug]/page.tsx` (mới).
+  - Phụ thuộc: SHOP-10 (T3), SHOP-11 (T4), SHOP-15 (T8), SHOP-16 (T9), SHOP-18 (T11).
+- [ ] SHOP-24 (US6b): Khách gặp trang "Không tìm thấy sản phẩm" với mã 404 · fe-dev
   - AC26; S6. NFR9, NFR26.
   - Proxy theo Architecture Decisions, mục 9; route `/[locale]/product-not-found`; một component S6 dùng chung cho route đó và cho `not-found.tsx` của trang chi tiết. Unit test của Proxy với `api` trả 200, 404, 500 và quá 5 s. E2E: mã 404 và nội dung S6 cho slug chưa từng có, sản phẩm Ẩn và sản phẩm đã xóa; axe của S6.
   - File: `src/proxy.ts`, `src/app/[locale]/product-not-found/page.tsx` (mới), `src/app/[locale]/product-not-found/not-found.tsx` (mới), `src/app/[locale]/products/[slug]/not-found.tsx` (mới), `src/features/product/components/product-not-found.tsx` (mới).
-  - Phụ thuộc: US6a.
-- [ ] US5a: Khách xem danh sách sản phẩm Đang bán · be-dev, fe-dev (Sub-task)
+  - Phụ thuộc: SHOP-21 (US6a).
+- [ ] SHOP-25 (US5a): Khách xem danh sách sản phẩm Đang bán · be-dev, fe-dev (Sub-task)
   - AC16, AC17, AC21; S4.2, S4.5, S4.6, S4.9, S4.10. NFR3, NFR4 (`qa` đo LCP và CLS của S4, và INP của Xem thêm), NFR7, NFR9, NFR18, NFR26.
-  - BE: `GET /api/products?offset=&limit=`, thứ tự `NEWEST`. WebMvc test: 400 cho `offset` và `limit` sai; `?status=HIDDEN` không mở sản phẩm Ẩn. File: `StoreProductController.java`, `StoreProductService.java`, `dto/StoreProductSummary.java` (mới).
-  - FE: DAL đọc theo khối 96 tới `page × 24` và bỏ trùng `id` (mục 10). Lưới S4.5 với 1, 2, 3, 4 cột. Thẻ S4.6: cả thẻ là liên kết tới S5, huy hiệu Hết hàng, giá gốc gạch ngang và "-16%". Dòng tiến độ S4.9. Nút Xem thêm S4.10: `router.replace`, focus thẻ mới đầu tiên, trạng thái đang tải và lỗi. Khi `api` lỗi, trang hiện trạng thái lỗi của S4.5, không bao giờ là danh sách trống (NFR26). E2E `products.spec.ts` cho AC16, AC17, AC21, và mở `?page=999999` thấy trang bình thường trong 2 s (NFR3); axe của S4 thay phần Products của `accessibility.spec.ts`; 320 px không có thanh cuộn ngang.
+  - BE (SHOP-26): `GET /api/products?offset=&limit=`, thứ tự `NEWEST`. WebMvc test: 400 cho `offset` và `limit` sai; `?status=HIDDEN` không mở sản phẩm Ẩn. File: `StoreProductController.java`, `StoreProductService.java`, `dto/StoreProductSummary.java` (mới).
+  - FE (SHOP-27): DAL đọc theo khối 96 tới `page × 24` và bỏ trùng `id` (mục 10). Lưới S4.5 với 1, 2, 3, 4 cột. Thẻ S4.6: cả thẻ là liên kết tới S5, huy hiệu Hết hàng, giá gốc gạch ngang và "-16%". Dòng tiến độ S4.9. Nút Xem thêm S4.10: `router.replace`, focus thẻ mới đầu tiên, trạng thái đang tải và lỗi. Khi `api` lỗi, trang hiện trạng thái lỗi của S4.5, không bao giờ là danh sách trống (NFR26). E2E `products.spec.ts` cho AC16, AC17, AC21, và mở `?page=999999` thấy trang bình thường trong 2 s (NFR3); axe của S4 thay phần Products của `accessibility.spec.ts`; 320 px không có thanh cuộn ngang.
   - File: `src/features/product/model/product-query.ts`, `server/get-products.ts`, `components/product-results.tsx`, `components/product-card.tsx` (mới), `components/load-more-button.tsx` (mới).
-  - Phụ thuộc: US6a.
-- [ ] US5b: Khách tìm và sắp xếp danh sách sản phẩm · be-dev, fe-dev (Sub-task)
+  - Phụ thuộc: SHOP-21 (US6a).
+- [ ] SHOP-28 (US5b): Khách tìm và sắp xếp danh sách sản phẩm · be-dev, fe-dev (Sub-task)
   - AC18, AC19, AC20, AC22, AC23; S4.3, S4.4, S4.7, S4.8. NFR4 (`qa` đo INP của đổi sắp xếp), NFR10.
-  - BE: thêm `q` và `sort` vào `GET /api/products`. WebMvc test: 400 cho `sort` sai và cho `RELEVANCE` khi không có `q`. Integration test thứ tự của AC19 và AC20 qua endpoint. File: `StoreProductController.java`, `StoreProductService.java`.
-  - FE: đọc `q`, `sort`, `page`, giá trị sai thì dùng mặc định (AC22). Ô tìm S4.3 là `<form role=search>` kiểu GET. Ô chọn S4.4 áp dụng ngay, và chỉ có Liên quan nhất khi đang tìm. Đổi từ khóa hay sắp xếp thì về 24 sản phẩm đầu. Trạng thái trống S4.7 và liên kết S4.8. E2E cho AC18–AC20, AC22 và AC23; nửa "Chưa có sản phẩm nào." mang tag `@local`.
+  - BE (SHOP-29): thêm `q` và `sort` vào `GET /api/products`. WebMvc test: 400 cho `sort` sai và cho `RELEVANCE` khi không có `q`. Integration test thứ tự của AC19 và AC20 qua endpoint. File: `StoreProductController.java`, `StoreProductService.java`.
+  - FE (SHOP-30): đọc `q`, `sort`, `page`, giá trị sai thì dùng mặc định (AC22). Ô tìm S4.3 là `<form role=search>` kiểu GET. Ô chọn S4.4 áp dụng ngay, và chỉ có Liên quan nhất khi đang tìm. Đổi từ khóa hay sắp xếp thì về 24 sản phẩm đầu. Trạng thái trống S4.7 và liên kết S4.8. E2E cho AC18–AC20, AC22 và AC23; nửa "Chưa có sản phẩm nào." mang tag `@local`.
   - File: `src/features/product/model/product-query.ts`, `server/get-products.ts`, `components/product-filters.tsx`, `components/product-results.tsx`, `components/load-more-button.tsx`.
-  - Phụ thuộc: US5a.
-- [ ] US6c: Thẻ meta, JSON-LD và sitemap của sản phẩm · be-dev, fe-dev (Sub-task)
+  - Phụ thuộc: SHOP-25 (US5a).
+- [ ] SHOP-31 (US6c): Thẻ meta, JSON-LD và sitemap của sản phẩm · be-dev, fe-dev (Sub-task)
   - AC27, AC28. NFR7, NFR9, NFR11, NFR21, NFR26.
-  - BE: `GET /api/sitemap/products`. File: `StoreProductController.java`, `StoreProductService.java`, `dto/SitemapEntry.java` (mới).
-  - FE:
+  - BE (SHOP-32): `GET /api/sitemap/products`. File: `StoreProductController.java`, `StoreProductService.java`, `dto/SitemapEntry.java` (mới).
+  - FE (SHOP-33):
     - `generateMetadata` của S5: `title: { absolute: '‹tên› | ‹tên site›' }`, vì template `%s · …` của layout gốc không cho đúng AC27; meta description là 160 ký tự đầu của mô tả, gộp xuống dòng; canonical và hreflang qua `buildPageMetadata`;
     - `productLd` qua `JsonLd`: `name`, `description`, `url`, `offers` với `price` số nguyên, `priceCurrency: 'VND'` và `availability`; không có `image`;
     - `sitemap.ts` gọi `connection()` trước khi đọc, rồi đọc mọi khối 1.000 qua DAL; `lastmod` là `updatedAt`, kèm hreflang `vi` và `en`; khi `api` lỗi, sitemap trả 5xx (NFR26);
     - E2E cho AC27, gồm một mô tả có `</script><script>alert(1)</script>` (NFR11), và cho AC28.
   - File: `src/app/[locale]/products/[slug]/page.tsx`, `src/lib/seo/structured-data.ts`, `src/app/sitemap.ts`, `src/features/product/server/get-sitemap-entries.ts` (mới).
-  - Phụ thuộc: US6a.
+  - Phụ thuộc: SHOP-21 (US6a).
 
 ### Checkpoint: Thêm và xem
 - [ ] E2E của AC1–AC8 và AC16–AC28 pass trên Development.
@@ -457,17 +480,17 @@ Mỗi item ghi AC, khối của `design.md`, NFR, file code dự kiến (không 
 
 ### Phase 4: Sửa, ẩn và xóa
 
-- [ ] US3: Quản trị viên sửa và ẩn sản phẩm · be-dev, fe-dev (Sub-task)
+- [ ] SHOP-34 (US3): Quản trị viên sửa và ẩn sản phẩm · be-dev, fe-dev (Sub-task)
   - AC9–AC13; S2 ở chế độ sửa (S2.3 đang tải và không tìm thấy, S2.5 xung đột, S2.7 cảnh báo đổi slug), S1.7, S1.12 ("Đã lưu sản phẩm"). NFR6, NFR7, NFR19.
-  - BE: `GET` và `PUT /api/admin/products/{id}` theo API Contract, gồm slug cũ sai định dạng và `version`. WebMvc test: 409 `OPTIMISTIC_LOCK_CONFLICT`, 409 slug trùng, 400 slug đổi sai định dạng, 404. File: `AdminProductController.java`, `AdminProductService.java`, `dto/UpdateProductRequest.java` (mới).
-  - FE: nạp sản phẩm theo `productId`; form của US2 ở chế độ sửa: slug không đổi theo tên, cảnh báo khi slug khác slug đã lưu, gửi `version`. Khi xung đột, dữ liệu đã nhập còn nguyên, và chỉ nút Tải lại mới nạp lại (AC13). Route ngoài `ProtectedRoute`. E2E `product-edit.spec.ts` cho AC9–AC13; các AC "trong vòng 60 giây" chờ bằng `expect.poll` tới 60 s trên danh sách, trang chi tiết và sitemap của khách.
+  - BE (SHOP-35): `GET` và `PUT /api/admin/products/{id}` theo API Contract, gồm slug cũ sai định dạng và `version`. WebMvc test: 409 `OPTIMISTIC_LOCK_CONFLICT`, 409 slug trùng, 400 slug đổi sai định dạng, 404. File: `AdminProductController.java`, `AdminProductService.java`, `dto/UpdateProductRequest.java` (mới).
+  - FE (SHOP-36): nạp sản phẩm theo `productId`; form của US2 ở chế độ sửa: slug không đổi theo tên, cảnh báo khi slug khác slug đã lưu, gửi `version`. Khi xung đột, dữ liệu đã nhập còn nguyên, và chỉ nút Tải lại mới nạp lại (AC13). Route ngoài `ProtectedRoute`. E2E `product-edit.spec.ts` cho AC9–AC13; các AC "trong vòng 60 giây" chờ bằng `expect.poll` tới 60 s trên danh sách, trang chi tiết và sitemap của khách.
   - File: `src/features/product/api/get-product.ts` (mới), `api/update-product.ts` (mới), `components/product-form.tsx`, `src/app/routes/products/product-edit-route.tsx` (mới), `src/app/routes.tsx`.
-  - Phụ thuộc: US2, US5a, US6b, US6c.
-- [ ] US4: Quản trị viên xóa sản phẩm · fe-dev
+  - Phụ thuộc: SHOP-20 (US2), SHOP-25 (US5a), SHOP-24 (US6b), SHOP-31 (US6c).
+- [ ] SHOP-37 (US4): Quản trị viên xóa sản phẩm · fe-dev
   - AC14, AC15; S3, S1.8, S1.12 ("Đã xóa sản phẩm"). NFR19, NFR20, NFR21.
   - Hộp thoại S3 dùng Dialog của T2: mở thì focus vào Hủy, đóng mà không xóa thì focus về S1.8. Xóa xong thì tải lại danh sách và hiện toast. `retry.ts` chỉ thử lại GET, HEAD và OPTIONS (mục 13). E2E `product-delete.spec.ts` cho AC14 và AC15: trang khách trả 404 trong vòng 60 s, và slug dùng lại được; axe của S3.
   - File: `src/features/product/api/delete-product.ts` (mới), `components/product-delete-dialog.tsx` (mới), `components/product-list.tsx`, `src/lib/api/retry.ts`.
-  - Phụ thuộc: US1, US6b.
+  - Phụ thuộc: SHOP-19 (US1), SHOP-24 (US6b).
 
 ### Checkpoint: Hoàn tất
 - [ ] E2E của AC1–AC28 pass trên Development. Chỉ còn hai test bỏ qua, đăng nhập và đăng xuất, với `reason:` "login Epic".
