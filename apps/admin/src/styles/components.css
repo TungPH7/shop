@@ -1,6 +1,7 @@
 /* Shared classes of admin, built only from the tokens of tokens.css. Each class is
    listed in docs/design-system/admin.md with the block of design.md that uses it.
-   Components with behaviour (Field, SegmentedControl, Dialog, Toast…) come in SHOP-9. */
+   The components with behaviour (src/components/ui, feedback/notifications.tsx) draw
+   themselves with the classes from the Placeholder tile section on. */
 
 /* --- Utilities -------------------------------------------------------------- */
 
@@ -460,5 +461,457 @@ textarea.input {
 @media (prefers-reduced-motion: reduce) {
   .skeleton {
     animation: none;
+  }
+}
+
+/* --- Placeholder tile ----------------------------------------------------------- */
+
+/* <PlaceholderTile> (components/ui/placeholder-tile.tsx). The group colour comes from
+   data-group, set from the product id; the tile is decorative (aria-hidden). */
+.tile {
+  --tile-from: var(--group-blue-from);
+  --tile-to: var(--group-blue-to);
+
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: var(--tile-thumb);
+  height: var(--tile-thumb);
+  color: var(--tile-text, var(--group-blue-text));
+  font-family: var(--font);
+  font-size: calc(var(--tile-thumb) * 0.4);
+  font-weight: var(--fw-bold);
+  line-height: 1;
+  background: linear-gradient(160deg, var(--tile-from), var(--tile-to));
+  border-radius: var(--r-thumb);
+  user-select: none;
+}
+
+.tile[data-group='coral'] {
+  --tile-from: var(--group-coral-from);
+  --tile-to: var(--group-coral-to);
+  --tile-text: var(--group-coral-text);
+}
+
+.tile[data-group='green'] {
+  --tile-from: var(--group-green-from);
+  --tile-to: var(--group-green-to);
+  --tile-text: var(--group-green-text);
+}
+
+.tile[data-group='orange'] {
+  --tile-from: var(--group-orange-from);
+  --tile-to: var(--group-orange-to);
+  --tile-text: var(--group-orange-text);
+}
+
+.tile[data-group='teal'] {
+  --tile-from: var(--group-teal-from);
+  --tile-to: var(--group-teal-to);
+  --tile-text: var(--group-teal-text);
+}
+
+.tile[data-group='ink'] {
+  --tile-from: var(--group-ink-from);
+  --tile-to: var(--group-ink-to);
+  --tile-text: var(--group-ink-text);
+}
+
+/* --- Field ------------------------------------------------------------------------ */
+
+/* <InputField>, <TextAreaField>, <SelectField> (components/ui/field.tsx): the label,
+   the control, then a row with the messages on the left and the counter on the right. */
+.field {
+  min-width: 0;
+}
+
+.field__meta {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.field__messages {
+  flex: 1;
+  min-width: 0;
+}
+
+.field__messages > p,
+.field__messages > [role='status'] > p {
+  margin-bottom: 0;
+}
+
+.field-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+}
+
+.field-warning {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: var(--space-1);
+  color: var(--warn-text);
+  font: var(--fw-regular) var(--fs-sm) / 18.1px var(--font);
+}
+
+.field-counter {
+  flex: none;
+  margin: var(--space-1) 0 0;
+  color: var(--hint);
+  font: var(--fw-regular) var(--fs-sm) / 18.1px var(--font);
+  font-variant-numeric: tabular-nums;
+}
+
+.field-counter[data-over='true'] {
+  color: var(--bad-text);
+}
+
+.input--select {
+  cursor: pointer;
+}
+
+/* An input with a fixed prefix or suffix: the frame is the .input, the real input
+   inside it has no frame of its own, so the frame shows focus and errors. */
+.input-group {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+.input-group:focus-within {
+  border-color: var(--accent-line);
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px var(--focus-halo);
+}
+
+.input-group:has([aria-invalid='true']) {
+  border-color: var(--bad-text);
+}
+
+.input-group:has(:disabled) {
+  opacity: 0.5;
+}
+
+.input-group__input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  background: transparent;
+  border: 0;
+  outline: none;
+}
+
+.input-group__input::placeholder {
+  color: var(--hint);
+  opacity: 1;
+}
+
+.input-group__affix {
+  flex: none;
+  color: var(--hint);
+  white-space: nowrap;
+}
+
+/* --- Segmented control -------------------------------------------------------------- */
+
+/* <SegmentedFilter> and <SegmentedChoice> (components/ui/segmented-control.tsx). The
+   chosen segment comes from aria-pressed (filter) or the checked radio (choice). */
+/* fit-content: a grid or flex parent must not stretch the group. */
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  max-width: 100%;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-2);
+  border-radius: var(--r-ctl);
+}
+
+.segmented__item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: var(--space-2) var(--space-3-5);
+  color: var(--muted);
+  font: var(--fw-semibold) var(--fs-sm) / 18.1px var(--font);
+  white-space: nowrap;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-ctl);
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    color var(--dur-fast) var(--ease);
+}
+
+.segmented__item:hover {
+  color: var(--text);
+  background: var(--line);
+}
+
+.segmented__item[aria-pressed='true'],
+.segmented__item:has(.segmented__radio:checked) {
+  color: var(--text);
+  background: var(--line-2);
+  border-color: var(--line-2);
+}
+
+.segmented__item:has(.segmented__radio:focus-visible) {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
+}
+
+/* Visually hidden, still focusable and announced. */
+.segmented__radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  opacity: 0;
+}
+
+.choice {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice > legend {
+  padding: 0;
+}
+
+.choice > .field-hint {
+  margin-bottom: 0;
+}
+
+/* --- Pagination --------------------------------------------------------------------- */
+
+/* <Pagination> (components/ui/pagination.tsx), S1.11: the range on the left, the
+   buttons on the right. The current page comes from aria-current. */
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pagination__summary {
+  margin: 0;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pagination__page {
+  min-width: 34px;
+  padding: 0 var(--space-2-5);
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination__page[aria-current='page'] {
+  background: var(--line-2);
+  border-color: var(--control-border);
+}
+
+.pagination__gap {
+  min-width: 20px;
+  color: var(--hint);
+  text-align: center;
+}
+
+/* --- Dialog ------------------------------------------------------------------------- */
+
+/* <Dialog> (components/ui/dialog.tsx), S3: a native <dialog> opened with showModal(). */
+.dialog {
+  width: min(92vw, 560px);
+  max-width: none;
+  padding: var(--space-5-5);
+  color: var(--text);
+  background: var(--dialog);
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  border: 0;
+  border-radius: var(--r-dialog);
+  box-shadow: var(--card-shadow);
+}
+
+.dialog[open] {
+  animation: dialog-in var(--dur) var(--ease);
+}
+
+.dialog::backdrop {
+  background: var(--scrim);
+  backdrop-filter: blur(var(--blur-thick));
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-2)) scale(0.98);
+  }
+}
+
+.dialog__header {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.dialog__title {
+  margin: var(--space-1) 0 var(--space-3);
+  overflow-wrap: anywhere;
+}
+
+/* Round close button of the dialog (S3.2), --icon-btn wide. The toast shares its look
+   and is 34 px wide (.toast__close below). */
+.dialog__close,
+.toast__close {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: var(--icon-btn);
+  height: var(--icon-btn);
+  padding: 0;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-2);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.dialog__close:hover:not([aria-disabled='true']),
+.toast__close:hover {
+  background: var(--line-2);
+}
+
+.dialog__close[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dialog__body {
+  color: var(--muted);
+}
+
+.dialog__body > :last-child {
+  margin-bottom: 0;
+}
+
+.dialog__error {
+  margin: var(--space-4) 0 0;
+}
+
+.dialog__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2-5);
+  justify-content: flex-end;
+  margin-top: var(--space-6);
+}
+
+/* --- Toast -------------------------------------------------------------------------- */
+
+/* <Notifications> (components/feedback/notifications.tsx), S1.12: toasts stacked at the
+   bottom centre. The empty region lets clicks through. */
+.toasts {
+  position: fixed;
+  bottom: var(--space-6);
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+  width: min(92vw, 480px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  gap: var(--space-2-5);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  color: var(--text);
+  font: var(--fw-regular) var(--fs-base) / var(--lh-base) var(--font);
+  background: var(--dialog);
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  border-radius: var(--r-field);
+  box-shadow: var(--card-shadow);
+  pointer-events: auto;
+  animation: toast-in var(--dur-slow) var(--ease);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-2));
+  }
+}
+
+.toast__icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--info-text);
+}
+
+.toast[data-kind='success'] .toast__icon {
+  color: var(--good-text);
+}
+
+.toast[data-kind='error'] .toast__icon {
+  color: var(--bad-text);
+}
+
+.toast__message {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Smaller than the round button of the dialog: the height of a small button. */
+.toast__close {
+  width: 34px;
+  height: 34px;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .dialog,
+  .toast {
+    background: var(--solid);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .dialog,
+  .toast {
+    background: var(--solid);
+    backdrop-filter: none;
   }
 }

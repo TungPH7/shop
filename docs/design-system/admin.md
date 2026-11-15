@@ -1,6 +1,6 @@
 # Design system: admin
 
-> **App:** `apps/admin` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-15, SHOP-8
+> **App:** `apps/admin` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-15, SHOP-8 và SHOP-9
 
 Design system của `admin` là CSS variables và CSS thường, không có Tailwind hay thư viện UI (NFR13). Mỗi màn hình dùng token và class dưới đây, không tự đặt màu, cỡ chữ hay khoảng cách.
 
@@ -16,6 +16,14 @@ Design system của `admin` là CSS variables và CSS thường, không có Tail
 | `apps/admin/src/stores/theme/apply-theme.ts` | `applyTheme`, `syncThemeToDocument`: đặt hay gỡ `data-theme` trên `<html>` theo store |
 | `apps/admin/src/components/theme/theme-switcher.tsx` | Ô chọn Sáng, Tối, Hệ thống ở khung trang |
 | `apps/admin/src/app/layouts/root-layout.tsx` | Khung trang S1.1 |
+| `apps/admin/src/components/ui/field.tsx` | `InputField`, `TextAreaField`, `SelectField` (mục Components) |
+| `apps/admin/src/components/ui/segmented-control.tsx` | `SegmentedFilter`, `SegmentedChoice` |
+| `apps/admin/src/components/ui/pagination.tsx` | `Pagination` |
+| `apps/admin/src/components/ui/dialog.tsx` | `Dialog` |
+| `apps/admin/src/components/ui/placeholder-tile.tsx` | `PlaceholderTile` |
+| `apps/admin/src/components/feedback/notifications.tsx` | Toast: vẽ store thông báo |
+| `apps/admin/src/lib/notifications/notification-store.ts` | Store thông báo: `notify.success`, `notify.error`, `notify.info`; đếm 6 s, `pauseTimers`, `resumeTimers` |
+| `apps/admin/src/lib/i18n/locales/{vi,en}/common.json` | Chữ của component: `pagination.*`, `dialog.close`, `notifications.*` |
 
 ## Theme
 
@@ -34,7 +42,8 @@ Cột "Trạng thái" theo bảng của `design.md`: mọi dòng ở đó là "m
 | `--bg`, `--bg-from`, `--bg-to` | #f2f4f8; gradient 135° #eef1f6 → #f6f8fb | #111113; gradient 135° #0c0c0e → #131316 | Nền `<html>` và gradient của `<body>` |
 | `--surface` | #ffffffb8 | #1e1e226b | Thẻ kính, viên thuốc; đi cùng `--blur`, `--sat` |
 | `--solid` | #ffffff | #1d1d21 | Thay `--surface` khi không có `backdrop-filter` hay khi bật giảm độ trong suốt |
-| `--dialog` | #fffffff0 | #1c1c20db | Hộp thoại và toast (SHOP-9) |
+| `--dialog` | #fffffff0 | #1c1c20db | Hộp thoại và toast |
+| `--scrim` | #0f172466 | #00000099 | Màn che sau hộp thoại, đi cùng `--blur-thick`. SHOP-9 thêm: `design.md` chỉ ghi "tối đi và mờ" |
 | `--text` | #0f1724 | #f6f8fc | Chữ chính, nhãn trường |
 | `--muted` | #3b475a | #c9d1de | Chữ phụ, tiêu đề cột bảng, huy hiệu Ẩn |
 | `--hint` | #556074 | #9aa1ad | Gợi ý, placeholder, slug dưới tên, giá gốc |
@@ -52,7 +61,7 @@ Cột "Trạng thái" theo bảng của `design.md`: mọi dòng ở đó là "m
 | `--good-tint`, `--bad-tint`, `--warn-tint`, `--info-tint` | fill ở 14% | fill ở 16% | Nền huy hiệu và banner |
 | `--destructive`, `--on-destructive` | #b42318, #ffffff | #e98278, #1a0a08 | Nút nguy hiểm (nút Xóa của S3) |
 | `--focus-halo` | `--accent` ở 18% | như bên trái | Vầng 3 px quanh ô đang focus |
-| `--group-<tên>-from`, `-to`, `-text` | blue #354a6a → #283953, #eef4fd; coral #6a423d → #52322e, #fdeeeb; green #375741 → #29432f, #eef9f1; orange #66503a → #4e3d2b, #fdf3e6; teal #31574f → #24433d, #ecf8f5; ink #3b3e46 → #2c2e34, #f1f2f5 | giống bên trái | Ô giữ chỗ của sản phẩm (gradient 160°), dùng ở SHOP-9 |
+| `--group-<tên>-from`, `-to`, `-text` | blue #354a6a → #283953, #eef4fd; coral #6a423d → #52322e, #fdeeeb; green #375741 → #29432f, #eef9f1; orange #66503a → #4e3d2b, #fdf3e6; teal #31574f → #24433d, #ecf8f5; ink #3b3e46 → #2c2e34, #f1f2f5 | giống bên trái | Ô giữ chỗ của sản phẩm (gradient 160°), `.tile` |
 
 Tương phản: `ux` đã tính mọi cặp chữ và nền ở hai giao diện (từ 4,5:1). SHOP-8 kiểm lại trên trình duyệt bằng axe 4.12.1 (WCAG 2.0, 2.1, 2.2 A và AA) ở trang chủ và trang Giới thiệu, sáng và tối: không có vi phạm. Các nút axe để "incomplete" vì nền kính trong suốt được tính tay bằng cách chồng các lớp nền: thấp nhất 6,81:1 (sáng) và 10,98:1 (tối).
 
@@ -74,7 +83,7 @@ Tương phản: `ux` đã tính mọi cặp chữ và nền ở hai giao diện 
 | Nút phụ nhỏ, huy hiệu, nút phân đoạn | 12,5/18,1, 600 (huy hiệu 12/600) | `.btn--sm`, `.badge` |
 | Tiêu đề cột bảng | 12/17,4, 600 | `.table th` |
 | Giá | Thẻ 17/700; chi tiết 34/700; giá gốc 13,5/500 gạch ngang | Dùng ở `user`; `admin` hiện giá trong bảng bằng chữ thân |
-| Chữ cái đầu của ô giữ chỗ | 700, khoảng 40% chiều cao ô. Ước lượng | SHOP-9 |
+| Chữ cái đầu của ô giữ chỗ | 700, 40% chiều cao ô (16 px ở ô 40). Ước lượng | `.tile` |
 
 ### Font
 
@@ -87,6 +96,7 @@ Tương phản: `ux` đã tính mọi cặp chữ và nền ở hai giao diện 
 | Token | Giá trị |
 |---|---|
 | `--space-1`, `--space-2`, `--space-2-5`, `--space-3`, `--space-3-5`, `--space-4`, `--space-4-5`, `--space-6`, `--space-7` | 4, 8, 10, 12, 14, 16, 18, 24, 28 px |
+| `--space-5-5` | 22 px, đệm của hộp thoại (SHOP-9, theo `design.md`) |
 | `--gap` | 16 px, khoảng cách giữa các thẻ |
 | `--gutter` | `clamp(16px, 1.6vw, 28px)`, lề ngang của `.shell` |
 | `--app-max` | 1840 px, bề rộng tối đa của `.shell` |
@@ -106,7 +116,9 @@ Tương phản: `ux` đã tính mọi cặp chữ và nền ở hai giao diện 
 | `--card-shadow` | Tối: bảy lớp của trang mẫu (`inset 0 1px 1px #ffffff4d` … `0 24px 48px -22px #000000bf`). Sáng: `inset 0 1px 1px #ffffffcc, 0 1px 2px #0f17240f, 0 18px 40px -22px #0f172447` | Thẻ, viên thuốc, hộp thoại |
 | `--button-shadow` | Tối: `inset 0 1px 0 #ffffff47, inset 0 -1px 0 #0000001f, 0 6px 16px -6px #7aaef0a6`. Sáng: `0 6px 16px -8px #2b63c499`. Ước lượng | Nút chính, nút nguy hiểm |
 | `--blur`, `--sat` | 14 px, 175% | `backdrop-filter` của thẻ và viên thuốc |
-| `--blur-thick` | 30 px | Màn che sau hộp thoại (SHOP-9) |
+| `--blur-thick` | 30 px | Màn che sau hộp thoại (`.dialog::backdrop`) |
+| `--tile-thumb` | 40 px | Ô giữ chỗ ở dòng bảng S1.6 (SHOP-9) |
+| `--icon-btn` | 40 px | Nút tròn chỉ có biểu tượng: nút Đóng của hộp thoại S3.2 (SHOP-9) |
 
 Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card` và `.pill` dùng nền `--solid`. Không dùng bộ lọc SVG của trang mẫu.
 
@@ -143,6 +155,13 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.skeleton` | Khung xương | Nền `--surface-2`, nhấp nháy 1,2 s; đặt `border-radius` như phần tử thật; vùng chứa có `aria-busy="true"` |
 | `.visually-hidden` | | Chữ chỉ cho trình đọc màn hình, như nhãn ẩn "Tìm theo tên" |
 | `.shell`, `.shell__bar`, `.shell__main`, `.shell__status` | Khung trang | Rộng tối đa `--app-max`, lề `--gutter` |
+| `.field`, `.field__meta`, `.field__messages`, `.field-warning`, `.field-counter`, `.field-icon` | Trường của form | Do `InputField`, `TextAreaField`, `SelectField` vẽ. Dòng cảnh báo màu `--warn-text` kèm biểu tượng; bộ đếm `--hint`, thành `--bad-text` khi vượt (`data-over`) |
+| `.input-group`, `.input-group__input`, `.input-group__affix` | Ô nhập có phần đầu hay hậu tố | Khung là `.input`; focus và lỗi vẽ trên khung (`:focus-within`, `:has([aria-invalid])`) |
+| `.segmented`, `.segmented__item`, `.segmented__radio`, `.choice` | Nút phân đoạn | Nhóm nền `--surface-2`, bo 999, rộng vừa các mục; mục cao 34, đệm 8 14, chữ 12,5/600 `--muted`; mục đang chọn (`aria-pressed`, hay radio `:checked`) nền `--line-2`, chữ `--text` |
+| `.pagination`, `.pagination__summary`, `.pagination__list`, `.pagination__page`, `.pagination__gap` | Phân trang (S1.11) | Mục là liên kết mang class `.btn--secondary.btn--sm`; trang hiện tại (`aria-current`) nền `--line-2`, viền `--control-border` |
+| `.dialog`, `.dialog__header`, `.dialog__title`, `.dialog__close`, `.dialog__body`, `.dialog__error`, `.dialog__actions` | Hộp thoại (S3) | Nền `--dialog` kính, bo 30, rộng `min(92vw, 560px)`, đệm 22; màn che `--scrim` và blur 30; nút Đóng tròn 40; lỗi là `.banner--error` |
+| `.toasts`, `.toast`, `.toast__icon`, `.toast__message`, `.toast__close` | Toast (S1.12) | Đáy giữa, rộng `min(92vw, 480px)`; nền `--dialog`, bo 14, đệm 12 16, `--card-shadow`; biểu tượng màu theo `data-kind`; nút đóng tròn 34 |
+| `.tile` | Ô giữ chỗ | 40×40, bo `--r-thumb`, gradient 160° theo `data-group` |
 | `.pill`, `.pill--brand`, `.pill__link`, `.pill__control`, `.pill__select` | Viên thuốc điều hướng (S1.1) | Thanh cao 49,6, bo 999, nền `--surface`; mục cao 39,6, đệm 10 16, chữ 13,5/600; mục đang chọn (`aria-current="page"` mà `NavLink` đặt, không có class riêng) và hover nền `--surface-2`. Ô chọn ngôn ngữ và giao diện có viền `--control-border` |
 
 ## App shell (S1.1)
@@ -155,6 +174,73 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 
 Không có thanh công cụ dọc của ảnh mẫu. Nút "thanh bên" demo và `<aside>` của nó đã gỡ (plan, mục 14). `admin` chỉ có bố cục máy tính, từ 1024 px.
 
+## Components
+
+Component có hành vi của SHOP-9, trong `apps/admin/src/components/`. Mỗi component có file test cạnh nó, cho từng trạng thái. Props mô tả ý định (`label`, `error`, `isBusy`), không mô tả cách vẽ, và không nhận `className` (UI-008).
+
+### Field (`ui/field.tsx`)
+
+`InputField`, `TextAreaField`, `SelectField`: nhãn trên ô, rồi lỗi, cảnh báo, gợi ý và bộ đếm.
+
+| Prop | Ý nghĩa |
+|---|---|
+| `label` | Nhãn, gắn với ô bằng `htmlFor`. Trường tùy chọn ghi "(không bắt buộc)" ngay trong nhãn |
+| `required` | Đặt `required` cho ô và hiện `*` (`aria-hidden`) |
+| `hint`, `error`, `warning` | Gợi ý; lỗi (đặt `aria-invalid`, viền `--bad-text`); cảnh báo không chặn, như đổi slug (S2.7) |
+| `counter` | `{ count, max }`, hiện "n/max". Form tính `count` (độ dài UTF-16, như `api`), vì ô có thể không được điều khiển |
+| `prefix`, `suffix` | Chỉ `InputField`: chữ cố định trước hay sau giá trị, như "/products/" (S2.7) và "₫" (S2.9). `aria-hidden`, vì nhãn đã nói điều đó |
+
+- Mọi prop khác của phần tử gốc đi thẳng vào ô, kể cả `ref`, nên form trải `register()` của react-hook-form: `<InputField label="Tên sản phẩm" {...register('name')} />`. Không có `id` thì component tự sinh.
+- `aria-describedby` của ô theo thứ tự đọc: lỗi, cảnh báo, gợi ý, bộ đếm, rồi các id do nơi gọi thêm.
+- Lỗi không có role sống: khi lưu lỗi, form đưa focus về ô sai đầu tiên (S2.6), và ô đọc mô tả của nó, lỗi trước. Cảnh báo nằm trong một vùng `role="status"` luôn có sẵn, rỗng khi không có cảnh báo, để cảnh báo xuất hiện sau được đọc.
+
+### SegmentedControl (`ui/segmented-control.tsx`)
+
+Một kiểu vẽ, hai hành vi. Cả hai được điều khiển: nơi gọi giữ `value` (URL, hay `Controller` của react-hook-form) và nhận `onChange(value)`.
+
+- `SegmentedFilter` (S1.4): `role="group"` có `label`, mỗi mục là `<button aria-pressed>` và là một điểm Tab. Bấm mục đang chọn không gọi `onChange`.
+- `SegmentedChoice` (S2.11, S2.12): `<fieldset>` với `<legend>`, mỗi mục là radio gốc ẩn bằng mắt, nên cả nhóm là một điểm Tab và mũi tên đổi lựa chọn. `hint` mô tả nhóm (`aria-describedby` trên `<fieldset>`). Tên radio tự sinh, nên hai nhóm trên cùng form không lẫn nhau.
+
+### Pagination (`ui/pagination.tsx`)
+
+`<Pagination page pageSize totalItems hrefFor />` (S1.11).
+
+- Đổi trang là điều hướng (UI-001): mỗi mục là một liên kết `<a href>` tới URL của trang đó, do nơi gọi dựng bằng `hrefFor(page)` và giữ các tham số khác của danh sách (`?q=…&status=…&page=3`). Nên một trang mở được ở tab mới hay chép được link (AC4). Bấm thì đi qua router, không tải lại trang. URL là nguồn sự thật: nơi gọi đọc lại `page` từ `?page=`, component không có `onPageChange`.
+
+- `<nav>` có nhãn "Phân trang", dòng "Hiển thị 1–20 trên 25" với số theo ngôn ngữ (`10.000` ở `vi`), Trước, số trang, Sau. Ẩn khi chỉ có một trang.
+- Trang hiện tại có `aria-current="page"`; liên kết số trang có nhãn "Trang n".
+- Trước ở trang đầu và Sau ở trang cuối là liên kết bị khóa: `<a>` không có `href`, với `role="link"`, `aria-disabled="true"` và `tabIndex={0}`. Vẫn là cùng một phần tử `<a>` với liên kết đang dùng được, nên người dùng bàn phím đi tới trang cuối bằng Sau vẫn giữ focus trên Sau.
+- Tới 7 trang thì hiện đủ. Dài hơn: trang đầu, trang cuối, và một trang mỗi bên trang hiện tại; dấu "…" (`aria-hidden`) không bao giờ thay cho đúng một trang.
+- Nơi gọi đọc `?page=` một lần và truyền một trang hợp lệ: `page` không hợp lệ thì dùng trang 1 (S1.11), để dòng "Hiển thị…" khớp với các dòng của bảng. Component cũng chốt chặn theo đúng luật đó: trang vượt quá trang cuối, `NaN`, `0` hay `2.5` hiện như trang 1.
+
+### Dialog (`ui/dialog.tsx`)
+
+`<Dialog open title cancelLabel onCancel action isBusy error>nội dung</Dialog>` (S3).
+
+- `<dialog>` gốc mở bằng `showModal()`: phần phía sau inert. `role="alertdialog"`, `aria-modal`, tên là `title` (h2), mô tả là nội dung.
+- Focus đầu ở nút Hủy. Tab và Shift+Tab xoay vòng trong hộp thoại (một `<dialog>` trần để focus ra thanh của trình duyệt).
+- Esc (sự kiện `cancel`), nút Hủy và nút Đóng tròn đều gọi `onCancel`; nơi gọi đóng bằng `open={false}`. Trình duyệt tự đóng thì cũng coi như Hủy.
+- Đóng: focus về phần tử có focus lúc mở (nút S1.8 của dòng). Nếu phần tử đó không còn, như dòng của sản phẩm vừa xóa, nơi gọi chuyển focus.
+- `action` là nút làm việc đó, như nút Xóa `.btn--danger` của S3. `isBusy`: Hủy, Đóng và Esc không làm gì, và hai nút khóa bằng `aria-disabled` để focus không rơi khỏi hộp thoại; nơi gọi khóa `action` cùng cách và đổi chữ ("Đang xóa…"). `error` hiện trên hàng nút, `role="alert"`.
+- Toast mở lúc hộp thoại đang mở nằm dưới màn che, vì hộp thoại ở top layer; lỗi của S3 vì vậy hiện trong hộp thoại.
+
+### Toast (`feedback/notifications.tsx`)
+
+Gọi `notify.success('Đã xóa sản phẩm')` (hay `error`, `info`) từ bất cứ đâu; `<Notifications>` ở `app/provider.tsx` vẽ chúng (S1.12).
+
+- Xếp chồng ở đáy giữa màn hình. Mỗi toast có biểu tượng theo loại, chữ và nút đóng ("Đóng thông báo"). Đóng bằng bàn phím (Enter, Space) thì focus sang nút đóng của toast kế tiếp, hay của toast trước nếu đó là toast cuối, hay về phần tử có focus trước khi vào vùng toast nếu không còn toast nào; không rơi về `<body>` (WCAG 2.4.3). Đóng bằng chuột thì không dời focus, để bộ đếm chạy lại.
+- Mỗi toast ở lại 6 s, mọi loại như nhau. Rê chuột lên các toast hay đưa focus vào chúng thì mọi bộ đếm dừng, và chạy tiếp phần còn lại khi rời đi (`pauseTimers`, `resumeTimers` của store). Toast thêm lúc đang dừng chỉ bắt đầu đếm khi chạy tiếp. Đóng một toast thì bộ đếm chạy lại tới lần rê chuột kế tiếp: các toast còn lại tụt xuống, và trình duyệt có thể không báo con trỏ đã rời đi.
+- Vùng `<section aria-label="Thông báo" aria-live="polite">` luôn có, kể cả khi rỗng. Lỗi là `role="alert"`, thành công và thông tin là `role="status"`.
+- `useTranslation` của nó không suspend, vì nó nằm ngoài mọi `<Suspense>`.
+
+### PlaceholderTile (`ui/placeholder-tile.tsx`)
+
+`<PlaceholderTile id name />`: ô 40×40 của dòng bảng S1.6, `aria-hidden`, vì tên sản phẩm luôn ở cạnh nó.
+
+- Màu nhóm: `GROUPS[parseInt(id.slice(-8), 16) % 6]`, `GROUPS = [blue, coral, green, orange, teal, ink]` (plan, Architecture Decisions mục 15). 8 ký tự hex cuối của UUIDv7 là phần ngẫu nhiên, và `id` không đổi, nên đổi tên hay slug không đổi màu. `id` không phải hex thì dùng `blue`.
+- Chữ: ký tự đầu của tên sau khi bỏ khoảng trắng đầu, qua `toLocaleUpperCase('vi')`. "Ký tự" là một grapheme (`Intl.Segmenter`), nên chữ có dấu viết ở dạng tách (NFD), như "a" cộng dấu hỏi, vẫn ra "Ả". Tên rỗng thì ô không có chữ.
+- `user` (SHOP-10) dùng cùng thuật toán, để một sản phẩm có cùng màu ở hai app.
+
 ## Not Yet Built
 
-Các component có hành vi của bảng Design System làm ở SHOP-9 (T2): Field, nút phân đoạn (SegmentedControl, kiểu lọc và kiểu chọn), phân trang (Pagination), hộp thoại (Dialog), toast, ô giữ chỗ (PlaceholderTile). SHOP-9 thêm chúng vào file này. Thẻ sản phẩm và hiển thị giá ở thẻ thuộc `user` (`docs/design-system/user.md`).
+Không còn component nào của bảng Design System cho `admin`. Thẻ sản phẩm và hiển thị giá ở thẻ thuộc `user` (`docs/design-system/user.md`).
