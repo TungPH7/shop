@@ -12,7 +12,7 @@ import {
   type Rgba,
   type Theme,
   toHex,
-} from '~/testing/css-tokens';
+} from '~/styles/css-tokens';
 
 // The colour tokens of user against the Design System table of docs/specs/SHOP-7/design.md (SHOP-10). tokens.css keeps
 // the semantic role names user already had and writes the values in OKLCH; this test pins each role to the hex of the
