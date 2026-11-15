@@ -216,6 +216,31 @@ describe('Notifications', () => {
     expect(first).toHaveFocus();
   });
 
+  // Focus moves to the next toast, so it is still in the toasts: that toast must not
+  // close under it (S1.12; WCAG 2.2.1).
+  it('keeps the next toast while focus moves to it after a keyboard dismissal', () => {
+    vi.useFakeTimers();
+    renderWithProviders(<Notifications />);
+    act(() => {
+      notify.success('First');
+      notify.success('Second');
+    });
+    const [first, second] = screen.getAllByRole('button', { name: 'Dismiss notification' });
+    if (first === undefined) throw new Error('no dismiss button');
+
+    act(() => {
+      first.focus();
+    });
+    fireEvent.click(first, { detail: 0 });
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+
+    expect(screen.queryByText('First')).not.toBeInTheDocument();
+    expect(screen.getByText('Second')).toBeInTheDocument();
+    expect(second).toHaveFocus();
+  });
+
   it('gives focus back to where it came from when the only toast is dismissed with the keyboard', async () => {
     const { user } = renderWithProviders(
       <>

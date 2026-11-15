@@ -122,6 +122,8 @@ export function Notifications() {
             className="toast__close"
             aria-label={t('notifications.dismiss')}
             onClick={(event) => {
+              // Read before dismiss() removes this button from the toasts.
+              const toasts = event.currentTarget.closest('.toasts');
               // A click from Enter or Space has no pointer position (detail 0).
               const target =
                 event.detail === 0
@@ -129,11 +131,11 @@ export function Notifications() {
                   : null;
               target?.focus();
               dismiss(notification.id);
-              // The focused button is gone and browsers send no blur for that. The
-              // stack sits at the bottom, so the toasts left drop down and the pointer
-              // may be outside them with no mouseleave: count again until the next
-              // mouseover.
-              if (!event.currentTarget.closest('.toasts')?.contains(target)) setHasFocus(false);
+              // The focused button is gone and browsers send no blur for that, so
+              // count again unless focus moved to another toast. The stack sits at
+              // the bottom, so the toasts left drop down and the pointer may be
+              // outside them with no mouseleave: count again until the next mouseover.
+              if (!toasts?.contains(target)) setHasFocus(false);
               setIsHovered(false);
             }}
           >
