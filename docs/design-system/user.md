@@ -38,7 +38,7 @@ Mọi dòng của bảng Design System là "mới"; dòng nào không có ở đ
 | `--background-from`, `--background-to` | bg (gradient) | #eef1f6 → #f6f8fb | #0c0c0e → #131316 | Gradient 135° của `<body>` |
 | `--foreground`, `--surface-foreground`, `--secondary-foreground` | text | #0f1724 | #f6f8fc | Chữ chính, nhãn trường, chữ trên thẻ và nút phụ |
 | `--surface` | surface | #ffffffb8 | #1e1e226b | Thẻ kính; đi cùng `--blur`, `--sat` |
-| `--solid` | solid | #ffffff | #1d1d21 | Thay `--surface` khi không có `backdrop-filter` hay khi bật giảm độ trong suốt; nền `<option>` |
+| `--solid` | solid | #ffffff | #1d1d21 | Thay `--surface` khi không có `backdrop-filter` hay khi bật giảm độ trong suốt; nền `<option>`; nền hộp phóng to ảnh `.zoom-content` (`globals.css`), vì hộp không có `backdrop-filter` |
 | `--dialog` | dialog | #fffffff0 | #1c1c20db | Nền hộp thoại và toast, nếu `user` cần |
 | `--muted`, `--secondary` | surface-2 | #0f17240d | #ffffff14 | Nền ô nhập, nút phụ, khung xương, huy hiệu Ẩn |
 | `--muted-foreground` | muted | #3b475a | #c9d1de | Chữ phụ, chữ huy hiệu Ẩn |
@@ -53,13 +53,13 @@ Mọi dòng của bảng Design System là "mới"; dòng nào không có ở đ
 | `--primary-hover` | | `--primary` pha 6% trắng | như bên trái | Nền nút chính khi hover ("sáng hơn 6%") |
 | `--primary-foreground` | on-accent | #ffffff | #071a33 | Chữ trên `--primary` |
 | `--primary-text` | accent-text | #1a56b0 | #a9cdfc | Liên kết, chữ nhấn |
-| `--success`, `--success-foreground`, `--success-tint` | good fill, good, fill 14%/16% | #2f9e5b, #166534, fill ở 14% | #5fc483, #8fdca8, fill ở 16% | Huy hiệu Còn hàng |
-| `--warning`, `--warning-foreground`, `--warning-tint` | warn fill, warn | #c98a08, #8a5300 | #e4b759, #f3cd7e | Huy hiệu Hết hàng |
-| `--info`, `--info-foreground`, `--info-tint` | info fill, info | #2b63c4, #1a56b0 | #7aaef0, #a9cdfc | Huy hiệu Đang bán |
-| `--danger`, `--danger-foreground`, `--danger-tint` | bad fill, bad | #d4493c, #b42318 | #e98278, #f6a59c | Lỗi ô nhập, huy hiệu "-16%" |
+| `--success`, `--success-text`, `--success-tint` | good fill, good, fill 14%/16% | #2f9e5b, #166534, fill ở 14% | #5fc483, #8fdca8, fill ở 16% | Huy hiệu Còn hàng |
+| `--warning`, `--warning-text`, `--warning-tint` | warn fill, warn | #c98a08, #8a5300 | #e4b759, #f3cd7e | Huy hiệu Hết hàng |
+| `--info`, `--info-text`, `--info-tint` | info fill, info | #2b63c4, #1a56b0 | #7aaef0, #a9cdfc | Huy hiệu Đang bán |
+| `--danger`, `--danger-text`, `--danger-tint` | bad fill, bad | #d4493c, #b42318 | #e98278, #f6a59c | Lỗi ô nhập, huy hiệu "-16%" |
 | `--group-<tên>-from`, `-to`, `-text` | Màu nhóm (6) | blue #354a6a → #283953, #eef4fd; coral #6a423d → #52322e, #fdeeeb; green #375741 → #29432f, #eef9f1; orange #66503a → #4e3d2b, #fdf3e6; teal #31574f → #24433d, #ecf8f5; ink #3b3e46 → #2c2e34, #f1f2f5 | giống bên trái | Ô giữ chỗ (gradient 160°) |
 
-Với bốn trạng thái, tên vai trò (`--success`) là màu fill cho chấm, `-foreground` là màu chữ (trên nền trang hay trên tint), `-tint` là nền huy hiệu. `--danger` của `user` vì vậy là fill của bad, không phải nút nguy hiểm: `user` không có nút nguy hiểm.
+Với bốn trạng thái, tên vai trò (`--success`) là màu fill cho chấm, `-text` là màu chữ (trên nền trang hay trên tint, như `--primary-text`), `-tint` là nền huy hiệu. Hậu tố `-foreground` chỉ dùng cho chữ đặt trên chính màu fill, như `--primary-foreground` trên `--primary`; không trạng thái nào có chữ trên fill, nên không có `--danger-foreground`. `tokens.test.ts` kiểm điều đó, và kiểm `components.css`, `globals.css` chỉ đọc token đã khai. `--danger` của `user` vì vậy là fill của bad, không phải nút nguy hiểm: `user` không có nút nguy hiểm.
 
 Giá trị viết bằng OKLCH ở tầng primitive (`--slate-950`, `--blue-600`, `--white-a8`…), mỗi dòng kèm hex gốc trong chú thích. Hai token bóng giữ hex của `design.md`.
 
@@ -142,7 +142,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | Giá trị | Ước lượng của `design.md` | Số đo | Dùng |
 |---|---|---|---|
 | Huy hiệu trạng thái ("Running", "Draft", "Finished") | Cao 24, chấm 6, chữ 12/600, đệm 4 10 | Cao 25,4; đệm 4 10; chữ 12/17,4, 600; chấm 7 px tròn; cách chữ 6 px. Nền: fill ở 13% (Running) và 14% (Finished); "Draft" chữ text trên nền well | Số đo, trừ nền: giữ tint 14% (sáng) và 16% (tối) của bảng Design System, vì bảng không ghi là ước lượng và tương phản đã tính theo nó |
-| Màu "-16%" | Coral, ước lượng; bảng ghi bad | Mức giảm "▼ −7.1%" của trang mẫu là bad #f6a59c, 12/700 | bad (`--danger-foreground` trên `--danger-tint`), như bảng |
+| Màu "-16%" | Coral, ước lượng; bảng ghi bad | Mức giảm "▼ −7.1%" của trang mẫu là bad #f6a59c, 12/700 | bad (`--danger-text` trên `--danger-tint`), như bảng |
 | Tiêu đề trang | 34/36, 700; 26 ở điện thoại | "Growth Lab": 38/39,52, 600, letter-spacing -0,95 px (-0,025em); 28/29,12 ở cửa sổ hẹp | Số đo |
 | Chữ cái đầu của ô giữ chỗ | 40% chiều cao ô | Trang mẫu không có ô chữ cái cùng loại: chữ của avatar "NH" 13/38 (34%), chữ của logo 21/38 (55%) | Giữ 40%, nằm giữa hai số đo |
 | Bo góc ô giữ chỗ ở dòng | 12 px | Ô biểu tượng 38 px và 52 px bo 28% (10,6 và 14,6 px) | Giữ 12 px (28% của 40 là 11,2) |
@@ -164,8 +164,8 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.card` | Thẻ kính | Nền `--surface`, blur 14 px và bão hòa 175%, bo 26, đệm 18, `--card-shadow`, không viền |
 | `.well` | Ô "well" (S5) | Nền `--well`, đệm 12 14, bo 18; đặt trong `.card` |
 | `.label` | Nhãn trường | 14/500 `--foreground`, cách ô 4. Trường bắt buộc: dấu `*` có `aria-hidden="true"`, ô có `required` |
-| `.input` | Ô nhập, vùng văn bản, ô chọn | Dùng cho `<input>`, `<textarea>` (cao tối thiểu 144) và `<select>` gốc. Cao 44, bo 14, đệm 10 14, nền `--muted`, viền `--control-border`, chữ 14/500 (16 dưới 768 px). Focus: viền `--ring` và vầng 3 px `--focus-halo`. Lỗi: `aria-invalid="true"` thì viền `--danger-foreground`. Khóa: mờ 50% |
-| `.field-error` | Dòng lỗi | 12,5/500 `--danger-foreground`, cách ô 4; đặt biểu tượng trước chữ; gắn vào ô bằng `aria-describedby` |
+| `.input` | Ô nhập, vùng văn bản, ô chọn | Dùng cho `<input>`, `<textarea>` (cao tối thiểu 144) và `<select>` gốc. Cao 44, bo 14, đệm 10 14, nền `--muted`, viền `--control-border`, chữ 14/500 (16 dưới 768 px). Focus: viền `--ring` và vầng 3 px `--focus-halo`. Lỗi: `aria-invalid="true"` thì viền `--danger-text`. Khóa: mờ 50% |
+| `.field-error` | Dòng lỗi | 12,5/500 `--danger-text`, cách ô 4; đặt biểu tượng trước chữ; gắn vào ô bằng `aria-describedby` |
 | `.search`, `.search__icon`, `.search__input` | Ô tìm (S4.3) | Viên thuốc cao 44, kính lúp 16 px `--hint` bên trái (`aria-hidden`), chữ cách trái 40. Dùng cùng `.input` |
 | `.skeleton` | Khung xương | Nền `--muted`, nhấp nháy 1,2 s, tắt khi giảm chuyển động; đặt `border-radius` như phần tử thật; vùng chứa có `aria-busy="true"` |
 | `.visually-hidden` | | Chữ chỉ cho trình đọc màn hình: nhãn ẩn "Tìm theo tên", "Giảm", "Giá gốc:" |

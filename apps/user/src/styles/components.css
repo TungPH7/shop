@@ -123,7 +123,7 @@
 .badge--info {
   --badge-dot: var(--info);
 
-  color: var(--info-foreground);
+  color: var(--info-text);
   background: var(--info-tint);
 }
 
@@ -137,21 +137,21 @@
 .badge--good {
   --badge-dot: var(--success);
 
-  color: var(--success-foreground);
+  color: var(--success-text);
   background: var(--success-tint);
 }
 
 .badge--warn {
   --badge-dot: var(--warning);
 
-  color: var(--warning-foreground);
+  color: var(--warning-text);
   background: var(--warning-tint);
 }
 
 .badge--bad {
   --badge-dot: var(--danger);
 
-  color: var(--danger-foreground);
+  color: var(--danger-text);
   background: var(--danger-tint);
 }
 
@@ -208,7 +208,7 @@ select.input option {
 }
 
 .input[aria-invalid='true'] {
-  border-color: var(--danger-foreground);
+  border-color: var(--danger-text);
 }
 
 .input:disabled {
@@ -228,7 +228,7 @@ select.input option {
   gap: 6px;
   align-items: flex-start;
   margin-top: var(--space-1);
-  color: var(--danger-foreground);
+  color: var(--danger-text);
   font: var(--fw-regular) var(--fs-sm) / var(--lh-base) var(--font);
 }
 

@@ -17,7 +17,8 @@ import {
 // The colour tokens of user against the Design System table of docs/specs/SHOP-7/design.md (SHOP-10). tokens.css keeps
 // the semantic role names user already had and writes the values in OKLCH; this test pins each role to the hex of the
 // design, in both themes, and checks the WCAG AA pairs the design promises. docs/design-system/user.md maps each role.
-const css = readFileSync(fileURLToPath(new URL('./tokens.css', import.meta.url)), 'utf8');
+const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8');
+const css = read('./tokens.css');
 const tokens = readTokens(css);
 const color = (name: string, theme: Theme) => parseColor(tokens.value(name, theme));
 
@@ -54,16 +55,16 @@ const DESIGN: [string, string, string][] = [
   ['--secondary-foreground', '#0f1724', '#f6f8fc'],
   ['--focus-halo', '#2b63c42e', '#7aaef02e'],
   ['--success', '#2f9e5b', '#5fc483'],
-  ['--success-foreground', '#166534', '#8fdca8'],
+  ['--success-text', '#166534', '#8fdca8'],
   ['--success-tint', '#2f9e5b24', '#5fc48329'],
   ['--warning', '#c98a08', '#e4b759'],
-  ['--warning-foreground', '#8a5300', '#f3cd7e'],
+  ['--warning-text', '#8a5300', '#f3cd7e'],
   ['--warning-tint', '#c98a0824', '#e4b75929'],
   ['--info', '#2b63c4', '#7aaef0'],
-  ['--info-foreground', '#1a56b0', '#a9cdfc'],
+  ['--info-text', '#1a56b0', '#a9cdfc'],
   ['--info-tint', '#2b63c424', '#7aaef029'],
   ['--danger', '#d4493c', '#e98278'],
-  ['--danger-foreground', '#b42318', '#f6a59c'],
+  ['--danger-text', '#b42318', '#f6a59c'],
   ['--danger-tint', '#d4493c24', '#e9827829'],
 ];
 
@@ -103,6 +104,14 @@ describe('colour tokens match the Design System table', () => {
     expect(tokens.names('.dark').filter((name) => palette.test(name))).toEqual([]);
   });
 
+  test('a status role names its words -text, like --primary-text, and has no -foreground', () => {
+    // -foreground means "the words on the fill" (--primary-foreground on --primary). The words of a status sit on the
+    // page or on the tint, so they are --danger-text and the rest: a --danger-foreground would read as white on red.
+    const status = /^--(success|warning|info|danger)-foreground$/;
+    expect(tokens.names(':root').filter((name) => status.test(name))).toEqual([]);
+    expect(tokens.names('.dark').filter((name) => status.test(name))).toEqual([]);
+  });
+
   test('the primary button gets lighter on hover in both themes', () => {
     for (const theme of THEMES) {
       const hover = tokens.value('--primary-hover', theme);
@@ -132,11 +141,11 @@ describe.each(THEMES)('WCAG AA contrast in the %s theme', (theme) => {
     ['--primary-text', '--background'],
     ['--primary-text', '--surface'],
     ['--primary-foreground', '--primary'],
-    ['--success-foreground', '--success-tint'],
-    ['--warning-foreground', '--warning-tint'],
-    ['--info-foreground', '--info-tint'],
-    ['--danger-foreground', '--danger-tint'],
-    ['--danger-foreground', '--surface'],
+    ['--success-text', '--success-tint'],
+    ['--warning-text', '--warning-tint'],
+    ['--info-text', '--info-tint'],
+    ['--danger-text', '--danger-tint'],
+    ['--danger-text', '--surface'],
   ])('text %s on %s is at least 4.5:1', (text, background) => {
     expect(contrast(color(text, theme), on(background))).toBeGreaterThanOrEqual(4.5);
   });
@@ -153,5 +162,23 @@ describe.each(THEMES)('WCAG AA contrast in the %s theme', (theme) => {
     const text = color(`--group-${group}-text`, theme);
     expect(contrast(text, color(`--group-${group}-from`, theme))).toBeGreaterThanOrEqual(4.5);
     expect(contrast(text, color(`--group-${group}-to`, theme))).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+// The stylesheets that read the tokens. A var() of a name that nothing declares is silently invalid, so a renamed token
+// would leave a class without its colour and no other test would see it.
+describe.each(['./components.css', '../app/globals.css'])('%s', (path) => {
+  const sheet = read(path);
+  const declaredIn = (source: string) =>
+    [...source.matchAll(/^\s*(--[\w-]+)\s*:/gm)].map(([, name]) => name);
+
+  test('reads only custom properties that tokens.css or the sheet itself declares', () => {
+    const known = new Set([
+      ...tokens.names(':root'),
+      ...tokens.names('.dark'),
+      ...declaredIn(sheet),
+    ]);
+    const used = [...sheet.matchAll(/var\((--[\w-]+)/g)].map(([, name]) => name);
+    expect(used.filter((name) => !known.has(name))).toEqual([]);
   });
 });
