@@ -43,6 +43,8 @@ Mã item trong plan (T1…T11, US1…US6c) là mã tạm: `ba` thay bằng key J
     - Giá trị sai thì dùng mặc định, không báo lỗi (AC22, S1.11).
     - Đường dẫn của S2 chốt là `/products/new` và `/products/:productId/edit`, ngoài `ProtectedRoute`.
 12. **Đường dẫn tới `api` từ `user`.** `request()` của `apps/user/src/lib/http/client.ts` dựng URL bằng `new URL(path, env.API_URL)`, và mọi đường dẫn sản phẩm bắt đầu bằng `/api/`. Nhờ vậy URL đúng dù `API_URL` có hay không có `/api` ở cuối. Mọi lệnh có thời hạn 5 s (`AbortSignal.timeout`, NFR26). Không đổi biến môi trường nào (NFR27).
+
+    Ngày 2026-11-15 bạn đồng ý: `API_URL` của `user` trên ba môi trường được coi là trỏ tới `api` nội bộ, như `http://api:3001`, nên Epic không đổi secret nào. E2E đầu tiên của `user` trên Development (US6a) kiểm điều đó. Nếu nó cho thấy `API_URL` còn trỏ tới API NestJS cũ, `fe-dev` đánh dấu US6a "Needs you", vì đổi secret trên VPS cần quyền agent không có, và bạn đổi secret đó trước gate ④.
 13. **`admin` không tự thử lại lệnh ghi** (NFR19). `apps/admin/src/lib/api/retry.ts` chỉ thử lại GET, HEAD và OPTIONS. `DELETE` của API idempotent (204 kể cả khi sản phẩm đã không còn), nên một lần xóa đã thành công mà mất phản hồi không thành lỗi giả.
 14. **Design system bằng CSS variables và CSS thường**, không thêm Tailwind hay thư viện UI (NFR13).
     - Font là Be Vietnam Pro 500, 600 và 700, subset `latin`, `latin-ext` và `vietnamese` (Tech Stack): `user` qua `next/font/google`, `admin` qua `@fontsource/be-vietnam-pro` 5.3.0 ghim đúng phiên bản, kèm font dự phòng có `size-adjust` (NFR5).
@@ -353,6 +355,7 @@ Mỗi item ghi AC, khối của `design.md`, NFR, file code dự kiến (không 
 
 - [ ] T5: Năm sản phẩm thử trên Staging và Production (TW6) · devops · effort xhigh: ghi lên Production đang chạy, bằng basic auth của host `shop-admin`.
   - Sau gate ② và trước gate ④ của `v0.3.0`, thêm năm sản phẩm dưới đây qua `POST /api/products` của `v0.2.0`, qua `/api` của `shop-admin-staging` rồi của `shop-admin`. Ghi `id` trả về vào comment của Task. Staging cũng có chúng, nên lần deploy `v0.3.0` lên Staging là lần chạy thử V4 trên cùng dữ liệu, trước Production. Basic auth chỉ nằm trong biến môi trường của lệnh, không vào file, log hay comment.
+  - Basic auth, theo đề xuất bạn đồng ý ngày 2026-11-15: với Staging, `devops` dùng basic auth mà `/ao-qa` đã có; với Production, bạn đặt basic auth vào biến môi trường của phiên `devops` khi chạy T5. Phiên không có nó thì `devops` đánh dấu T5 "Needs you", và bạn đặt biến đó hay tự chạy năm lệnh dưới đây.
   - `Áo thun cổ tròn` · slug `ao-thun-co-tron` · giá `250000.00` · mô tả `Áo thun cotton 100%.` xuống dòng `Cổ tròn, tay ngắn.`: tên có dấu, mô tả nhiều dòng.
   - `Quần jean nam` · `quan-jean-nam` · `450000.00` · không có mô tả.
   - `Đầm maxi đỏ 2026` · `dam-maxi-do-2026` · `1250000.00` · mô tả `Kích thước < 5 cm`: ký tự `<` trong mô tả.
@@ -479,15 +482,14 @@ Mỗi item ghi AC, khối của `design.md`, NFR, file code dự kiến (không 
 | Trigger làm lệch giá giữa hai cột | High | Một integration test cho mỗi dòng của bảng trigger; T7 kiểm cột `price` sau mỗi lệnh ghi mới; bước contract bỏ trigger ở bản sau |
 | Rewrite của Proxy không giữ được mã 404, hay Proxy làm chậm các trang | Medium | E2E kiểm `response.status()` trên bản build và trên Development. Proxy chỉ gọi `api` cho đường dẫn chi tiết sản phẩm, và chỉ khi tải trang. Nếu rewrite không giữ 404, `fe-dev` trả 404 thẳng từ Proxy và báo `sa` bằng `Cần sa:` để sửa plan |
 | Cache của Next giữ dữ liệu lâu hơn 60 s | Medium | Profile `catalog` tối đa 25 s cộng 30 s; E2E của AC9–AC11 và AC15 chờ bằng `expect.poll` tới 60 s |
-| `API_URL` trên VPS không trỏ tới `api` | Medium | URL dựng bằng `new URL` (mục 12); E2E đầu tiên của `user` trên Development (US6a) cho biết ngay; Open Questions, câu 1 |
+| `API_URL` trên VPS không trỏ tới `api` | Medium | URL dựng bằng `new URL`; E2E đầu tiên của `user` trên Development (US6a) cho biết ngay; nếu sai, US6a "Needs you" và bạn đổi secret trước gate ④ (mục 12) |
 | E2E trên Development dùng chung đụng dữ liệu của lần chạy khác | Medium | Nhãn `E2E <runId>`, đếm bằng cách tìm theo nhãn, chỉ kiểm thứ tự tương đối, dọn sản phẩm E2E cũ hơn 1 giờ (mục 16) |
 | Lúc deployer chuyển bản, `user` mới gặp `api` cũ hay ngược lại trong ít phút | Low | Danh sách hiện lỗi S4.5, trang chi tiết trả 503, không bao giờ là danh sách trống hay 404 (NFR26) |
 | Truy vấn chậm hơn 200 ms với 10.000 sản phẩm | Low | Test của NFR2 ở T7; nếu cần, một migration sau thêm index GIN trên `name_search` |
-| `devops` không có basic auth của `shop-admin` Production cho T5 | Low | `devops` đánh dấu T5 "Needs you"; Open Questions, câu 2 |
+| `devops` không có basic auth của `shop-admin` Production cho T5 | Low | Bạn đặt nó vào biến môi trường của phiên `devops`; thiếu thì T5 "Needs you" (T5) |
 
 ## Open Questions
 
-Không có câu nào cần bạn quyết trước gate ②: mọi quyết định của plan theo đề xuất của `sa`, như bạn dặn. Hai việc cần quyền mà agent không có, kèm đề xuất:
+Không có. Ngày 2026-11-15 bạn đồng ý cả hai đề xuất, và mỗi câu trả lời đã thành quyết định ở chỗ của nó: `API_URL` của `user` ở Architecture Decisions, mục 12; basic auth của `shop-admin` Production ở T5.
 
-1. **`API_URL` của `user` trên ba môi trường** nằm trong secret của VPS, nên agent không đọc được. NFR8 coi nó trỏ tới `api` nội bộ, như `http://api:3001`. Đề xuất: không cần làm gì nếu đúng vậy, dù có hay không có `/api` ở cuối (mục 12). Nếu nó còn trỏ tới API NestJS cũ, bạn đổi secret đó trước gate ④; E2E của US6a trên Development sẽ cho biết.
-2. **Basic auth của `shop-admin` Production cho T5.** Đề xuất: với Staging, `devops` dùng basic auth mà `/ao-qa` đã có; với Production, bạn đặt basic auth vào biến môi trường của phiên `devops` khi chạy T5, hoặc tự chạy năm lệnh của T5.
+Câu hỏi mới ở các Task, Story và chặng sau của Epic: agent làm theo đề xuất của mình và ghi quyết định vào artifact của chặng đó. Agent chỉ hỏi bạn những việc cần quyền mà agent không có.
