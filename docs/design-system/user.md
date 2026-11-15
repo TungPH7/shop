@@ -194,7 +194,7 @@ Hai dòng Component của bảng Design System là của `user` nhưng chưa có
 ```
 
 - **Màu nhóm:** `placeholderGroup(id)` là `GROUPS[parseInt(id.slice(-8), 16) % 6]`, với `GROUPS = ['blue', 'coral', 'green', 'orange', 'teal', 'ink']`. Tám ký tự hex cuối của UUIDv7 là phần ngẫu nhiên. Đổi tên hay slug không đổi màu. `id` không kết thúc bằng hex thì nhận nhóm đầu, `blue`.
-- **Bộ mẫu dùng chung** cho test của hai app: `admin` (SHOP-9) dùng đúng các cặp này, để một app lệch quy tắc thì test bắt được. Mỗi id chỉ ra nhóm của nó khi đọc đúng 8 ký tự cuối; đọc 1 tới 12 ký tự khác thì ra nhóm khác (`placeholder-tile.test.tsx`). Id có tiền tố cố định như `…-0123xxxxxxxx` không ghim được độ dài, vì 16^k chia 6 luôn dư 4.
+- **Bộ mẫu dùng chung** cho test của hai app: `admin` (SHOP-9) dùng đúng các cặp này, để một app lệch quy tắc thì test bắt được. Bảy id ghim độ dài khi đi cùng nhau: đọc 1 tới 12 ký tự cuối, trừ 8, thì ít nhất một id ra nhóm khác (`placeholder-tile.test.tsx`). Chỉ hai id, `…06c7400a60ee` và `…c07d23ef7c9d`, tự ghim được mọi độ dài; năm id kia trùng nhóm ở vài độ dài, như `…a1b2c3d4e5f6` ở 1, 2, 6, 7 và 12. Vì vậy test của `admin` dùng đủ bảy id. Id có tiền tố cố định như `…-0123xxxxxxxx` không ghim được độ dài, vì 16^k chia 6 luôn dư 4.
 
   | id | Nhóm |
   |---|---|

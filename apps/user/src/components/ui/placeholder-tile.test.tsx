@@ -33,8 +33,10 @@ describe('placeholderGroup', () => {
   });
 
   // Real UUIDv7 ids, one per group. The ids above share the fixed prefix 0123 and give the same group for any length
-  // of the slice (16^k ≡ 4 mod 6), so only these pin the 8 digits: each one gets another group from slice(-1) to
-  // slice(-12) except slice(-8). docs/design-system/user.md lists them as the shared samples for admin (SHOP-9).
+  // of the slice (16^k ≡ 4 mod 6), so only these pin the 8 digits. They pin it together, not one by one: for every
+  // length from slice(-1) to slice(-12) except slice(-8), at least one of the seven gets another group, but only
+  // …06c7400a60ee and …c07d23ef7c9d do so alone at every length. Keep all seven. docs/design-system/user.md lists them
+  // as the shared samples for admin (SHOP-9).
   test.each([
     ['0192f1c4-7a3b-7c2d-8e9f-a1b2c3d4e5f6', 'blue'],
     ['0193a2b5-29ba-7b09-a5ad-06c7400a60ee', 'blue'],
