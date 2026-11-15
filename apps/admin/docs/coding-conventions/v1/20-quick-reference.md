@@ -96,6 +96,7 @@ pnpm lint && pnpm format:check && pnpm typecheck && pnpm build
 **A11y & i18n**
 - [ ] Control có tên đọc được; vùng động có `role="status"`/`"alert"` (`UI-002`, `UI-003`)
 - [ ] Không hardcode chuỗi hiển thị (`IN-004`)
+- [ ] Màu, chữ, khoảng cách lấy từ token; class của `components.css` trước CSS mới (`UI-011`, `UI-012`)
 
 **Bảo mật**
 - [ ] Không `dangerouslySetInnerHTML` trực tiếp (`SE-001`)
@@ -119,6 +120,7 @@ pnpm lint && pnpm format:check && pnpm typecheck && pnpm build
 | `toast.error()` trong interceptor | `onError` ở cache của Query (`EH-006`) |
 | `api.get<Product[]>('/products')` | Truyền Zod schema (`API-010`) |
 | `<div onClick=…>` làm nút | `<button>` (`UI-001`) |
+| `color: #3b475a; padding: 13px` | `var(--muted)`, `var(--space-3)` (`UI-011`) |
 | `items[0]!` | Kiểm `undefined` (`TY-008`) |
 | `key={index}` | `key={item.id}` (`CH-006`) |
 | `import { X } from '@/features/other'` | Nâng lên shared / compose ở app (`PS-002`) |
