@@ -3,6 +3,7 @@
     "title": "tungph7 codebase"
   },
   "nav": {
+    "label": "Main navigation",
     "home": "Home",
     "products": "Products",
     "about": "About",
@@ -12,13 +13,14 @@
   "language": {
     "label": "Language"
   },
+  "theme": {
+    "label": "Theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
   "state": {
     "loading": "Loading…"
-  },
-  "sidebar": {
-    "open": "Open sidebar",
-    "close": "Close sidebar",
-    "content": "Sidebar content (client-state demo)."
   },
   "greeting": "Hello, {{name}}"
 }

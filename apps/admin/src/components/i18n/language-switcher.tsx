@@ -3,17 +3,17 @@ import { useTranslation } from 'react-i18next';
 import { isLocale } from '@/lib/i18n/config';
 import { useLocale } from '@/lib/i18n/use-locale';
 
-// Headless language switcher — proves runtime language switching. UI-agnostic
-// (Phase 1.1): a plain native <select>; Phase 1.2 swaps in a styled control,
-// the useLocale contract unchanged.
+// Runtime language switch: a native <select> in the tools pill of the shell (S1.1).
+// The label is visually hidden but stays the accessible name of the control.
 export function LanguageSwitcher() {
   const { t } = useTranslation();
   const { locale, locales, labels, setLocale } = useLocale();
 
   return (
-    <label>
-      {t('language.label')}{' '}
+    <label className="pill__control">
+      <span className="visually-hidden">{t('language.label')}</span>
       <select
+        className="pill__select"
         value={locale}
         onChange={(event) => {
           if (isLocale(event.target.value)) {
