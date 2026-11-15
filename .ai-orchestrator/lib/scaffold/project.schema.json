@@ -35,11 +35,14 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["dev", "dev_id", "review", "review_id"],
+          "dependentRequired": { "merge": ["merge_id"], "merge_id": ["merge"] },
           "properties": {
             "dev": { "$ref": "#/$defs/slug" },
             "dev_id": { "$ref": "#/$defs/id" },
             "review": { "$ref": "#/$defs/slug" },
-            "review_id": { "$ref": "#/$defs/id" }
+            "review_id": { "$ref": "#/$defs/id" },
+            "merge": { "description": "merge-gate's own App (Pilot 3, spec 2.9): the only one the rulesets let merge without your approval; its key lives only in the merge-gate environment.", "$ref": "#/$defs/slug" },
+            "merge_id": { "$ref": "#/$defs/id" }
           }
         },
         "kit_peers": { "type": "array", "items": { "$ref": "#/$defs/repo" } }

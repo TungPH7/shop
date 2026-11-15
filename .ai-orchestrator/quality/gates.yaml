@@ -2,7 +2,7 @@
 # the project's copy in .ai-orchestrator/quality/. That copy is a protected path, and a PR that lowers a threshold here
 # turns the policy job red.
 
-# The jobs of kit/.github/workflows/ci.yml; merge-gate, audit and the ruleset require every one of them.
+# The jobs of kit/.github/workflows/ci.yml; merge-gate, audit and the rulesets of PRs require every one of them.
 checks: [policy, build-test, secrets, sast]
 
 # Coverage of the lines a PR adds or changes, read from the lcov files the project's test:coverage script writes. The
@@ -65,7 +65,9 @@ merge_method:
 # The PR of a release branch into main, and the PR that merges main back into develop or the open release branch
 # (release-workflow spec 2.7). merge-gate merges both with a merge commit, so each release keeps its history on main. A
 # release PR needs green CI and your approval on its head; after it merges, merge-gate tags the merge commit and opens
-# the merge back. A merge back needs only green CI and no conflict: every commit of main passed gate ③ or gate ⑤.
+# the merge back. A merge back needs green CI, no conflict, and the head of main to be the commit of a v* tag, which only
+# ao-merge and you may make (Pilot 3, spec 2.9): every commit of main passed gate ③ or gate ⑤. The PR of the release
+# report, release-notes/vX.Y.Z into release/vX.Y.Z, needs green CI and to change only that report and CHANGELOG.md.
 release_pull_requests:
   merge_method: merge
   tag: v<VERSION>
@@ -81,6 +83,7 @@ protected_paths:
   - { path: ".claude/**" }
   - { path: ".ai-orchestrator/**" }
   - { path: ".mcp.json" }
+  - { path: ".github/CODEOWNERS" }
 
 # The effort of a full security review (Pilot 1, review cost): the roster's when the PR touches a protected path or one
 # of these paths, or when its item or one of its Sub-tasks has an effort label; lower_effort otherwise. A review of only

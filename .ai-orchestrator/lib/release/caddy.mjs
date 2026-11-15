@@ -1,7 +1,8 @@
 // The Caddyfile of the VPS (release-workflow spec 2.3, 2.11): one site per host of /etc/ao/deployer.yaml, proxied to the
 // public app of the release that runs in that environment, by the alias docker.mjs gives it. With hosts app by app, each
 // public app has its own site (project-scaffold part 2, spec 2.4). Development and Staging
-// ask for the shared basic auth account; Production is open. An environment with no release yet answers 503, and still
+// ask for the shared basic auth account; Production is open, unless the project sets production_auth until it opens to
+// everyone (Pilot 3, spec 2.2). An environment with no release yet answers 503, and still
 // has its site, so Caddy holds its certificate before the first deploy. The deployer writes the file after each tick
 // and reloads Caddy only when the text changed. Every name in it was checked by deployer-config.mjs or docker.mjs.
 import { hostList, hostsByApp } from './hosts.mjs';
@@ -23,7 +24,7 @@ export function caddySites(config, states) {
           // One host for each environment serves the one public app, whatever its name.
           const target = byApp ? running.find((entry) => entry.app === app) : running[0];
           const upstream = target ? `ao-${project.name}-${env}-${target.app}:${Number(target.port)}` : null;
-          return { host, upstream, auth: env !== 'production' };
+          return { host, upstream, auth: env !== 'production' || project.production_auth === true };
         });
     });
   });

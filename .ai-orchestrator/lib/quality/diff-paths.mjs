@@ -62,3 +62,9 @@ export function headerPath(line) {
   const prefix = side === '---' ? 'a/' : 'b/';
   return path.startsWith(prefix) ? { side, path: path.slice(prefix.length) } : null;
 }
+
+// The paths a list of changed files from GitHub touches (GET /pulls/{n}/files, GET /compare): each file's name, and the
+// old name of a renamed one, once each. A file moved into an allowed path still counts by the path it left.
+export function touchedPaths(files = []) {
+  return [...new Set(files.flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename])))];
+}

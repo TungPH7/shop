@@ -21,6 +21,13 @@ function releaseFlowProblems({ branch, base, title }) {
     const ok = new RegExp(`^Merge main into ${base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} after v\\d+\\.\\d+\\.\\d+$`).test(title);
     return ok ? [] : [`title "${title}": the merge back of main into ${base} is titled "Merge main into ${base} after ${TAG}"`];
   }
+  // The release report of /ao-ship (Pilot 3, spec 2.9): release-notes/vX.Y.Z into release/vX.Y.Z, which merge-gate merges
+  // when it changes only the report and the changelog of that version.
+  const notes = branch.match(/^release-notes\/v(\d+\.\d+\.\d+)$/)?.[1];
+  if (notes && base === `release/v${notes}`) {
+    const expected = `release notes: v${notes}`;
+    return title === expected ? [] : [`title "${title}": the PR of ${branch} into ${base} is titled "${expected}"`];
+  }
   return null;
 }
 

@@ -87,6 +87,13 @@ export function appCredentials(kind, { env = process.env, readFile = readFileSyn
   return { appId: Number(appId), slug, privateKey: key ?? readFile(file, 'utf8') };
 }
 
+// A token or password of yours (JIRA_CI_TOKEN, AO_ENV_AUTH…): your Windows user variable first, then the environment.
+// Claude Code keeps the environment it started with, so after you change a secret its old value stays there until
+// the editor restarts (Pilot 3, T2: AO_ENV_AUTH got 401 everywhere). Off Windows, and in CI, the environment holds it.
+export function userSecret(name, { env = process.env, readUserVariable = userVariable } = {}) {
+  return readUserVariable(name) || env[name] || undefined;
+}
+
 // A user environment variable as Windows stores it (HKCU\Environment); undefined elsewhere or when it is not set.
 export function userVariable(name) {
   if (process.platform !== 'win32') return undefined;

@@ -6,7 +6,7 @@
 import { docsPullRequest, gatePassage } from '../quality/docs-pr.mjs';
 import { docsRule } from '../quality/gates.mjs';
 import { approved, botLogin, protectedPaths } from '../quality/merge-gate.mjs';
-import { openFindings, readReviewReport } from '../quality/pull-request.mjs';
+import { acceptedRisks, findingId, openFindings, readReviewReport, stillBlocking } from '../quality/pull-request.mjs';
 import { parseBranch } from '../tracker/conventions.mjs';
 import { expectedOptions } from '../tracker/expected.mjs';
 import { changesRequestedOn, githubGuards, jiraGuards, qaEnvironment, readChecks, readLatestQaReport } from '../tracker/facts.mjs';
@@ -152,12 +152,14 @@ function checksOf(github, sha) {
   return readChecks({ ...github, get }, sha);
 }
 
-// One PR with its CI, the review reports of the ao-review App and your decision. ctx: { gates, apps, approvers }.
-export async function readPullRequest(github, number, { gates, apps, approvers = [], space }) {
+// One PR with its CI, the review reports of the ao-review App and your decision. ctx: { gates, apps, approvers }; `now`
+// dates the Highs you accept (Pilot 3, spec 2.9 part 5).
+export async function readPullRequest(github, number, { gates, apps, approvers = [], space, now = () => new Date() }) {
   const pr = await github.get(`/pulls/${number}`);
   const head = pr.head.sha;
   const [reviews, files, checks] = [await github.getAll(`/pulls/${number}/reviews`), await github.getAll(`/pulls/${number}/files`), await checksOf(github, head)];
-  const { reports, securityFull } = reviewReports(reviews, { roles: gates.github_apps.review.roles, bot: botLogin(apps.review), head });
+  const on = now().toISOString().slice(0, 10);
+  const { reports, securityFull } = reviewReports(reviews, { roles: gates.github_apps.review.roles, bot: botLogin(apps.review), head, approvers, on });
   // From the newest full security report to the head, for a review of the new part only (spec 2.6).
   const since = reports.security && !reports.security.onHead ? securityFull?.sha : null;
   const compare = since ? await maybe(() => github.get(`/compare/${since}...${head}`)) : null;
@@ -196,8 +198,11 @@ export async function readPullRequest(github, number, { gates, apps, approvers =
 
 // The review reports the ao-review App (`bot`) posted among `reviews` (oldest first): the newest of each role, and the
 // newest full security report, the one without a Scope line, that a review of the new part counts from (spec 2.6).
-// Each is { sha, at, ok, blocking, state, onHead } or null.
-export function reviewReports(reviews, { roles, bot, head }) {
+// Each is { sha, at, ok, blocking, open, ids, state, onHead } or null. With `on`, a High you accept in your approval of
+// the head no longer blocks a report on the head, though it stays open for the next review to check; ids are those of
+// the findings that still block, by which you would accept one (Pilot 3, spec 2.9 part 5).
+export function reviewReports(reviews, { roles, bot, head, approvers = [], on }) {
+  const { accepted } = on ? acceptedRisks(reviews, { approvers, head, on }) : { accepted: new Map() };
   const all = reviews
     .filter((r) => r.user?.login === bot)
     .map((r) => ({ ...readReviewReport(r.body, roles), sha: r.commit_id, at: r.submitted_at, state: r.state }));
@@ -208,7 +213,12 @@ export function reviewReports(reviews, { roles, bot, head }) {
     return openFindings(mine).map((open, i) => [mine[i], open]);
   }));
   const named = (report) => (after.get(report) ?? []).map(({ severity, where, finding }) => ({ severity, where, finding }));
-  const brief = (report) => (report ? { sha: report.sha, at: report.at, ok: report.ok, blocking: named(report).length, open: named(report), state: report.state, onHead: report.sha === head } : null);
+  const brief = (report) => {
+    if (!report) return null;
+    const open = named(report);
+    const still = report.sha === head ? stillBlocking(open, accepted) : open;
+    return { sha: report.sha, at: report.at, ok: report.ok, blocking: still.length, open, ids: still.map(findingId), state: report.state, onHead: report.sha === head };
+  };
   const reports = Object.fromEntries(roles.map((role) => [role, brief(all.filter((report) => report.role === role).at(-1))]));
   return { reports, securityFull: brief(all.filter((report) => report.role === 'security' && !report.scope).at(-1)) };
 }

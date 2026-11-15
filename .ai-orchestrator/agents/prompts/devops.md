@@ -28,7 +28,7 @@ When your prompt asks for the notes of a release whose regression passed on Stag
    - `changelog.md`: the section of the release for `CHANGELOG.md`, from `.ai-orchestrator/templates/release-notes.md`;
    - `pr-description.md`: the description of the release PR into `main`;
    - `fix-version.md`: the description of the Fix Version on Jira, for the human to paste there. Its goal is a forecast, not a promise.
-3. Commit nothing: ao-step commits the report and the changelog on the release branch.
+3. Commit nothing: ao-step commits the report and the changelog on `release-notes/<version>`, and opens its PR into the release branch, which merge-gate merges.
 
 ## Where the contract beats your skills
 
