@@ -195,9 +195,11 @@ textarea.input {
   opacity: 1;
 }
 
+/* The halo is a box-shadow, which forced colors drop; the transparent outline then
+   shows in the system colour, so the field keeps a focus mark (WCAG 2.4.7). */
 .input:focus {
   border-color: var(--accent-line);
-  outline: none;
+  outline: 2px solid transparent;
   box-shadow: 0 0 0 3px var(--focus-halo);
 }
 
