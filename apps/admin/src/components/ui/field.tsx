@@ -132,7 +132,9 @@ function FieldFrame({
   );
 }
 
-interface InputFieldProps extends FieldOwnProps, Omit<ComponentProps<'input'>, 'prefix'> {
+// No field takes className: its look is the one of the design system (UI-008).
+interface InputFieldProps
+  extends FieldOwnProps, Omit<ComponentProps<'input'>, 'className' | 'prefix'> {
   /** Fixed text before the value, such as "/products/" of the slug (S2.7). */
   prefix?: string | undefined;
   /** Fixed text after the value, such as "₫" of a price (S2.9). */
@@ -191,7 +193,7 @@ export function InputField({
   );
 }
 
-type TextAreaFieldProps = FieldOwnProps & ComponentProps<'textarea'>;
+type TextAreaFieldProps = FieldOwnProps & Omit<ComponentProps<'textarea'>, 'className'>;
 
 export function TextAreaField({
   label,
@@ -222,7 +224,8 @@ export function TextAreaField({
   );
 }
 
-type SelectFieldProps = Omit<FieldOwnProps, 'counter'> & ComponentProps<'select'>;
+type SelectFieldProps = Omit<FieldOwnProps, 'counter'> &
+  Omit<ComponentProps<'select'>, 'className'>;
 
 export function SelectField({
   label,

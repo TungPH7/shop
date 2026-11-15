@@ -1,6 +1,6 @@
-import { createRef } from 'react';
+import { type ComponentProps, createRef } from 'react';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 
 import { InputField, SelectField, TextAreaField } from '@/components/ui/field';
 import { renderWithProviders, screen } from '@/testing/render';
@@ -181,5 +181,13 @@ describe('SelectField', () => {
     await user.selectOptions(select, 'price-asc');
 
     expect(select).toHaveValue('price-asc');
+  });
+});
+
+describe('the props of the fields', () => {
+  it('take no className, so the look stays the one of the design system (UI-008)', () => {
+    expectTypeOf<ComponentProps<typeof InputField>>().not.toHaveProperty('className');
+    expectTypeOf<ComponentProps<typeof TextAreaField>>().not.toHaveProperty('className');
+    expectTypeOf<ComponentProps<typeof SelectField>>().not.toHaveProperty('className');
   });
 });
