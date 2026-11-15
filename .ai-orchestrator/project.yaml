@@ -29,6 +29,9 @@ apps:
       default: 3000
     health: /en
     public: true
+    # Test helpers, not code of the app: the changed-lines check skips them (SHOP-38; PR #19 and #20 went red on them).
+    coverage_exclude:
+      - src/testing/**
     hosts:
       development: shop-dev.ao.t2g.io.vn
       staging: shop-staging.ao.t2g.io.vn
@@ -43,6 +46,9 @@ apps:
       default: 5173
     health: /
     public: true
+    # Test helpers, not code of the app: the changed-lines check skips them (SHOP-38; PR #20 went red on setup.ts).
+    coverage_exclude:
+      - src/testing/**
     hosts:
       development: shop-admin-dev.ao.t2g.io.vn
       staging: shop-admin-staging.ao.t2g.io.vn
@@ -71,3 +77,13 @@ roles:
   optional: []
 claude:
   allow: []
+# Lanes (parallel-runs spec, approved at Phiên 32 · Lượt 35): the build and fix of each item run in a worktree of their
+# own next to this folder, shop-wt/<KEY>; three lanes at once, one agent each, while 3 GB of RAM stay free. The lanes get
+# the untracked env files the apps read on this machine.
+runs:
+  worktrees: true
+  lanes_max: 3
+  min_free_ram_gb: 3
+  copy:
+    - apps/api/.env
+    - apps/user/.env.development

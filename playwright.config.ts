@@ -23,7 +23,12 @@ type App = { path: string; dev: string; port: { env: string; default: number }; 
 const config = parse(readFileSync('.ai-orchestrator/project.yaml', 'utf8')) as { apps?: Record<string, App> };
 const apps = Object.entries(config.apps ?? {});
 const open = apps.filter(([, app]) => app.public);
-const localUrl = (app: App) => `http://localhost:${app.port.default}`;
+// A run of ao-step in a lane gets AO_PORT_OFFSET (parallel-runs spec 5.2): every port of the apps it starts moves by it,
+// and so do the localhost URLs one app gives another, so two lanes never meet on a port or test the other's server.
+const OFFSET = Number(process.env.AO_PORT_OFFSET ?? 0) || 0;
+const portOf = (app: App) => app.port.default + OFFSET;
+const shift = (value: string) => (OFFSET ? value.replace(/\b(localhost|127\.0\.0\.1):(\d+)/g, (_, host: string, port: string) => `${host}:${Number(port) + OFFSET}`) : value);
+const localUrl = (app: App) => `http://localhost:${portOf(app)}`;
 const envName = (name: string) => `E2E_${name.toUpperCase().replaceAll('-', '_')}_URL`;
 // The URL of a public app on the environment under test, or undefined when the tests run here.
 const remoteUrl = (name: string, first: boolean) => process.env[envName(name)] || (first ? process.env.E2E_BASE_URL : undefined) || undefined;
@@ -64,6 +69,6 @@ export default defineConfig({
     url: `${localUrl(app)}${app.health}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
-    env: { ...(app.env ?? {}), [app.port.env]: String(app.port.default) },
+    env: { ...Object.fromEntries(Object.entries(app.env ?? {}).map(([name, value]) => [name, shift(value)])), [app.port.env]: String(portOf(app)) },
   })),
 });
