@@ -9,14 +9,11 @@ import { ThemeSwitcher } from '@/components/theme/theme-switcher';
 import { paths } from '@/config/paths';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
-function pillLinkClass({ isActive }: { isActive: boolean }): string {
-  return isActive ? 'pill__link pill__link--active' : 'pill__link';
-}
-
 // App shell, S1.1 of docs/specs/SHOP-7/design.md: three pills. Left, the app name;
 // middle, the main navigation (NavLink sets aria-current="page" on the current
-// link); right, the language and theme switches and the account link. The app name
-// is a link, not the h1: each page owns its single h1.
+// link, and components.css styles that attribute); right, the language and theme
+// switches and the account link. The app name is a link, not the h1: each page
+// owns its single h1.
 // NuqsAdapter is mounted here (inside RouterProvider) so URL-state hooks work.
 // Strings come from the `common` namespace (bundled eagerly → no flash, folder 14).
 export function RootLayout() {
@@ -34,13 +31,13 @@ export function RootLayout() {
           </Link>
 
           <nav className="pill" aria-label={t('nav.label')}>
-            <NavLink className={pillLinkClass} to={paths.home.getHref()} end>
+            <NavLink className="pill__link" to={paths.home.getHref()} end>
               {t('nav.home')}
             </NavLink>
-            <NavLink className={pillLinkClass} to={paths.products.getHref()}>
+            <NavLink className="pill__link" to={paths.products.getHref()}>
               {t('nav.products')}
             </NavLink>
-            <NavLink className={pillLinkClass} to={paths.about.getHref()}>
+            <NavLink className="pill__link" to={paths.about.getHref()}>
               {t('nav.about')}
             </NavLink>
           </nav>
@@ -49,11 +46,11 @@ export function RootLayout() {
             <LanguageSwitcher />
             <ThemeSwitcher />
             {isAuthenticated && user ? (
-              <NavLink className={pillLinkClass} to={paths.profile.getHref()}>
+              <NavLink className="pill__link" to={paths.profile.getHref()}>
                 {user.email}
               </NavLink>
             ) : (
-              <NavLink className={pillLinkClass} to={paths.login.getHref()}>
+              <NavLink className="pill__link" to={paths.login.getHref()}>
                 {t('nav.login')}
               </NavLink>
             )}

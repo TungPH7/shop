@@ -142,7 +142,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.skeleton` | Khung xương | Nền `--surface-2`, nhấp nháy 1,2 s; đặt `border-radius` như phần tử thật; vùng chứa có `aria-busy="true"` |
 | `.visually-hidden` | | Chữ chỉ cho trình đọc màn hình, như nhãn ẩn "Tìm theo tên" |
 | `.shell`, `.shell__bar`, `.shell__main`, `.shell__status` | Khung trang | Rộng tối đa `--app-max`, lề `--gutter` |
-| `.pill`, `.pill--brand`, `.pill__link`, `.pill__link--active`, `.pill__control`, `.pill__select` | Viên thuốc điều hướng (S1.1) | Thanh cao 49,6, bo 999, nền `--surface`; mục cao 39,6, đệm 10 16, chữ 13,5/600; mục đang chọn và hover nền `--surface-2`. Ô chọn ngôn ngữ và giao diện có viền `--control-border` |
+| `.pill`, `.pill--brand`, `.pill__link`, `.pill__control`, `.pill__select` | Viên thuốc điều hướng (S1.1) | Thanh cao 49,6, bo 999, nền `--surface`; mục cao 39,6, đệm 10 16, chữ 13,5/600; mục đang chọn (`aria-current="page"` mà `NavLink` đặt, không có class riêng) và hover nền `--surface-2`. Ô chọn ngôn ngữ và giao diện có viền `--control-border` |
 
 ## App shell (S1.1)
 

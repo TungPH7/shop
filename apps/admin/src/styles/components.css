@@ -417,8 +417,10 @@ textarea.input {
   transition: background-color var(--dur-fast) var(--ease);
 }
 
+/* The current page is the one NavLink marks with aria-current, so the look and the
+   accessibility tree cannot drift apart. */
 .pill__link:hover,
-.pill__link--active {
+.pill__link[aria-current='page'] {
   background: var(--surface-2);
 }
 
