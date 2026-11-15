@@ -29,6 +29,10 @@ apps:
       default: 3000
     health: /en
     public: true
+    # The localhost URLs the apps give each other, here so that a lane moves them by its offset (review of shop PR #21);
+    # the .env files keep the rest.
+    env:
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
     # Test helpers, not code of the app: the changed-lines check skips them (SHOP-38; PR #19 and #20 went red on them).
     coverage_exclude:
       - src/testing/**
@@ -46,6 +50,8 @@ apps:
       default: 5173
     health: /
     public: true
+    env:
+      API_URL: http://localhost:3001
     # Test helpers, not code of the app: the changed-lines check skips them (SHOP-38; PR #20 went red on setup.ts).
     coverage_exclude:
       - src/testing/**
@@ -58,6 +64,8 @@ apps:
     path: apps/api
     profile: spring-boot
     dev: pnpm --filter ./apps/api run dev
+    env:
+      APP_SECURITY_CORS_ALLOWED_ORIGINS: http://localhost:5173,http://localhost:3000
     port:
       env: PORT
       default: 3001
@@ -87,3 +95,13 @@ runs:
   copy:
     - apps/api/.env
     - apps/user/.env.development
+  # Each slot's own Postgres in Docker Compose: project, container, volume, network and port (review of shop PR #21:
+  # every lane shared one). Your database in this folder keeps the defaults.
+  lane_env:
+    ports:
+      DB_PORT: 5432
+      POSTGRES_HOST_PORT: 5432
+    names:
+      COMPOSE_PROJECT_NAME: learn-postgresql-api
+      POSTGRES_CONTAINER_NAME: learn-postgres
+      COMPOSE_NETWORK_NAME: learn-app-network

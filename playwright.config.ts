@@ -23,8 +23,9 @@ type App = { path: string; dev: string; port: { env: string; default: number }; 
 const config = parse(readFileSync('.ai-orchestrator/project.yaml', 'utf8')) as { apps?: Record<string, App> };
 const apps = Object.entries(config.apps ?? {});
 const open = apps.filter(([, app]) => app.public);
-// A run of ao-step in a lane gets AO_PORT_OFFSET (parallel-runs spec 5.2): every port of the apps it starts moves by it,
-// and so do the localhost URLs one app gives another, so two lanes never meet on a port or test the other's server.
+// A run of ao-step in a lane, or next to other runs, gets AO_PORT_OFFSET (parallel-runs spec 5.2): every port of the apps
+// it starts moves by it, and so do the localhost URLs one app gives another. Such a run starts its own apps and uses no
+// server already on its ports, which would be another run's or one you left running (review of shop PR #21).
 const OFFSET = Number(process.env.AO_PORT_OFFSET ?? 0) || 0;
 const portOf = (app: App) => app.port.default + OFFSET;
 const shift = (value: string) => (OFFSET ? value.replace(/\b(localhost|127\.0\.0\.1):(\d+)/g, (_, host: string, port: string) => `${host}:${Number(port) + OFFSET}`) : value);
@@ -49,10 +50,14 @@ function projectsOf(name: string, testDir: string, app: App, remote: string | un
   ];
 }
 
-// On an environment, the apps start here only for the tests tagged @local: no such test, no app to start.
-const onEnvironment = open.some(([name], i) => remoteUrl(name, i === 0) !== undefined);
+// On an environment, the apps start here only for the tests tagged @local: no such test, no app to start. Every public
+// app needs its URL for that; with only some, every app starts here as before, so no project points at a port where
+// nothing runs (review of shop PR #10).
+const onEnvironment = open.length > 0 && open.every(([name], i) => remoteUrl(name, i === 0) !== undefined);
 const specs = (dir: string) => (existsSync(dir) ? readdirSync(dir, { recursive: true, encoding: 'utf8' }).filter((path) => /\.spec\.[cm]?[jt]sx?$/.test(path)).map((path) => join(dir, path)) : []);
-const localTests = [...open.map(([, app]) => `${app.path}/e2e`), 'e2e'].flatMap(specs).some((file) => readFileSync(file, 'utf8').includes('@local'));
+// @local as a tag, in a title or in tag: '@local'; not in an address such as user@localhost (review of shop PR #10).
+const LOCAL_TAG = /(^|[\s'"`[,(])@local\b/m;
+const localTests = [...open.map(([, app]) => `${app.path}/e2e`), 'e2e'].flatMap(specs).some((file) => LOCAL_TAG.test(readFileSync(file, 'utf8')));
 
 const projects: Project[] = open.flatMap(([name, app], i) => projectsOf(name, `${app.path}/e2e`, app, remoteUrl(name, i === 0)));
 if (open.length > 0) projects.push(...projectsOf('shared', 'e2e', open[0][1], remoteUrl(open[0][0], true)));
@@ -67,7 +72,7 @@ export default defineConfig({
   webServer: (onEnvironment && !localTests ? [] : apps).map(([, app]) => ({
     command: app.dev,
     url: `${localUrl(app)}${app.health}`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !process.env.CI && process.env.AO_PORT_OFFSET === undefined,
     timeout: 120_000,
     env: { ...Object.fromEntries(Object.entries(app.env ?? {}).map(([name, value]) => [name, shift(value)])), [app.port.env]: String(portOf(app)) },
   })),
