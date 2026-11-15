@@ -62,10 +62,11 @@ textarea {
   outline-offset: 2px;
 }
 
+/* The page inside the frame of SHOP-11 (.site-shell, components.css), which owns the side margin (--gutter). */
 main {
   max-width: 48rem;
   margin: 0 auto;
-  padding: 2rem 1rem;
+  padding: var(--space-7) 0;
 }
 
 /* Folder 14 — seam S1 (Redux): mật độ danh sách = client-UI state. `DensityScope` áp `data-density`. */

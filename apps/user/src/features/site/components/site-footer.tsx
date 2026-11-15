@@ -21,7 +21,7 @@ export function SiteFooter({ year }: SiteFooterProps) {
   const notice = buildCopyrightNotice({ name: siteConfig.name }, year);
 
   return (
-    <footer>
+    <footer className="site-footer">
       <small>{notice}</small>
     </footer>
   );
