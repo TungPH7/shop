@@ -1,0 +1,189 @@
+/* Design tokens of admin: the Design System table of docs/specs/SHOP-7/design.md,
+   documented in docs/design-system/admin.md. Plain CSS variables (plan, decision 14).
+
+   Theme: light by default, dark when the system asks for it, and data-theme on <html>
+   (set by the theme switch, see src/stores/theme/apply-theme.ts) overrides both.
+   Colour tokens use light-dark(light, dark), which follows `color-scheme`; the two
+   shadow tokens are not colours, so they switch in the blocks at the end. */
+
+:root {
+  color-scheme: light dark;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+:root {
+  /* --- Colour --------------------------------------------------------------- */
+  --bg: light-dark(#f2f4f8, #111113);
+  --bg-from: light-dark(#eef1f6, #0c0c0e);
+  --bg-to: light-dark(#f6f8fb, #131316);
+  --surface: light-dark(#ffffffb8, #1e1e226b);
+  --solid: light-dark(#ffffff, #1d1d21);
+  --dialog: light-dark(#fffffff0, #1c1c20db);
+  --text: light-dark(#0f1724, #f6f8fc);
+  --muted: light-dark(#3b475a, #c9d1de);
+  --hint: light-dark(#556074, #9aa1ad);
+  --control-border: light-dark(#667184, #7d8696);
+  --line: light-dark(#0f17241a, #ffffff1a);
+  --line-2: light-dark(#0f17242e, #ffffff2e);
+  --surface-2: light-dark(#0f17240d, #ffffff14);
+  --well: light-dark(#0f17240d, #c8c8d71a);
+  --accent: light-dark(#2b63c4, #7aaef0);
+  --on-accent: light-dark(#ffffff, #071a33);
+  --accent-text: light-dark(#1a56b0, #a9cdfc);
+  --accent-line: light-dark(#2a5db8, #8dbcf6);
+
+  /* Status: -text for words, -fill for dots and tinted backgrounds. */
+  --good-text: light-dark(#166534, #8fdca8);
+  --good-fill: light-dark(#2f9e5b, #5fc483);
+  --bad-text: light-dark(#b42318, #f6a59c);
+  --bad-fill: light-dark(#d4493c, #e98278);
+  --warn-text: light-dark(#8a5300, #f3cd7e);
+  --warn-fill: light-dark(#c98a08, #e4b759);
+  --info-text: light-dark(#1a56b0, #a9cdfc);
+  --info-fill: light-dark(#2b63c4, #7aaef0);
+  --destructive: light-dark(#b42318, #e98278);
+  --on-destructive: light-dark(#ffffff, #1a0a08);
+
+  /* Tinted backgrounds of badges and banners: the fill at 14% (light) or 16% (dark). */
+  --good-tint: light-dark(
+    color-mix(in srgb, #2f9e5b 14%, transparent),
+    color-mix(in srgb, #5fc483 16%, transparent)
+  );
+  --bad-tint: light-dark(
+    color-mix(in srgb, #d4493c 14%, transparent),
+    color-mix(in srgb, #e98278 16%, transparent)
+  );
+  --warn-tint: light-dark(
+    color-mix(in srgb, #c98a08 14%, transparent),
+    color-mix(in srgb, #e4b759 16%, transparent)
+  );
+  --info-tint: light-dark(
+    color-mix(in srgb, #2b63c4 14%, transparent),
+    color-mix(in srgb, #7aaef0 16%, transparent)
+  );
+  --focus-halo: color-mix(in srgb, var(--accent) 18%, transparent);
+
+  /* Group colours of the placeholder tile: the same in both themes. */
+  --group-blue-from: #354a6a;
+  --group-blue-to: #283953;
+  --group-blue-text: #eef4fd;
+  --group-coral-from: #6a423d;
+  --group-coral-to: #52322e;
+  --group-coral-text: #fdeeeb;
+  --group-green-from: #375741;
+  --group-green-to: #29432f;
+  --group-green-text: #eef9f1;
+  --group-orange-from: #66503a;
+  --group-orange-to: #4e3d2b;
+  --group-orange-text: #fdf3e6;
+  --group-teal-from: #31574f;
+  --group-teal-to: #24433d;
+  --group-teal-text: #ecf8f5;
+  --group-ink-from: #3b3e46;
+  --group-ink-to: #2c2e34;
+  --group-ink-text: #f1f2f5;
+
+  /* --- Type ----------------------------------------------------------------- */
+  --font:
+    'Be Vietnam Pro', 'Be Vietnam Pro Fallback', ui-sans-serif, system-ui, -apple-system,
+    'Segoe UI', sans-serif;
+  --fs-2xs: 11px;
+  --fs-xs: 12px;
+  --fs-sm: 12.5px;
+  --fs-md: 13.5px;
+  --fs-base: 14px;
+  --fs-lg: 15px;
+  --fs-xl: 17px;
+  --fs-2xl: 20px;
+  --fs-3xl: 22px;
+  --fs-4xl: 26px;
+  --fs-display: 34px;
+  --lh-base: 20.3px;
+  --fw-regular: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* --- Space ---------------------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-2-5: 10px;
+  --space-3: 12px;
+  --space-3-5: 14px;
+  --space-4: 16px;
+  --space-4-5: 18px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --gap: 16px;
+  --gutter: clamp(16px, 1.6vw, 28px);
+  --app-max: 1840px;
+
+  /* --- Radius --------------------------------------------------------------- */
+  --r-card: 26px;
+  --r-tile: 22px;
+  --r-dialog: 30px;
+  --r-field: 14px;
+  --r-thumb: 12px;
+  --r-ctl: 999px;
+
+  /* --- Glass ---------------------------------------------------------------- */
+  --blur: 14px;
+  --sat: 175%;
+  --blur-thick: 30px;
+
+  /* --- Motion --------------------------------------------------------------- */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --dur-fast: 150ms;
+  --dur: 200ms;
+  --dur-slow: 250ms;
+
+  /* --- Shadow (light; dark below) ------------------------------------------ */
+  --card-shadow: inset 0 1px 1px #ffffffcc, 0 1px 2px #0f17240f, 0 18px 40px -22px #0f172447;
+  --button-shadow: 0 6px 16px -8px #2b63c499;
+}
+
+:root[data-theme='dark'] {
+  --card-shadow:
+    inset 0 1px 1px #ffffff4d, inset 0 -1px 1px #ffffff1a, inset 3px 4px 12px -6px #ffffff38,
+    inset -4px -6px 14px -8px #ffffff1f, inset 0 -16px 28px -18px #00000073, 0 1px 2px #0000004d,
+    0 24px 48px -22px #000000bf;
+  --button-shadow: inset 0 1px 0 #ffffff47, inset 0 -1px 0 #0000001f, 0 6px 16px -6px #7aaef0a6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --card-shadow:
+      inset 0 1px 1px #ffffff4d, inset 0 -1px 1px #ffffff1a, inset 3px 4px 12px -6px #ffffff38,
+      inset -4px -6px 14px -8px #ffffff1f, inset 0 -16px 28px -18px #00000073, 0 1px 2px #0000004d,
+      0 24px 48px -22px #000000bf;
+    --button-shadow: inset 0 1px 0 #ffffff47, inset 0 -1px 0 #0000001f, 0 6px 16px -6px #7aaef0a6;
+  }
+}
+
+/* Motion off for people who ask for less. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0ms;
+    --dur: 0ms;
+    --dur-slow: 0ms;
+  }
+}
+
+/* Fallback font with the metrics of Be Vietnam Pro, so the swap does not move the
+   layout (NFR5). Values from the capsize metrics next/font uses for the same font
+   (the user app gets the same ones): Arial, size-adjust 110.36%, ascent 90.61%,
+   descent 24.01%, line gap 0. Liberation Sans has the metrics of Arial on Linux. */
+@font-face {
+  font-family: 'Be Vietnam Pro Fallback';
+  src: local('Arial'), local('ArialMT'), local('Liberation Sans');
+  size-adjust: 110.36%;
+  ascent-override: 90.61%;
+  descent-override: 24.01%;
+  line-gap-override: 0%;
+}

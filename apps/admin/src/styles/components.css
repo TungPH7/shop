@@ -1,0 +1,460 @@
+/* Shared classes of admin, built only from the tokens of tokens.css. Each class is
+   listed in docs/design-system/admin.md with the block of design.md that uses it.
+   Components with behaviour (Field, SegmentedControl, Dialog, Toast…) come in SHOP-9. */
+
+/* --- Utilities -------------------------------------------------------------- */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* --- Glass card --------------------------------------------------------------- */
+
+.card {
+  padding: var(--space-4-5);
+  border-radius: var(--r-card);
+  background: var(--surface);
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  box-shadow: var(--card-shadow);
+}
+
+/* --- Buttons ------------------------------------------------------------------ */
+
+.btn {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: center;
+  height: 42px;
+  padding: 0 var(--space-4-5);
+  border: 1px solid transparent;
+  border-radius: var(--r-ctl);
+  font: var(--fw-semibold) var(--fs-md) / 19.6px var(--font);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--dur-fast) var(--ease),
+    transform var(--dur-fast) var(--ease);
+}
+
+.btn:active:not(:disabled, [aria-disabled='true']) {
+  transform: translateY(1px);
+}
+
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  color: var(--on-accent);
+  background: var(--accent);
+  box-shadow: var(--button-shadow);
+}
+
+.btn--primary:hover:not(:disabled, [aria-disabled='true']) {
+  background: color-mix(in srgb, var(--accent), #ffffff 6%);
+}
+
+.btn--secondary {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--line-2);
+}
+
+.btn--secondary:hover:not(:disabled, [aria-disabled='true']) {
+  background: var(--line-2);
+}
+
+.btn--danger {
+  color: var(--on-destructive);
+  background: var(--destructive);
+  box-shadow: var(--button-shadow);
+}
+
+.btn--danger:hover:not(:disabled, [aria-disabled='true']) {
+  background: color-mix(in srgb, var(--destructive), #ffffff 6%);
+}
+
+/* Small: in lists and table rows (S1.7, S1.8, S1.11). */
+.btn--sm {
+  height: 34px;
+  padding: 0 var(--space-3-5);
+  font-size: var(--fs-sm);
+  line-height: 18.1px;
+}
+
+/* Words in the bad colour, as the Delete button of a row (S1.8). */
+.btn--bad-text {
+  color: var(--bad-text);
+}
+
+/* --- Status badge ------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  height: 24px;
+  padding: var(--space-1) var(--space-2-5);
+  border-radius: var(--r-ctl);
+  font: var(--fw-semibold) var(--fs-xs) / 1 var(--font);
+  white-space: nowrap;
+}
+
+.badge::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--badge-dot, currentcolor);
+  content: '';
+}
+
+.badge--info {
+  --badge-dot: var(--info-fill);
+
+  color: var(--info-text);
+  background: var(--info-tint);
+}
+
+.badge--neutral {
+  --badge-dot: var(--muted);
+
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.badge--good {
+  --badge-dot: var(--good-fill);
+
+  color: var(--good-text);
+  background: var(--good-tint);
+}
+
+.badge--warn {
+  --badge-dot: var(--warn-fill);
+
+  color: var(--warn-text);
+  background: var(--warn-tint);
+}
+
+.badge--bad {
+  --badge-dot: var(--bad-fill);
+
+  color: var(--bad-text);
+  background: var(--bad-tint);
+}
+
+/* --- Field: label, input, text area, select, search --------------------------- */
+
+.label {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--text);
+  font: var(--fw-regular) var(--fs-base) / var(--lh-base) var(--font);
+}
+
+.label__required {
+  margin-left: 2px;
+  color: var(--bad-text);
+}
+
+.input {
+  display: block;
+  width: 100%;
+  height: 44px;
+  padding: var(--space-2-5) var(--space-3-5);
+  color: var(--text);
+  font: var(--fw-regular) var(--fs-base) / var(--lh-base) var(--font);
+  background: var(--surface-2);
+  border: 1px solid var(--control-border);
+  border-radius: var(--r-field);
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+
+textarea.input {
+  height: auto;
+  min-height: 144px;
+  resize: vertical;
+}
+
+.input::placeholder {
+  color: var(--hint);
+  opacity: 1;
+}
+
+.input:focus {
+  border-color: var(--accent-line);
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-halo);
+}
+
+.input[aria-invalid='true'] {
+  border-color: var(--bad-text);
+}
+
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* iOS zooms the page on a field under 16 px. */
+@media (width < 768px) {
+  .input {
+    font-size: 16px;
+  }
+}
+
+.field-hint {
+  margin-top: var(--space-1);
+  color: var(--hint);
+  font: var(--fw-regular) var(--fs-sm) / 18.1px var(--font);
+}
+
+.field-error {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-top: var(--space-1);
+  color: var(--bad-text);
+  font: var(--fw-regular) var(--fs-sm) / 18.1px var(--font);
+}
+
+/* Search pill (S1.5): <div class="search"><svg class="search__icon" aria-hidden="true">
+   <input class="input search__input" type="search"></div> */
+.search {
+  position: relative;
+}
+
+.search__icon {
+  position: absolute;
+  top: 50%;
+  left: var(--space-3-5);
+  width: 16px;
+  height: 16px;
+  color: var(--hint);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.search__input {
+  padding-left: 40px;
+  border-radius: var(--r-ctl);
+}
+
+/* --- Table -------------------------------------------------------------------- */
+
+/* Scrolls sideways inside its card under 1024 px (S1.6); give it tabindex=0 and a label. */
+.table-wrap {
+  overflow-x: auto;
+}
+
+.table-wrap:focus-visible {
+  border-radius: var(--r-field);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font: var(--fw-regular) var(--fs-base) / var(--lh-base) var(--font);
+}
+
+.table th {
+  padding: var(--space-2-5) var(--space-3);
+  color: var(--muted);
+  font: var(--fw-semibold) var(--fs-xs) / 17.4px var(--font);
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+
+.table td {
+  height: 64px;
+  padding: var(--space-3);
+  vertical-align: middle;
+  border-bottom: 1px solid var(--line);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody tr {
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.table tbody tr:hover {
+  background: var(--surface-2);
+}
+
+.table .table__num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.table .table__actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+/* --- Banner ------------------------------------------------------------------- */
+
+/* Error: role=alert; warning: role=status (S2.5, S2.7). */
+.banner {
+  display: flex;
+  gap: var(--space-2-5);
+  align-items: flex-start;
+  padding: var(--space-3) var(--space-3-5);
+  color: var(--text);
+  font: var(--fw-regular) var(--fs-base) / var(--lh-base) var(--font);
+  border-radius: var(--r-field);
+}
+
+.banner--error {
+  --banner-icon: var(--bad-text);
+
+  background: var(--bad-tint);
+}
+
+.banner--warn {
+  --banner-icon: var(--warn-text);
+
+  background: var(--warn-tint);
+}
+
+.banner__icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--banner-icon);
+}
+
+/* --- Skeleton ----------------------------------------------------------------- */
+
+/* Give the container aria-busy=true; set border-radius like the real element. */
+.skeleton {
+  display: block;
+  min-height: 1em;
+  background: var(--surface-2);
+  border-radius: var(--r-field);
+  animation: skeleton-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* --- App shell, S1.1 ---------------------------------------------------------- */
+
+.shell {
+  max-width: var(--app-max);
+  margin: 0 auto;
+  padding: var(--space-4-5) var(--gutter) var(--space-7);
+}
+
+.shell__bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shell__status {
+  margin: var(--space-3) 0 0;
+  color: var(--hint);
+}
+
+.shell__main {
+  padding-top: var(--space-7);
+}
+
+/* A pill bar: the app name, the navigation, the tools. */
+.pill {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  min-height: 49.6px;
+  padding: 5px;
+  border-radius: var(--r-ctl);
+  background: var(--surface);
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  box-shadow: var(--card-shadow);
+}
+
+.pill--brand {
+  padding: 0 var(--space-6);
+  color: var(--text);
+  font: var(--fw-bold) var(--fs-lg) / 1 var(--font);
+  text-decoration: none;
+}
+
+.pill__link {
+  display: inline-flex;
+  align-items: center;
+  height: 39.6px;
+  padding: var(--space-2-5) var(--space-4);
+  color: var(--text);
+  font: var(--fw-semibold) var(--fs-md) / 19.6px var(--font);
+  text-decoration: none;
+  border-radius: var(--r-ctl);
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.pill__link:hover,
+.pill__link--active {
+  background: var(--surface-2);
+}
+
+.pill__control {
+  display: inline-flex;
+}
+
+.pill__select {
+  height: 39.6px;
+  padding: 0 var(--space-3);
+  color: var(--text);
+  font: var(--fw-semibold) var(--fs-md) / 19.6px var(--font);
+  background: var(--surface-2);
+  border: 1px solid var(--control-border);
+  border-radius: var(--r-ctl);
+  cursor: pointer;
+}
+
+/* --- Glass fallbacks ---------------------------------------------------------- */
+
+/* No backdrop-filter, or the person asks for less transparency: solid surfaces. */
+@supports not (backdrop-filter: blur(1px)) {
+  .card,
+  .pill {
+    background: var(--solid);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .card,
+  .pill {
+    background: var(--solid);
+    backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+}
