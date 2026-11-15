@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -57,12 +57,25 @@ function CloseIcon() {
   );
 }
 
+// Where focus goes when a toast is dismissed with the keyboard, rather than to <body>
+// with the removed button (WCAG 2.4.3): the close button of the next toast, or of the
+// one before, or back where focus was before it entered the toasts.
+function focusAfterDismiss(button: HTMLElement, origin: HTMLElement | null) {
+  const toast = button.closest('.toast');
+  const neighbour = (
+    toast?.nextElementSibling ?? toast?.previousElementSibling
+  )?.querySelector<HTMLElement>('.toast__close');
+  return neighbour ?? (origin?.isConnected ? origin : null);
+}
+
 export function Notifications() {
   const { t } = useTranslation('common', { useSuspense: false });
   const notifications = useNotifications();
   const [isHovered, setIsHovered] = useState(false);
   const [hasFocus, setHasFocus] = useState(false);
   const isPaused = isHovered || hasFocus;
+  // Where focus was before it entered the toasts, to give it back.
+  const focusOriginRef = useRef<HTMLElement | null>(null);
 
   // Sync the countdowns of the store with the pointer and focus.
   useEffect(() => {
@@ -84,7 +97,11 @@ export function Notifications() {
       onMouseLeave={() => {
         setIsHovered(false);
       }}
-      onFocus={() => {
+      onFocus={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          focusOriginRef.current =
+            event.relatedTarget instanceof HTMLElement ? event.relatedTarget : null;
+        }
         setHasFocus(true);
       }}
       onBlur={(event) => {
@@ -104,13 +121,19 @@ export function Notifications() {
             type="button"
             className="toast__close"
             aria-label={t('notifications.dismiss')}
-            onClick={() => {
+            onClick={(event) => {
+              // A click from Enter or Space has no pointer position (detail 0).
+              const target =
+                event.detail === 0
+                  ? focusAfterDismiss(event.currentTarget, focusOriginRef.current)
+                  : null;
+              target?.focus();
               dismiss(notification.id);
               // The focused button is gone and browsers send no blur for that. The
               // stack sits at the bottom, so the toasts left drop down and the pointer
               // may be outside them with no mouseleave: count again until the next
               // mouseover.
-              setHasFocus(false);
+              if (!event.currentTarget.closest('.toasts')?.contains(target)) setHasFocus(false);
               setIsHovered(false);
             }}
           >

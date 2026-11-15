@@ -119,7 +119,7 @@ describe('Notifications', () => {
     expect(screen.queryByText('Product saved')).not.toBeInTheDocument();
   });
 
-  it('starts counting again once the focused toast is dismissed', () => {
+  it('starts counting again once the focused toast is dismissed with the mouse', () => {
     vi.useFakeTimers();
     renderWithProviders(<Notifications />);
     act(() => {
@@ -132,7 +132,7 @@ describe('Notifications', () => {
     act(() => {
       first.focus();
     });
-    fireEvent.click(first);
+    fireEvent.click(first, { detail: 1 });
     act(() => {
       vi.advanceTimersByTime(6000);
     });
@@ -179,5 +179,60 @@ describe('Notifications', () => {
     });
 
     expect(screen.getByText('Second')).toBeInTheDocument();
+  });
+
+  it('moves focus to the next toast when one is dismissed with the keyboard', async () => {
+    const { user } = renderWithProviders(<Notifications />);
+    act(() => {
+      notify.success('First');
+      notify.success('Second');
+      notify.success('Third');
+    });
+    const [, second, third] = screen.getAllByRole('button', { name: 'Dismiss notification' });
+
+    act(() => {
+      second?.focus();
+    });
+    await user.keyboard('{Enter}');
+
+    expect(screen.queryByText('Second')).not.toBeInTheDocument();
+    expect(third).toHaveFocus();
+  });
+
+  it('moves focus to the toast before when the last one is dismissed with the keyboard', async () => {
+    const { user } = renderWithProviders(<Notifications />);
+    act(() => {
+      notify.success('First');
+      notify.success('Second');
+    });
+    const [first, second] = screen.getAllByRole('button', { name: 'Dismiss notification' });
+
+    act(() => {
+      second?.focus();
+    });
+    await user.keyboard(' ');
+
+    expect(screen.queryByText('Second')).not.toBeInTheDocument();
+    expect(first).toHaveFocus();
+  });
+
+  it('gives focus back to where it came from when the only toast is dismissed with the keyboard', async () => {
+    const { user } = renderWithProviders(
+      <>
+        <button type="button">Save</button>
+        <Notifications />
+      </>,
+    );
+    act(() => {
+      notify.success('Product saved');
+    });
+
+    await user.tab();
+    await user.tab();
+    expect(screen.getByRole('button', { name: 'Dismiss notification' })).toHaveFocus();
+    await user.keyboard('{Enter}');
+
+    expect(screen.queryByText('Product saved')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveFocus();
   });
 });
