@@ -10,9 +10,10 @@ SEO, theme, test và CI — thay vì `create-next-app` rồi tự lắp lại t�
 **chứng minh từng mảnh chạy thật**, không phải để làm sản phẩm.
 
 **Trạng thái hiện tại:** Phase 1.1 ✅ **hoàn tất** (folder 00–25) — phần lõi server-first.
-Phase 1.2 (lớp UI adapter: UI contract `@ui`, shadcn/Antd, Storybook) **chưa làm** → giao diện hiện tại
-là HTML + CSS variables thuần, **cố ý chưa có UI library**. Đừng kỳ vọng một giao diện đẹp: giá trị của
-repo nằm ở kiến trúc bên dưới.
+Giao diện là HTML + CSS variables và CSS thường, **không Tailwind hay thư viện UI** (plan SHOP-7, mục 14,
+NFR13): token, font Be Vietnam Pro và class dùng chung ở `src/styles/`, mô tả ở
+[docs/design-system/user.md](../../docs/design-system/user.md). Lớp UI adapter của lộ trình cũ (UI contract
+`@ui`, shadcn/Antd, Storybook) không làm nữa.
 
 |                 |                                                                                                          |
 | --------------- | -------------------------------------------------------------------------------------------------------- |
@@ -49,7 +50,7 @@ repo nằm ở kiến trúc bên dưới.
 | Auth                      | Tự xây: **jose** (JWE) + cookie `__Host-session` httpOnly + RBAC từ backend                                           |
 | Form                      | **react-hook-form** + `zodResolver` · Server Actions                                                                  |
 | i18n                      | **next-intl 4** (`/en`, `/vi`) — key type-safe                                                                        |
-| Theme                     | **next-themes** + design tokens CSS variables (light/dark/system)                                                     |
+| Theme                     | **next-themes** + design tokens CSS variables (light/dark/system); font Be Vietnam Pro qua `next/font`                |
 | Quan sát                  | logger (**pino** ở server) · monitoring seam · analytics seam · `instrumentation.ts`                                  |
 | Test                      | **Vitest 4** + RTL (unit/integration) · **Playwright 1.61** + axe (E2E) · **MSW**                                     |
 | Chất lượng                | ESLint 9 (flat, type-aware) · Prettier · Husky + lint-staged + commitlint · GitHub Actions                            |
@@ -201,11 +202,11 @@ Dừng server: bấm **Ctrl + C** trong cửa sổ terminal.
 Toàn bộ env được **validate bằng Zod** ở `src/config/env/` → thiếu hoặc sai là `dev`/`build` **chết ngay
 lập tức** kèm thông báo rõ, thay vì lỗi mơ hồ lúc chạy.
 
-| Biến                   | Phạm vi    | Ý nghĩa                                                                                        |
-| ---------------------- | ---------- | ---------------------------------------------------------------------------------------------- |
-| `API_URL`              | **server** | URL backend cho DAL. Không lộ ra trình duyệt → nơi đặt URL nội bộ.                             |
+| Biến                   | Phạm vi    | Ý nghĩa                                                                                                                           |
+| ---------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `API_URL`              | **server** | URL backend cho DAL. Không lộ ra trình duyệt → nơi đặt URL nội bộ.                                                                |
 | `NEXT_PUBLIC_SITE_URL` | public     | Origin công khai của chính site (không có `/` cuối) — nguồn cho canonical/hreflang/sitemap/OG. Mặc định là origin của Production. |
-| `AUTH_SECRET`          | **server** | Khoá niêm phong (mã hoá JWE) cookie phiên đăng nhập. **Tối thiểu 32 ký tự.**                   |
+| `AUTH_SECRET`          | **server** | Khoá niêm phong (mã hoá JWE) cookie phiên đăng nhập. **Tối thiểu 32 ký tự.**                                                      |
 
 **Next.js nạp file nào?**
 
@@ -466,8 +467,9 @@ README này cố tình **ngắn**. Chi tiết nằm ở:
 | [`study-guide-impl/build-project/<01–25>/`](study-guide-impl/build-project/)                               | "Vì sao" của từng quyết định, theo đúng thứ tự đã build                          |
 | [`.env.example`](.env.example)                                                                             | Template env — liệt kê mọi biến kèm giải thích                                   |
 
-**Lộ trình tiếp theo:** Phase 1.2 (folder 26–32) — lớp UI adapter: UI contract `@ui`, adapter headless/Antd
-chứng minh swap được, Storybook. Và wire CD thật khi chốt hosting.
+**Lộ trình tiếp theo:** các màn hình của Epic SHOP-7 (danh mục sản phẩm), dựng trên design system CSS thường
+([docs/design-system/user.md](../../docs/design-system/user.md)). Lớp UI adapter của Phase 1.2 cũ (UI contract
+`@ui`, adapter headless/Antd, Storybook) đã bỏ theo plan SHOP-7, mục 14. Và wire CD thật khi chốt hosting.
 
 ---
 

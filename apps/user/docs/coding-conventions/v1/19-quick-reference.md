@@ -18,6 +18,7 @@
 | Endpoint cho client / webhook                         | `src/app/api/<path>/route.ts`                   | §06      |
 | Chuỗi hiển thị                                        | `messages/{en,vi}.json`                         | §11      |
 | Màu / spacing                                         | `src/styles/tokens.css` (semantic token)        | §12      |
+| Class dùng chung (nút, huy hiệu, thẻ, ô nhập…)        | `src/styles/components.css`                     | §12.6    |
 
 ## 19.2 "Dùng cái gì?"
 
@@ -88,6 +89,7 @@ pnpm analyze             # bundle
 - [ ] Server Action đủ **4 bước**: validate → re-authz → delegate → invalidate
 - [ ] Dữ liệu từ ngoài đều qua Zod; DTO **tối thiểu**, không lộ field thừa
 - [ ] Không có `any`, không `console.*`, không hardcode màu, không barrel file
+- [ ] Màu, chữ, khoảng cách lấy từ token; class của `components.css` trước CSS mới (§12.6)
 - [ ] Không thêm `useMemo`/`useCallback` tay khi chưa đo (React Compiler lo)
 - [ ] Rule kiến trúc thay đổi → tài liệu convention cập nhật **trong cùng PR**
 
