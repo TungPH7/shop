@@ -76,7 +76,9 @@ export function Notifications() {
       className="toasts"
       aria-label={t('notifications.label')}
       aria-live="polite"
-      onMouseEnter={() => {
+      // mouseover, not mouseenter: it fires again on the next move over a toast after
+      // a dismissal has cleared isHovered below.
+      onMouseOver={() => {
         setIsHovered(true);
       }}
       onMouseLeave={() => {
@@ -104,10 +106,12 @@ export function Notifications() {
             aria-label={t('notifications.dismiss')}
             onClick={() => {
               dismiss(notification.id);
-              // The focused button is gone and browsers send no blur for that; the
-              // pointer may have left with the last toast.
+              // The focused button is gone and browsers send no blur for that. The
+              // stack sits at the bottom, so the toasts left drop down and the pointer
+              // may be outside them with no mouseleave: count again until the next
+              // mouseover.
               setHasFocus(false);
-              if (notifications.length === 1) setIsHovered(false);
+              setIsHovered(false);
             }}
           >
             <CloseIcon />

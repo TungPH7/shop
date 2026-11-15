@@ -229,7 +229,7 @@ Một kiểu vẽ, hai hành vi. Cả hai được điều khiển: nơi gọi g
 Gọi `notify.success('Đã xóa sản phẩm')` (hay `error`, `info`) từ bất cứ đâu; `<Notifications>` ở `app/provider.tsx` vẽ chúng (S1.12).
 
 - Xếp chồng ở đáy giữa màn hình. Mỗi toast có biểu tượng theo loại, chữ và nút đóng ("Đóng thông báo").
-- Mỗi toast ở lại 6 s, mọi loại như nhau. Rê chuột lên các toast hay đưa focus vào chúng thì mọi bộ đếm dừng, và chạy tiếp phần còn lại khi rời đi (`pauseTimers`, `resumeTimers` của store). Toast thêm lúc đang dừng chỉ bắt đầu đếm khi chạy tiếp.
+- Mỗi toast ở lại 6 s, mọi loại như nhau. Rê chuột lên các toast hay đưa focus vào chúng thì mọi bộ đếm dừng, và chạy tiếp phần còn lại khi rời đi (`pauseTimers`, `resumeTimers` của store). Toast thêm lúc đang dừng chỉ bắt đầu đếm khi chạy tiếp. Đóng một toast thì bộ đếm chạy lại tới lần rê chuột kế tiếp: các toast còn lại tụt xuống, và trình duyệt có thể không báo con trỏ đã rời đi.
 - Vùng `<section aria-label="Thông báo" aria-live="polite">` luôn có, kể cả khi rỗng. Lỗi là `role="alert"`, thành công và thông tin là `role="status"`.
 - `useTranslation` của nó không suspend, vì nó nằm ngoài mọi `<Suspense>`.
 

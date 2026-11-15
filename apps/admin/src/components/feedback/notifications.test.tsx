@@ -139,4 +139,45 @@ describe('Notifications', () => {
 
     expect(screen.queryByText('Second')).not.toBeInTheDocument();
   });
+
+  // The stack sits at the bottom, so closing the top toast with the mouse drops the
+  // others under the pointer, and the browser may send no mouseleave for that.
+  it('counts again after a toast is closed with the mouse, even with others left', () => {
+    vi.useFakeTimers();
+    renderWithProviders(<Notifications />);
+    act(() => {
+      notify.success('First');
+      notify.success('Second');
+    });
+    const [first] = screen.getAllByRole('button', { name: 'Dismiss notification' });
+    if (first === undefined) throw new Error('no dismiss button');
+
+    fireEvent.mouseEnter(first);
+    fireEvent.click(first, { detail: 1 });
+    act(() => {
+      vi.advanceTimersByTime(6000);
+    });
+
+    expect(screen.queryByText('Second')).not.toBeInTheDocument();
+  });
+
+  it('stops again when the pointer moves over a toast that is left', () => {
+    vi.useFakeTimers();
+    renderWithProviders(<Notifications />);
+    act(() => {
+      notify.success('First');
+      notify.success('Second');
+    });
+    const [first] = screen.getAllByRole('button', { name: 'Dismiss notification' });
+    if (first === undefined) throw new Error('no dismiss button');
+
+    fireEvent.mouseEnter(first);
+    fireEvent.click(first, { detail: 1 });
+    fireEvent.mouseOver(screen.getByText('Second'));
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+
+    expect(screen.getByText('Second')).toBeInTheDocument();
+  });
 });
