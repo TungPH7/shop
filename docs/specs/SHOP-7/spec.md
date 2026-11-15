@@ -67,7 +67,7 @@ Các trường của một sản phẩm, theo chuẩn ngành (Shopify, Google Me
 
 **Phân trang:** khách xem 24 sản phẩm mỗi lần, với nút "Xem thêm" thay cho số trang. `admin` có số trang, 20 sản phẩm mỗi trang, mới nhất trước.
 
-**Độ trễ:** một thay đổi lưu ở `admin` hiện ở trang của khách, gồm danh sách, trang chi tiết và sitemap, trong vòng 60 giây. `admin` và `user` là hai app riêng, và `user` đang cache danh sách theo giờ, nên `sa` chọn cách đạt mốc này, như cache ngắn hay báo `user` làm mới.
+**Độ trễ:** một thay đổi lưu ở `admin` hiện ở trang của khách, gồm danh sách, trang chi tiết và sitemap, trong vòng 60 giây. `admin` và `user` là hai app riêng, và `user` đang cache danh sách theo giờ, nên `sa` đã chọn cách đạt mốc này: cache ngắn ở `user` (NFR7).
 
 **Sản phẩm có từ trước Epic này:** cột giá cũ là `NUMERIC(12,2)` ghi là USD, và cho phép giá 0. Khi nâng database:
 
@@ -147,12 +147,71 @@ Việc kỹ thuật đi cùng Epic. Plan biến chúng thành Task, và chúng k
 - **TW5 · Ba finding Low của review `shop` PR #10:** gom `isLocal` vào `apps/user/e2e/support/env.ts` và `apps/admin/e2e/support/env.ts`; `ActuatorProbesIntegrationTest` kiểm thêm `/actuator/health/db` trả 401; `reason:` của mọi test còn bỏ qua trỏ tới đúng Epic của chúng.
 - **TW6 · Năm sản phẩm thử trên Production**, để lần nâng database chạy trên dữ liệu thật. Claude thêm chúng qua `POST /api/products` của `api` đang chạy trên Production, qua `/api` của `shop-admin` (có basic auth), sau gate ② và trước gate ④ của `v0.3.0`. Giá nhập là số nguyên đồng như `250000.00`, vì API cũ nhận giá có hai số lẻ. Trong năm sản phẩm có ít nhất một tên có dấu, một mô tả nhiều dòng và một slug do người gõ, để lần nâng database kiểm được cả các trường hợp đó.
 
+### Non-functional requirements
+
+Do `sa` ghi ngày 2026-11-15. Mỗi yêu cầu có mã NFR<n> để plan và Story trỏ tới, và nói cách kiểm. Các quyết định ở đây là đề xuất của `sa`, theo lời dặn của bạn cho các chặng sau; không quyết định nào cần quyền mà agent không có.
+
+**Quy mô**
+
+- **NFR1 · Quy mô thiết kế:** tới 10.000 sản phẩm; 1–2 quản trị viên cùng lúc, mỗi người tới 2 tab; trang của khách tới 10 yêu cầu/giây. Mọi môi trường, kể cả Production (`production_auth`), còn sau basic auth tới khi mở cho mọi người (ngoài Scope), nên lượng truy cập thật thấp hơn nhiều. Tài nguyên giữ như `deploy.yaml`: `api` 768 MB, database 256 MB.
+
+**Hiệu năng**
+
+- **NFR2 · `api`:** với 10.000 sản phẩm trong database, mỗi lệnh danh sách (tìm, lọc, mỗi kiểu sắp xếp, trang bất kỳ) và lệnh chi tiết xong trong 200 ms, lệnh thêm, sửa, xóa trong 300 ms, đo ở `api`. Mỗi lệnh danh sách chạy tối đa hai câu SQL (một trang và tổng số), không có N+1. Kiểm: integration test (Testcontainers) nạp 10.000 sản phẩm, chạy mỗi kiểu truy vấn 5 lần và lấy trung vị.
+- **NFR3 · Giới hạn của mỗi lệnh:** một lệnh danh sách trả tối đa 100 sản phẩm (`admin` dùng 20, `user` 24). `api` bỏ khoảng trắng thừa của từ khóa rồi cắt ở 100 ký tự; kiểu sắp xếp và trạng thái chỉ nhận các giá trị đã định; số trang là số nguyên dương; giá trị sai trả 400. Mọi đường dẫn của khách, kể cả số đã xem rất lớn (AC22), chỉ gây ra một số lệnh tới `api` và một số dòng đọc có giới hạn, tính theo số sản phẩm Đang bán chứ không theo giá trị trong URL. Kiểm: WebMvc test cho 400 của từng tham số sai; E2E mở trang Sản phẩm với số đã xem bằng 999999 và thấy trang bình thường trong 2 s.
+- **NFR4 · Trang của khách:** trên Staging, đo bằng performance trace của chrome-devtools, giả lập điện thoại (Slow 4G, CPU chậm 4 lần): S4 và S5 có LCP ≤ 2,5 s và CLS ≤ 0,1; bấm Xem thêm và đổi sắp xếp có INP ≤ 200 ms; khi dữ liệu đã có trong cache của `user`, TTFB ≤ 600 ms. Trang sản phẩm không thêm thư viện JavaScript nào chạy ở trình duyệt. Kiểm: `qa` ghi số đo vào báo cáo QA của Story US5 và US6.
+- **NFR5 · Font:** file woff2 tự host trong bản build; tối đa ba độ đậm (500, 600, 700) hoặc một file variable; chỉ các subset `latin`, `latin-ext` và `vietnamese`; `font-display: swap`; font dự phòng có chỉnh cỡ (`size-adjust`) để lúc đổi font bố cục không nhảy (CLS ở NFR4). Một trang tải tối đa 150 KB font.
+- **NFR6 · `admin`:** trên Staging, danh sách cập nhật trong 1 s sau 300 ms ngừng gõ, hay sau khi đổi bộ lọc hay trang; sau khi bấm Lưu hay Xóa, thông báo kết quả hiện trong 1 s.
+
+**Độ trễ của dữ liệu**
+
+- **NFR7 · Mốc 60 giây** (Product Rules, Độ trễ): `sa` chọn cache ngắn ở `user`, không có lệnh báo `user` làm mới. Mọi dữ liệu sản phẩm mà `user` cache phía server (danh sách, chi tiết, sitemap) hết hạn sau tối đa 30 s, và cache router của trình duyệt giữ tối đa 30 s, nên cộng lại không quá 60 s. Lý do: lệnh báo làm mới cần một secret chung mới giữa `admin` hay `api` và `user` trên VPS (mục Ask first), và lời gọi giữa hai app có thể hỏng mà không ai thấy; cache ngắn chỉ thêm tối đa một lệnh tới `api` mỗi 30 s cho mỗi đường dẫn đang được xem, nhỏ ở quy mô NFR1. Next có thể không đưa cache ngắn như vậy vào phần dựng sẵn (prerender), nên phần dữ liệu sản phẩm nằm trong `<Suspense>` và render lúc có yêu cầu; plan kiểm điều này với Next 16.4.6. Trang chi tiết phải quyết định 404 trước khi gửi phần đầu của trang, vì sau đó mã HTTP không đổi được nữa (AC26). Kiểm: E2E của AC9, AC10, AC11 và AC15 chờ bằng `expect.poll`, như Testing Strategy.
+
+**Bảo mật**
+
+- **NFR8 · Ai gọi được lệnh ghi:** tới Epic đăng nhập, `/api/**` của `api` vẫn `permitAll`, và chỉ mạng giữ các lệnh ghi. `api` không có host công khai (`deploy.yaml` không khai host cho nó), và chỉ hai đường tới được nó: `/api/*` của host `admin`, sau basic auth của VPS, và server của `user` qua `API_URL`. `user` chỉ gọi các lệnh đọc sản phẩm, và không có route hay Server Action nào ghi sản phẩm (TW4 gỡ Server Action xóa). Release note của `v0.3.0` ghi điều này ở Known Issues. Kiểm: `security` review các PR của TW2 và TW4; unit test cho thấy DAL sản phẩm của `user` chỉ gửi GET.
+- **NFR9 · Sản phẩm Ẩn không lộ ra:** lệnh đọc dành cho khách của `api` luôn chỉ trả sản phẩm Đang bán, và không nhận tham số nào mở ra sản phẩm Ẩn; `admin` dùng lệnh đọc riêng có lọc trạng thái. Slug chưa từng có, slug của sản phẩm Ẩn và của sản phẩm đã xóa cho cùng một phản hồi 404, ở `api` lẫn ở trang của khách, để không ai đoán ra một sản phẩm Ẩn có tồn tại. Không chỗ nào của trang khách (danh sách, tổng số, chi tiết, meta, JSON-LD, sitemap) đếm hay nhắc tới sản phẩm Ẩn. Kiểm: WebMvc test so phản hồi 404 của ba trường hợp; E2E của AC10, AC16, AC26 và AC28.
+- **NFR10 · Dữ liệu vào:** `api` kiểm mọi trường theo Product Rules bằng Bean Validation, và các tham số theo NFR3. Mọi câu SQL dùng tham số bind; từ khóa được thoát `%`, `_` và `\` trước khi vào `LIKE`, để tìm `%` hay `_` không ra mọi sản phẩm. Kiểm: unit và integration test với từ khóa `%`, `_`, `\` và `'`.
+- **NFR11 · Dữ liệu ra:** tên và mô tả luôn hiện như chữ (AC25), ở cả `admin`. JSON-LD chỉ dựng qua `JsonLd` đang có của `user`, vốn đổi `<` thành `\u003c`; meta description đi qua Metadata API của Next. Kiểm: test của AC25 thêm một mô tả có `</script><script>alert(1)</script>`, và kiểm khối JSON-LD và thẻ meta không mở script nào.
+- **NFR12 · Lỗi và log:** Problem Details không lộ stack trace, câu SQL hay tên ràng buộc, như `api` đang làm. Slug trùng trả 409 dựa vào ràng buộc UNIQUE của database, không chỉ nhờ bước kiểm trước, vì hai lần thêm cùng lúc đều qua được bước kiểm trước. `api` ghi log INFO cho mỗi lần thêm, sửa, xóa, gồm thao tác, `id`, slug và correlation id; không ghi mô tả, thân yêu cầu hay header `Authorization`. Header đó có thể mang basic auth của host `admin`, vì proxy `/api/*` của `admin` chuyển nó tới `api`. Kiểm: unit test của exception handler; `security` review.
+- **NFR13 · Dependency và CSP:** dependency mới duy nhất là gói font (Tech Stack), ghim đúng phiên bản trong `pnpm-lock.yaml`, giấy phép OFL-1.1. Không nới CSP nào: `user` giữ `font-src 'self'` và `img-src 'self' blob: data:`, và bỏ `images.remotePatterns` của `picsum.photos`.
+
+**Dữ liệu**
+
+- **NFR14 · Kiểu của giá:** cột giá mới là `BIGINT` (Java `long`, TypeScript `number` nguyên), vì giá cũ `NUMERIC(12,2)` lên tới 9.999.999.999, vượt `INTEGER`. Cũng vì vậy, phép tính `(giá gốc − giá bán) × 100` (gần 10^11) vượt `int` của Java nếu `api` tính phần trăm giảm.
+- **NFR15 · Ràng buộc trong database:** database là chốt sau `api`. CHECK cho giá bán (0 tới 999.999.999, và giá 0 chỉ có ở sản phẩm Ẩn), giá gốc (lớn hơn giá bán, tối đa 999.999.999), trạng thái và tình trạng (chỉ các giá trị của Product Rules); UNIQUE cho slug không phân biệt chữ hoa, chữ thường (`citext`, như V3). Tên và định dạng slug không có CHECK, vì dữ liệu cũ có thể sai các quy tắc đó và được giữ (Product Rules và NFR16); `api` kiểm chúng khi lưu.
+- **NFR16 · Dữ liệu cũ ngoài Product Rules:** hai trường hợp mục "Sản phẩm có từ trước Epic này" chưa nêu, `sa` quyết như sau.
+  - Giá cũ lớn hơn 999.999.999 (V3 nhận tới 9.999.999.999,99): sản phẩm giữ con số, làm tròn tới đồng, và thành Ẩn như sản phẩm giá 0; quản trị viên phải nhập giá hợp lệ khi sửa nó.
+  - Slug cũ sai định dạng mới (V3 nhận `^[a-z0-9-]+$`, nên có thể có gạch ngang ở đầu, ở cuối hay hai gạch liền nhau): slug được giữ, và đường dẫn của nó vẫn mở được. Form và `api` chỉ kiểm định dạng slug khi quản trị viên đổi slug, để lưu lại sản phẩm cũ không bắt đổi đường dẫn của nó (AC12).
+- **NFR17 · Migration** (TW1): chỉ bước expand. Mỗi file Flyway chạy trong một transaction; với 10.000 dòng, migration xong trong 10 s, và chỉ khóa bảng trong lúc `ALTER TABLE`. Deployer dựng bản mới trong khi bản cũ còn chạy, nên trong lúc chuyển và sau rollback, hai bản đọc và ghi đúng trên cùng một schema:
+  - `v0.2.0` thêm sản phẩm hay sửa giá (cả `PUT /api/products/{id}/price` và `bulk-price`) thì các cột mới vẫn đúng, theo cùng quy tắc như dữ liệu cũ (Product Rules và NFR16);
+  - `v0.3.0` ghi thì cột giá cũ vẫn đúng, để `v0.2.0` đọc được sau rollback;
+  - `v0.2.0` khởi động được trên lịch sử Flyway có migration mới (Flyway mặc định bỏ qua migration "future") và với `ddl-auto: validate` của nó (cột cũ giữ kiểu).
+  Plan chọn cơ chế, như trigger hay ghi cả hai cột, và nói bản nào bỏ cột giá cũ. Kiểm: integration test của migration ở Testing Strategy, cộng một test chạy các lệnh ghi của `v0.2.0` trên schema mới.
+- **NFR18 · Thứ tự ổn định:** mọi kiểu sắp xếp lấy `id` (UUIDv7) làm khóa cuối, để phân trang không lặp hay sót sản phẩm khi nhiều sản phẩm cùng `created_at` hay cùng giá. Khi Xem thêm nối trang mới, `user` bỏ những sản phẩm đã hiện (theo `id`), vì một sản phẩm thêm vào giữa hai lần tải đẩy cả danh sách xuống một chỗ. Kiểm: integration test với sản phẩm cùng giá và cùng `created_at`; unit test của phần nối trang.
+- **NFR19 · Ghi chồng và thử lại** (AC13): lệnh sửa gửi `version` có sẵn của `BaseEntity` (optimistic locking), và `api` trả 409 khi `version` khác bản trong database. `admin` không tự thử lại lệnh thêm, sửa, xóa sản phẩm. Hiện `api-client` của `admin` tự thử lại PUT và DELETE khi lỗi mạng: một lần sửa đã thành công mà mất phản hồi sẽ nhận 409 giả ở lần thử lại, và một lần xóa đã thành công sẽ nhận 404. Khi lỗi mạng hay hết giờ lúc ghi, form hiện "Không lưu được. Vui lòng thử lại." (S2.5) và hộp thoại hiện lỗi của S3.6. Kiểm: unit test của hook ghi với MSW; WebMvc test của 409.
+
+**Lưu giữ**
+
+- **NFR20 · Sản phẩm đã xóa:** sản phẩm còn tới khi quản trị viên xóa nó. Xóa là xóa hẳn dòng trong database, không có thùng rác hay xóa mềm (US4). Dòng đã xóa còn trong các bản backup hằng ngày của kit (mọi bản của 48 giờ gần nhất, một bản mỗi ngày của 7 ngày, một bản mỗi tuần của 4 tuần), nên lấy lại được trong khoảng 4 tuần, bằng tay, bởi người có quyền trên VPS. Sản phẩm không chứa dữ liệu cá nhân, nên không có yêu cầu xóa nó khỏi backup.
+- **NFR21 · Cache và công cụ tìm kiếm:** sản phẩm Ẩn hay đã xóa rời mọi trang của khách và sitemap trong 60 s (NFR7). Công cụ tìm kiếm bỏ đường dẫn khi gặp 404 ở lần thu thập sau; việc đó ngoài tầm của Epic.
+- **NFR22 · Cột giá cũ:** `price NUMERIC(12,2)` ở lại trong `v0.3.0` để rollback về `v0.2.0`. Bước contract bỏ nó ở một bản sau, sớm nhất là `v0.4.0`, khi `v0.3.0` đã chạy ổn trên Production và không còn cần rollback về `v0.2.0`; plan ghi bản đó.
+- **NFR23 · Dữ liệu của E2E:** mỗi test xóa những gì nó tạo (Testing Strategy). Sản phẩm có tiền tố E2E còn sót lại sau một lần chạy hỏng bị lần chạy sau xóa: trước khi chạy, E2E xóa mọi sản phẩm có tiền tố E2E tạo cách đây hơn 1 giờ, để không đụng một lần chạy khác đang diễn ra. E2E không ghi gì trên Production.
+- **NFR24 · Sản phẩm thử trên Production** (TW6): năm sản phẩm ở lại Production sau `v0.3.0`, và phải được xóa hay thay bằng sản phẩm thật trước khi mở Production cho mọi người. Release note của `v0.3.0` ghi việc này.
+- **NFR25 · Dữ liệu cá nhân:** Epic không thêm dữ liệu cá nhân nào. `created_by` và `updated_by` vẫn là `system` tới Epic đăng nhập. Log của `api` vẫn có IP của người gọi (`X-Forwarded-For`) như hiện nay; Epic không thêm gì vào log ngoài NFR12.
+
+**Khả dụng**
+
+- **NFR26 · Khi `api` lỗi:** mỗi lệnh `user` gửi tới `api` có thời hạn 5 s (hiện `httpGet` không có thời hạn nào). Khi `api` lỗi hay hết giờ, trang của khách không bao giờ hiện danh sách trống hay "Chưa có sản phẩm nào.", để khách không tưởng shop hết hàng: danh sách hiện trạng thái lỗi của S4.5; trang chi tiết là trang lỗi với mã 5xx, không phải 404, để công cụ tìm kiếm không bỏ sản phẩm; sitemap trả 5xx thay vì một sitemap thiếu sản phẩm. `admin` hiện trạng thái lỗi của S1.6 và S2.3. Kiểm: unit test của DAL với `api` chậm và `api` trả 500.
+- **NFR27 · Deploy:** smoke test của deployer giữ như `deploy.yaml` (`/en`, `/`, `/actuator/health`). Epic không đổi `deploy.yaml`, secret hay biến môi trường nào trên VPS, nên không cần mục Ask first nào. Deployer không tự dump database trước khi chạy migration, nên ở gate ⑤ bạn xác nhận bản backup mới nhất của Production cách đó không quá 24 giờ; agent không được đọc backup.
+
 ## Tech Stack
 
 Không thêm framework: stack như README gốc và README của từng app. Những điểm Epic này đụng tới:
 
-- **`api`:** thêm migration Flyway sau `V3__create_products_table`, không sửa V1–V3. Tìm không phân biệt dấu cần một cách bỏ dấu ở phía `api` hay database. Extension `unaccent` chưa có: V1 chỉ kiểm `uuid-ossp`, `pgcrypto`, `citext` và `pg_trgm`, và script trong `apps/api/docker/postgres/init` chỉ chạy trên volume mới, nên database đang chạy của Development, Staging và Production không tự có extension mới. `sa` chọn cách, và thêm extension là việc phải hỏi trước (mục Boundaries).
-- **`user` và `admin`:** font Urbanist (Google Fonts, giấy phép OFL), tự host để giữ CSP `font-src 'self'` của `user`; `user` có sẵn `next/font/google`. Cách dựng design system, như CSS variables hay Tailwind, do Task design system chọn.
+- **`api`:** không thêm dependency: Java 21, Spring Boot 4.0.6, PostgreSQL 17 (`postgres:17-alpine`, cùng image ở `deploy.yaml` và ở Testcontainers). Thêm migration Flyway sau `V3__create_products_table`, không sửa V1–V3.
+- **Tìm không dấu mà không thêm extension** (quyết định của `sa`): extension `unaccent` chưa có. V1 chỉ kiểm `uuid-ossp`, `pgcrypto`, `citext` và `pg_trgm`, và script trong `apps/api/docker/postgres/init` chỉ chạy trên volume mới, nên database đang chạy của Development, Staging và Production không tự có extension mới; thêm nó là việc phải hỏi trước (mục Boundaries). Hàm `unaccent()` lại là STABLE, nên không dùng thẳng được trong cột sinh hay index. Thay vào đó, một hàm SQL IMMUTABLE trong schema `app` bỏ dấu bằng các hàm có sẵn của PostgreSQL 17: `normalize(…, NFD)`, `regexp_replace` bỏ các dấu kết hợp U+0300–U+036F, `translate` cho `đ` và `Đ`, rồi `lower`. Hàm này dựng một cột sinh (`GENERATED ALWAYS AS … STORED`) chứa tên đã bỏ dấu, và cũng bỏ dấu từ khóa trong câu tìm, nên tên và từ khóa đi qua cùng một hàm. Cột sinh tự điền cho cả những dòng `v0.2.0` ghi trong lúc chuyển hay sau rollback (NFR17), điều mà một cột do Java điền không làm được. Nếu NFR2 cần index, dùng `pg_trgm` đã có. Slug sinh ở `api` bằng `java.text.Normalizer` của Java, kiểm bằng các ví dụ ở Product Rules.
+- **`user` và `admin`:** font tự host để giữ CSP `font-src 'self'` của `user`. `user` dùng `next/font/google` của Next 16.4.6, vốn tải font lúc build, tự host nó trong bản build và dựng font dự phòng có chỉnh cỡ (NFR5); `admin` dùng gói Fontsource của cùng font, ghim đúng phiên bản. Urbanist (`@fontsource-variable/urbanist` 5.3.0, OFL-1.1, lấy từ Google Fonts) chỉ có subset `latin` và `latin-ext`, mà hai subset này bỏ trống U+1EA0–U+1EF1: phần lớn chữ có dấu thanh (ả, ầ, ẩ, ổ, ữ, ự…) sẽ hiện bằng font dự phòng, ngay giữa một từ như "Sản phẩm" hay "cổ". Đó là trường hợp "nhìn lệch" ở dòng Font family của `design.md`, nên `sa` đề xuất Be Vietnam Pro (`@fontsource/be-vietnam-pro` 5.3.0, OFL-1.1, có subset `vietnamese` và các độ đậm 500, 600, 700). `fe-dev` vẫn xem bằng mắt ở Task design system như `design.md` dặn, rồi ghi font đã chọn vào `docs/design-system/<app>.md` và mô tả PR. Cách dựng design system, như CSS variables hay Tailwind, do Task design system chọn. Tham số trên URL dùng `nuqs` 2.8.9 có sẵn ở cả hai app, không thêm thư viện.
 - **`user`:** bỏ `images.remotePatterns` của `picsum.photos` trong `next.config.ts` khi không còn ảnh ngoài.
 
 ## Commands
@@ -252,10 +311,12 @@ Ngoài DoD của Epic trong `.ai-orchestrator/docs/sdlc.md`:
 - axe không báo vi phạm WCAG A/AA nào trên các trang ở mục Testing Strategy. Ở bề rộng 320 px, danh sách và trang chi tiết của `user` không có thanh cuộn ngang.
 - Lần nâng database chạy không lỗi trên bản sao dữ liệu của Production, với năm sản phẩm thử. Sau khi nâng, mỗi sản phẩm cũ còn đủ tên, slug, mô tả, và có giá, trạng thái, tình trạng theo mục "Sản phẩm có từ trước Epic này" ở Product Rules. Bản `v0.2.0` vẫn khởi động và đọc được sản phẩm trên database đã nâng, để rollback được.
 - `v0.3.0` lên Production sau gate ⑤, và smoke test sau deploy pass.
-- Yêu cầu phi chức năng, như thời gian tải trang, cache và giới hạn của API, do `sa` ghi; Epic đạt khi chúng đạt.
+- Các yêu cầu NFR1–NFR27 ở mục Non-functional requirements đạt, mỗi yêu cầu theo cách kiểm của nó.
 
 ## Open Questions
 
 Không có. Ngày 2026-11-15 bạn đồng ý cả 12 đề xuất, và mỗi câu trả lời đã thành quyết định ở mục của nó.
+
+`sa` không có câu hỏi: các quyết định của `sa` (cache ngắn, tìm không dấu mà không thêm extension, font có tiếng Việt, kiểu `BIGINT` của giá, hai trường hợp dữ liệu cũ ở NFR16) ghi ở mục Non-functional requirements và Tech Stack, và không quyết định nào cần quyền mà agent không có.
 
 Câu hỏi mới ở các chặng sau của Epic: agent làm theo đề xuất của mình và ghi quyết định vào artifact của chặng đó. Agent chỉ hỏi bạn những việc cần quyền mà agent không có (mục Boundaries, Ask first).
