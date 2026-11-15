@@ -25,7 +25,7 @@ Design system của `admin` là CSS variables và CSS thường, không có Tail
 
 ## Tokens
 
-Cột "Trạng thái" theo bảng của `design.md`: mọi dòng ở đó là "mới", và SHOP-8 đã thêm chúng. Giá trị ghi "ước lượng" là ước lượng của `ux`, chưa đo lại; plan giao việc đo bằng chrome-devtools trên trang mẫu cho SHOP-10 (design system của `user`), và số đo được cập nhật vào cả file này khi có.
+Cột "Trạng thái" theo bảng của `design.md`: mọi dòng ở đó là "mới", và SHOP-8 đã thêm chúng. Giá trị ghi "ước lượng" là ước lượng của `ux`, chưa đo lại; plan giao việc đo bằng chrome-devtools trên trang mẫu cho SHOP-10 (design system của `user`). Checklist của SHOP-10 chỉ ghi số đo vào `docs/design-system/user.md`, nên SHOP-8 đã nhờ `ba` (comment trên SHOP-10) thêm việc ghi số đo vào file này và sửa `tokens.css` của `admin` khi số đo khác ước lượng. Tới khi đó, các giá trị "ước lượng" ở đây vẫn chưa đối chiếu.
 
 ### Màu
 
