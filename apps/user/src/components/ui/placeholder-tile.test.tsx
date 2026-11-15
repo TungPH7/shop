@@ -32,6 +32,21 @@ describe('placeholderGroup', () => {
     );
   });
 
+  // Real UUIDv7 ids, one per group. The ids above share the fixed prefix 0123 and give the same group for any length
+  // of the slice (16^k ≡ 4 mod 6), so only these pin the 8 digits: each one gets another group from slice(-1) to
+  // slice(-12) except slice(-8). docs/design-system/user.md lists them as the shared samples for admin (SHOP-9).
+  test.each([
+    ['0192f1c4-7a3b-7c2d-8e9f-a1b2c3d4e5f6', 'blue'],
+    ['0193a2b5-29ba-7b09-a5ad-06c7400a60ee', 'blue'],
+    ['0193a2b5-fce1-786a-b348-e4314aad4353', 'coral'],
+    ['0193a2b5-c906-7d72-8299-4a1d1f241b6a', 'green'],
+    ['0193a2b5-0091-770e-851f-c07d23ef7c9d', 'orange'],
+    ['0193a2b5-0da4-72b1-bdb4-0727dd873f80', 'teal'],
+    ['0193a2b5-02b2-7292-afeb-59babb00064f', 'ink'],
+  ])('reads exactly the last 8 hex digits of the UUIDv7 %s: %s', (id, group) => {
+    expect(placeholderGroup(id)).toBe(group);
+  });
+
   test('falls back to the first group when the end of the id is not hex', () => {
     expect(placeholderGroup('not-a-uuid-zzzzzzzz')).toBe('blue');
   });

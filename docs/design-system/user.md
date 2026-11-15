@@ -184,6 +184,17 @@ Tên class giống `admin` (`apps/admin/src/styles/components.css`), để một
 ```
 
 - **Màu nhóm:** `placeholderGroup(id)` là `GROUPS[parseInt(id.slice(-8), 16) % 6]`, với `GROUPS = ['blue', 'coral', 'green', 'orange', 'teal', 'ink']`. Tám ký tự hex cuối của UUIDv7 là phần ngẫu nhiên. Đổi tên hay slug không đổi màu. `id` không kết thúc bằng hex thì nhận nhóm đầu, `blue`.
+- **Bộ mẫu dùng chung** cho test của hai app: `admin` (SHOP-9) dùng đúng các cặp này, để một app lệch quy tắc thì test bắt được. Mỗi id chỉ ra nhóm của nó khi đọc đúng 8 ký tự cuối; đọc 1 tới 12 ký tự khác thì ra nhóm khác (`placeholder-tile.test.tsx`). Id có tiền tố cố định như `…-0123xxxxxxxx` không ghim được độ dài, vì 16^k chia 6 luôn dư 4.
+
+  | id | Nhóm |
+  |---|---|
+  | `0192f1c4-7a3b-7c2d-8e9f-a1b2c3d4e5f6` | blue |
+  | `0193a2b5-29ba-7b09-a5ad-06c7400a60ee` | blue |
+  | `0193a2b5-fce1-786a-b348-e4314aad4353` | coral |
+  | `0193a2b5-c906-7d72-8299-4a1d1f241b6a` | green |
+  | `0193a2b5-0091-770e-851f-c07d23ef7c9d` | orange |
+  | `0193a2b5-0da4-72b1-bdb4-0727dd873f80` | teal |
+  | `0193a2b5-02b2-7292-afeb-59babb00064f` | ink |
 - **Chữ:** `placeholderInitial(name)` bỏ mọi khoảng trắng, chuẩn hóa NFC, lấy ký tự đầu (theo code point, nên một chữ gõ kiểu tổ hợp như "a" + dấu sắc vẫn là "Á"), rồi `toLocaleUpperCase('vi')`. Tên rỗng cho chuỗi rỗng.
 - Ô là `<span aria-hidden="true">` có `data-group` và `data-variant`, nên dùng được trong một liên kết; tên sản phẩm phải có ở chữ của liên kết. Chữ cái 700, 40% chiều cao ô: `.tile` là container của chính nó, và chữ đặt bằng `cqi` (30cqi ở ô 4:3, 40cqi ở ô vuông).
 
