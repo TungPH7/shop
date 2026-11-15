@@ -27,10 +27,14 @@ const SESSION_NAMES = 'GIT_CONFIG\\w*|GIT_ASKPASS|SSH_ASKPASS|GIT_TERMINAL_PROMP
 const SESSION_VARIABLE = new RegExp(`^(?:${SESSION_NAMES})$`, 'i');
 // PowerShell reaches them through $env:, the Env: drive and [Environment]::SetEnvironmentVariable.
 const POWERSHELL_ENV = new RegExp(`(?:\\benv:[\\\\/]*|SetEnvironmentVariable\\(\\s*['"])(?:${SESSION_NAMES})\\b`, 'i');
-// Your user variables of Windows, where the kit keeps its tokens, the CI token among them (review round 2 of shop PR
-// #21, security): an agent runs as you, so gh-guard stops the plain ways to read them, the registry key and the User
-// target of .NET. The scripts of the kit read them for you; that the CI token stays off the machine is what would hold.
-const USER_VARIABLES = /\b(?:HKCU|HKEY_CURRENT_USER):?[\\/]*Environment\b|GetEnvironmentVariables?\s*\([^)]*(?:['"]User['"]|::User\b|,\s*1\s*\))|EnvironmentVariableTarget\]::User/i;
+// Your user variables of Windows, where the kit keeps its tokens, the CI token among them (reviews of shop PR #21,
+// security): an agent runs as you, so gh-guard refuses every plain way to them, as wide as the ways go, since a list of
+// keys kept missing one (round 3: HKCU /s, HKCU:\Env*, cd HKCU:): the user hive by any name (HKCU, HKEY_CURRENT_USER,
+// HKU, HKEY_USERS, the PowerShell drive HKCU:), whatever key follows; GetEnvironmentVariables with any argument and
+// GetEnvironmentVariable with a target; the registry API of .NET; and WMI (Win32_Environment, wmic). Agents need none of
+// them: the scripts of the kit read the tokens for you. A script an agent writes to a file and runs is not seen; that the
+// CI token stays off the machine is what would hold.
+const USER_VARIABLES = /\b(?:HKCU|HKEY_CURRENT_USER|HKU|HKEY_USERS)\b|GetEnvironmentVariables\s*\(|GetEnvironmentVariable\s*\([^)]*,|EnvironmentVariableTarget|Microsoft\.Win32\.Registry|\[Registry\]|\bWin32_Environment\b|\bwmic\b/i;
 const USER_VARIABLES_REASON = 'do not read the user variables of Windows: they hold the tokens of the kit, which its scripts read for you';
 // The scripts that start agents and buy their tokens (dev-workflow spec 2.3, plan decision 5), in any letter case, as
 // Windows reads them. Matched at the end of a word: an unquoted Windows path loses its backslashes in the shell.
@@ -49,56 +53,39 @@ const BACKUP_FILE = /\.agekey\b|\.dump\.age\b|ao-backups|ao-backup-pull|(?:^|[\s
 // shop PR #21): a search for them over your user folder prints the keys of the Apps, whatever the files are called.
 // Any character may stand between the words, as a regex has it. Round 4 refused only a command that also named your
 // user folder, and Git Bash names it in more ways than a list holds ($USERPROFILE, $HOMEDRIVE$HOMEPATH, a bare cd, /c),
-// so a command with a mark now passes only where every part that holds it stays in the repository (repoOnly): a
-// message of git commit, or a search of git grep or git log. security scans the project with Grep, which its path keeps
-// in the project.
+// so a command with a mark now passes only as one git command that stays in the repository (repoOnly): a message of git
+// commit, or a search of git grep or git log. The rounds of the review of shop PR #21 found a way past each looser rule
+// (cd and git init before it, $_ after it, grep -f - behind a pipe, git log --output): so the line is that git command
+// alone, with no redirection, run from a folder of the project. security scans the project with Grep, which its path
+// keeps in the project.
 const KEY_MARK = /PRIVATE.{0,3}KEY|AGE.{0,2}SECRET.{0,2}KEY|-{5}BEGIN/i;
-const KEY_SEARCH = 'do not search for a private key: ao-pr.mjs and git get the tokens of your role for you; to scan the project for committed keys, use Grep or git grep';
+const KEY_SEARCH = 'do not search for a private key: ao-pr.mjs and git get the tokens of your role for you; to scan the project for committed keys, use Grep, or git grep alone on its line from a folder of the project';
 // git grep options that read outside the files git tracks (--no-index, --untracked) or start a program
-// (--open-files-in-pager, -O alone or in a group such as -nO), by any start git takes for them.
+// (--open-files-in-pager, -O alone or in a group such as -nO), by any start git takes for them; git log --output writes
+// what it prints to a file.
 const GREP_OUTSIDE = /^--(?:no-in|u|op)|^-[A-Za-z]*O/;
+const LOG_OUTSIDE = /^--ou/;
 
-// A part of a command line that holds a mark of a private key, and stays in the repository: git with no option of its
-// own (-c, -C, --work-tree), no variable set before it and no command run inside a word ($( or a backtick), running
-// commit, log, or grep without GREP_OUTSIDE.
+// A command that holds a mark of a private key, and stays in the repository: git with no option of its own (-c, -C,
+// --work-tree), no variable set before it and no command run inside a word ($( or a backtick), running commit, log
+// without --output, or grep without GREP_OUTSIDE.
 function repoOnly(words) {
   if (words.env.length > 0 || words.some((word) => word.includes('$(') || word.includes('`'))) return false;
   if (programOf(words[0]) !== 'git') return false;
   const { index } = gitSubcommand(words);
   if (index !== 1) return false;
   const [sub, ...rest] = words.slice(1);
-  if (sub === 'commit' || sub === 'log') return true;
+  if (sub === 'commit') return true;
+  if (sub === 'log') return !rest.some((word) => LOG_OUTSIDE.test(word));
   return sub === 'grep' && !rest.some((word) => GREP_OUTSIDE.test(word));
 }
 
-// Whether a command line searches for a private key: it holds a mark, and some part that holds it, or none of them when
-// the mark only shows across parts, is not repoOnly.
-// A command line with a mark that also moves to another folder or makes or points at another repository reaches any
-// folder through git (review round 2 of shop PR #21: cd to a folder, git init, git add -A, then git grep -A 40).
-const ELSEWHERE = new Set(['cd', 'pushd', 'popd', 'chdir']);
-const OTHER_REPO = /\bGIT_(?:DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|CEILING_DIRECTORIES|DISCOVERY_ACROSS_FILESYSTEM)\b/;
-function movesOrMakesRepo(parts, command) {
-  if (OTHER_REPO.test(command)) return true;
-  return parts.some((words) => {
-    if (ELSEWHERE.has(programOf(words[0]))) return true;
-    if (programOf(words[0]) !== 'git') return false;
-    const sub = words[gitSubcommand(words).index];
-    return ['init', 'clone', 'worktree', 'submodule'].includes(sub);
-  });
-}
-
-// Next to a part with a mark, the other parts of the line may only be git, or a filter of its output, with no expansion
-// at all: bash hands the last word of a command to the next one as $_, so `git log -S <mark>; grep -rl "$_" <folder>`
-// searched with the mark (review round 2 of shop PR #21, security).
-const FOLLOWERS = new Set(['git', 'head', 'tail', 'wc', 'sort', 'uniq', 'cut', 'grep']);
-const plainFollower = (words) => words.env.length === 0 && FOLLOWERS.has(programOf(words[0])) && !words.some((word) => word.includes('$') || word.includes('`'));
-
+// Whether a command line searches for a private key: it holds a mark and is not one repoOnly command alone, with no
+// redirection. checkAgentCall also refuses it from a working folder outside the project.
 function searchesForKey(command) {
   if (!KEY_MARK.test(command)) return false;
   const parts = segments(command);
-  const marked = parts.filter((words) => KEY_MARK.test([...words.env, ...words].join(' ')));
-  if (marked.length === 0 || !marked.every(repoOnly) || movesOrMakesRepo(parts, command)) return true;
-  return !parts.every((words) => marked.includes(words) || plainFollower(words));
+  return command.includes('>') || parts.length !== 1 || !repoOnly(parts[0]);
 }
 
 // What a path, or a glob or pattern of Grep and Glob, may not name: keys, the token of gh, the backups. undefined when
@@ -125,6 +112,9 @@ export function checkAgentCall(input, { gates, contract, projectDir, roster, tem
   const args = input.tool_input ?? {};
   switch (input.tool_name) {
     case 'Bash':
+      // The working folder of the Bash tool stays from one call to the next, so a git grep with a mark from a folder
+      // outside the project searches a repository made there (review round 3 of shop PR #21).
+      if (KEY_MARK.test(args.command ?? '') && outsideProject(input.cwd, projectDir, tempDir)) return deny(KEY_SEARCH);
       return checkCommand(args.command ?? '', role, gates, roster);
     case 'Read':
       return forbiddenFile(args.file_path ?? '') ?? allow;

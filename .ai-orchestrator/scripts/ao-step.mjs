@@ -49,6 +49,7 @@ import { installLane, pullsOfBranch, qaWatcher, runPlacer, waitForRam } from '..
 import { checkoutBranch, laneDir, laneRoot } from '../lib/workflow/places.mjs';
 import { claimRole, claimsRole, liveLocks, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
 import { runsAtOnce } from '../lib/workflow/ports.mjs';
+import { hookKitDrift, hookKitNote } from '../lib/workflow/hook-kit.mjs';
 
 const COMMANDS = ['status', 'intake', 'preview', 'spec', 'plan', 'request', 'build', 'review', 'fix', 'qa', 'release', 'ship', 'rollback'];
 const USAGE = 'usage: node .ai-orchestrator/scripts/ao-step.mjs <status|intake|preview|spec|plan|request|build|review|fix|qa|release|ship|rollback> [<KEY>|<PR>|<vX.Y.0> <sha>|<vX.Y.Z>|<environment> [<sha>]] [--go] [--answers <file>] [--note <file>] [--change <word>] [--stop]';
@@ -230,7 +231,7 @@ async function main() {
     projectDir,
     gitIn,
     install: async (dir) => installLane(dir, { env: installEnv(), exists: existsSync, manager: managerFromLockfile, args: installArgs, run: runManager }),
-    fs: { existsSync, mkdirSync, copyFileSync, cpSync, readdirSync, statSync, writeFileSync },
+    fs: { existsSync, mkdirSync, copyFileSync, cpSync, readdirSync, rmSync, statSync, writeFileSync },
     pullsOf: (branch) => pullsOfBranch(github, repo, branch),
     isProtected: (branch) => isProtected(branch, gates.protected_branches),
     settings: runs,
@@ -283,6 +284,11 @@ async function main() {
   const dockerRunning = () => dockerAnswered(spawnSync('docker', DOCKER_INFO, { encoding: 'utf8', timeout: 20000 }));
   const decision = dockerGate(decideStep(command, facts, options), { java, dockerRunning });
   console.log(formatDecision(decision));
+  // Agents run the hooks of the kit in AO_KIT_DIR: one that differs from the kit copy of the project is named (review round
+  // 3 of shop PR #21).
+  const readText = (path) => (existsSync(path) ? readFileSync(path, 'utf8') : null);
+  const drift = process.env.AO_KIT_DIR ? hookKitNote(hookKitDrift({ kitDir, copyDir: join(projectDir, '.ai-orchestrator'), read: readText }), kitDir) : null;
+  if (drift) console.log(drift);
   if (command === 'status' && runs.worktrees) {
     const lanes = keeper.list();
     console.log(lanes.length > 0 ? `Lanes: ${lanes.map(({ key: k, branch }) => `${k} on ${branch || 'no branch yet'}`).join('; ')}` : 'Lanes: none');
@@ -611,7 +617,8 @@ function developHistory(tag) {
 }
 
 // /ao-release <vX.Y.0> <sha>, its one step (release-workflow spec 2.6): the Fix Versions and comments on Jira with the CI
-// token, a user variable of your Windows account that gh-guard keeps agents from reading (review round 2 of shop PR #21),
+// token, a user variable of your Windows account: gh-guard refuses the plain ways an agent could read it, not a script it
+// writes and runs (reviews of shop PR #21),
 // then the release branch with your gh login (Pilot 3, spec 2.9). The branch comes
 // last: once it is there the command stops at "release branch open", so a step cut short before it can be run again.
 async function releaseCut({ version, nextVersion, sha, included, after, cancelled = [] }, { repo, mapping, userToken }) {

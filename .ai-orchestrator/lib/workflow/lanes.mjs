@@ -7,7 +7,7 @@
 //   projectDir
 //   gitIn(dir)                  (...args) => { status, stdout, stderr }: git in a folder
 //   install(dir)                installs the packages of the project and of the kit in a lane: { ok, reason, notes }
-//   fs                          { existsSync, mkdirSync, copyFileSync, cpSync, readdirSync, statSync, writeFileSync }
+//   fs                          { existsSync, mkdirSync, copyFileSync, cpSync, readdirSync, rmSync, statSync, writeFileSync }
 //   pullsOf(branch)             resolves the PRs whose head is the branch: [{ number, state }], state open, closed or merged
 //   isProtected(branch)
 //   settings                    { worktrees, lanesMax, copy } of project.yaml (runsSettings)
@@ -20,7 +20,7 @@ const KEY = /^[A-Z][A-Z0-9_]*-\d+$/;
 // short, so the next run finishes it (review of shop PR #21: one whose install failed was taken as ready).
 const READY = join('.ai', 'lane-ready');
 
-export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtected, settings, busy = () => false }) {
+export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtected, settings, busy = () => false, sleep = (ms) => new Promise((done) => setTimeout(done, ms)) }) {
   const git = gitIn(projectDir);
   const root = laneRoot(projectDir);
   const exists = (dir) => fs.existsSync(join(dir, '.git'));
@@ -48,6 +48,41 @@ export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtecte
     return path;
   }
 
+  // runs.lanes_max is also how many lanes are open at once, those of items that wait for you included (spec 5.1;
+  // review round 2 of shop PR #21): each holds a full install of the packages. The open lanes are counted and the new
+  // one reserved, as its empty folder, in one step under the mutex .reserve of the lane folder, so two commands that
+  // start together cannot both pass the cap (review round 3); a reserved folder counts as open. A mutex older than a
+  // minute was left by a command that died. Resolves { ok: true } or { ok: false, reason }.
+  async function reserve(key, dir) {
+    fs.mkdirSync(root, { recursive: true });
+    const mutex = join(root, '.reserve');
+    let held = false;
+    for (let attempt = 0; attempt < 100 && !held; attempt++) {
+      try {
+        fs.writeFileSync(mutex, String(process.pid), { flag: 'wx' });
+        held = true;
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+        if (Date.now() - fs.statSync(mutex).mtimeMs > 60_000) fs.rmSync(mutex, { force: true });
+        else await sleep(100);
+      }
+    }
+    if (!held) return { ok: false, reason: `the mutex ${mutex} of the lanes stayed busy` };
+    try {
+      const open = fs
+        .readdirSync(root, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory() && KEY.test(entry.name) && entry.name !== key)
+        .map(({ name }) => name);
+      if (open.length >= (settings.lanesMax ?? Infinity)) {
+        return { ok: false, reason: `${open.length} lanes are open (${open.join(', ')}), the most runs.lanes_max allows: ${key} waits until the PR of one is merged or closed, which removes its lane at the next command` };
+      }
+      fs.mkdirSync(dir, { recursive: true });
+      return { ok: true };
+    } finally {
+      fs.rmSync(mutex, { force: true });
+    }
+  }
+
   // The lane of an item, made when it is not there: detached at origin/develop, its packages installed, the files of
   // runs.copy and the ledger of the item copied in. A lane cut short before that is finished, with the files of the
   // project folder: an agent that worked in it wrote its own ledger there. Resolves { ok, dir, made, notes } or
@@ -56,18 +91,18 @@ export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtecte
     const dir = laneDir(projectDir, key);
     if (exists(dir) && ready(dir)) return { ok: true, dir, made: false, notes: [] };
     const made = !exists(dir);
-    // runs.lanes_max is also how many lanes are open at once, those of items that wait for you included (spec 5.1;
-    // review round 2 of shop PR #21): each holds a full install of the packages.
-    const open = made ? list() : [];
-    if (open.length >= (settings.lanesMax ?? Infinity)) {
-      return { ok: false, reason: `${open.length} lanes are open (${open.map(({ key: k }) => k).join(', ')}), the most runs.lanes_max allows: ${key} waits until the PR of one is merged or closed, which removes its lane at the next command` };
-    }
     if (made) {
-      fs.mkdirSync(root, { recursive: true });
+      const reserved = await reserve(key, dir);
+      if (!reserved.ok) return reserved;
+      // A lane that git could not add gives back its place: its folder goes while it is empty.
+      const giveBack = (reason) => {
+        if (fs.existsSync(dir) && fs.readdirSync(dir).length === 0) fs.rmSync(dir, { recursive: true, force: true });
+        return { ok: false, reason };
+      };
       const fetched = git('fetch', '--quiet', 'origin');
-      if (fetched.status !== 0) return { ok: false, reason: `git fetch failed: ${fetched.stderr.trim()}` };
+      if (fetched.status !== 0) return giveBack(`git fetch failed: ${fetched.stderr.trim()}`);
       const added = git('worktree', 'add', '--detach', '--quiet', dir, 'origin/develop');
-      if (added.status !== 0) return { ok: false, reason: `git could not add the lane of ${key} at ${dir}: ${(added.stderr || added.stdout).trim()}` };
+      if (added.status !== 0) return giveBack(`git could not add the lane of ${key} at ${dir}: ${(added.stderr || added.stdout).trim()}`);
     }
     const installed = await install(dir);
     if (!installed.ok) return { ok: false, reason: `the lane of ${key} is at ${dir}, but its packages are not installed: ${installed.reason}` };
