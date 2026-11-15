@@ -115,15 +115,12 @@ export function parseColor(value: string): Rgba {
     const [, l, c, h, a] = oklch;
     return oklchToRgba(Number(l), Number(c), Number(h), a === undefined ? 1 : Number(a));
   }
-  const hex = /^#([\da-f]{3}|[\da-f]{6}|[\da-f]{8})$/i.exec(value);
-  if (hex) {
-    const short = hex[1].length === 3;
-    const digits = (short ? Array.from(hex[1], (d: string) => d + d).join('') : hex[1]).padEnd(
-      8,
-      'f',
-    );
-    const [r, g, b, a] = [0, 2, 4, 6].map((i) => parseInt(digits.slice(i, i + 2), 16) / 255);
-    return { r, g, b, a };
+  const hex = /^#([\da-f]{3}|[\da-f]{6}|[\da-f]{8})$/i.exec(value)?.[1];
+  if (hex !== undefined) {
+    const long = hex.length === 3 ? hex.replace(/./g, '$&$&') : hex;
+    const digits = long.padEnd(8, 'f');
+    const byte = (i: number) => parseInt(digits.slice(i, i + 2), 16) / 255;
+    return { r: byte(0), g: byte(2), b: byte(4), a: byte(6) };
   }
   throw new Error(`Not a colour this helper reads: ${value}`);
 }
@@ -143,8 +140,8 @@ const luminance = ({ r, g, b }: Rgba) => {
 
 /** The WCAG 2.1 contrast ratio of two opaque colours. */
 export function contrast(a: Rgba, b: Rgba): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
-  return (hi + 0.05) / (lo + 0.05);
+  const [la, lb] = [luminance(a), luminance(b)];
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
 
 /** `#rrggbb`, or `#rrggbbaa` when the colour is not opaque. */

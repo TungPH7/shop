@@ -15,8 +15,7 @@ export type PlaceholderVariant = 'card' | 'detail' | 'row';
  */
 export function placeholderGroup(id: string): PlaceholderGroup {
   const value = Number.parseInt(id.slice(-8), 16);
-  if (Number.isNaN(value)) return PLACEHOLDER_GROUPS[0];
-  return PLACEHOLDER_GROUPS[value % PLACEHOLDER_GROUPS.length];
+  return PLACEHOLDER_GROUPS[value % PLACEHOLDER_GROUPS.length] ?? PLACEHOLDER_GROUPS[0];
 }
 
 /**
