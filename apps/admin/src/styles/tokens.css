@@ -138,7 +138,8 @@
   /* --- Sizes ---------------------------------------------------------------- */
   /* Placeholder tile of a table row (S1.6); its letter is 40% of it. */
   --tile-thumb: 40px;
-  /* Round icon button: the close button of the dialog (S3.2) and of a toast. */
+  /* Round icon button: the close button of the dialog (S3.2). The close button of a
+     toast is smaller, 34 px (components.css). */
   --icon-btn: 40px;
 
   /* --- Glass ---------------------------------------------------------------- */

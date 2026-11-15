@@ -784,7 +784,8 @@ textarea.input {
   overflow-wrap: anywhere;
 }
 
-/* Round icon button: the close button of the dialog (S3.2) and of a toast. */
+/* Round close button of the dialog (S3.2), --icon-btn wide. The toast shares its look
+   and is 34 px wide (.toast__close below). */
 .dialog__close,
 .toast__close {
   display: inline-grid;
