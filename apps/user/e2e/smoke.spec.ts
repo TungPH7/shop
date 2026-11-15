@@ -21,7 +21,11 @@ test.describe('smoke: server render, điều hướng, i18n', () => {
 
   test('điều hướng sang trang About', async ({ page }) => {
     await page.goto('/en');
-    await page.getByRole('link', { name: /About/ }).click();
+    // Through the main navigation of the bar (SHOP-11); the home page has an "About →" link of its own.
+    await page
+      .getByRole('navigation', { name: 'Main navigation' })
+      .getByRole('link', { name: 'About' })
+      .click();
     await expect(page).toHaveURL(/\/en\/about$/);
     await expect(page.getByRole('heading', { level: 1, name: 'About' })).toBeVisible();
   });
