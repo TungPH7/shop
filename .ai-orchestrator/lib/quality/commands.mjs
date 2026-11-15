@@ -28,13 +28,15 @@ const SESSION_VARIABLE = new RegExp(`^(?:${SESSION_NAMES})$`, 'i');
 // PowerShell reaches them through $env:, the Env: drive and [Environment]::SetEnvironmentVariable.
 const POWERSHELL_ENV = new RegExp(`(?:\\benv:[\\\\/]*|SetEnvironmentVariable\\(\\s*['"])(?:${SESSION_NAMES})\\b`, 'i');
 // Your user variables of Windows, where the kit keeps its tokens, the CI token among them (reviews of shop PR #21,
-// security): an agent runs as you, so gh-guard refuses every plain way to them, as wide as the ways go, since a list of
-// keys kept missing one (round 3: HKCU /s, HKCU:\Env*, cd HKCU:): the user hive by any name (HKCU, HKEY_CURRENT_USER,
-// HKU, HKEY_USERS, the PowerShell drive HKCU:), whatever key follows; GetEnvironmentVariables with any argument and
-// GetEnvironmentVariable with a target; the registry API of .NET; and WMI (Win32_Environment, wmic). Agents need none of
-// them: the scripts of the kit read the tokens for you. A script an agent writes to a file and runs is not seen; that the
-// CI token stays off the machine is what would hold.
-const USER_VARIABLES = /\b(?:HKCU|HKEY_CURRENT_USER|HKU|HKEY_USERS)\b|GetEnvironmentVariables\s*\(|GetEnvironmentVariable\s*\([^)]*,|EnvironmentVariableTarget|Microsoft\.Win32\.Registry|\[Registry\]|\bWin32_Environment\b|\bwmic\b/i;
+// security). gh-guard refuses the usual ways to read them: the user hive by any name (HKCU, HKEY_CURRENT_USER, HKU,
+// HKEY_USERS, the PowerShell drive HKCU:), whatever key follows; GetEnvironmentVariable(s) in any form; the registry API
+// of .NET; COM (WScript.Shell); WMI (Win32_Environment, wmic); and /proc, where Git Bash shows the registry and the
+// environment of your other processes. Agents need none of them: the scripts of the kit read the tokens for you.
+// This catches mistakes and an agent led astray by plain words; it is no boundary. gh-guard reads the words of a command,
+// and an agent runs as your Windows user, so it can read what you can, through a script it writes and runs or a spelling
+// no list holds: four rounds of review each found one more. It is a risk you accept until the tokens leave the user
+// variables and the CI token leaves the machine (open).
+const USER_VARIABLES = /(?:^|[\s'"=(;&|])\/proc\b|\b(?:HKCU|HKEY_CURRENT_USER|HKU|HKEY_USERS)\b|GetEnvironmentVariables?\b|EnvironmentVariableTarget|Microsoft\.Win32\.Registry|\[Registry\]|WScript\.Shell|ComObject|\bWin32_Environment\b|\bwmic\b/i;
 const USER_VARIABLES_REASON = 'do not read the user variables of Windows: they hold the tokens of the kit, which its scripts read for you';
 // The scripts that start agents and buy their tokens (dev-workflow spec 2.3, plan decision 5), in any letter case, as
 // Windows reads them. Matched at the end of a word: an unquoted Windows path loses its backslashes in the shell.
@@ -57,8 +59,10 @@ const BACKUP_FILE = /\.agekey\b|\.dump\.age\b|ao-backups|ao-backup-pull|(?:^|[\s
 // commit, or a search of git grep or git log. The rounds of the review of shop PR #21 found a way past each looser rule
 // (cd and git init before it, $_ after it, grep -f - behind a pipe, git log --output): so the line is that git command
 // alone, with no redirection, run from a folder of the project. security scans the project with Grep, which its path
-// keeps in the project.
-const KEY_MARK = /PRIVATE.{0,3}KEY|AGE.{0,2}SECRET.{0,2}KEY|-{5}BEGIN/i;
+// keeps in the project. Round 4 added the usual spellings of the mark: BEGIN with the kind of key, the regex forms of the
+// space and the dashes. Like USER_VARIABLES above, this catches mistakes, not an agent set on reading the keys (it runs
+// as you, and the kit says so in lib/agents/launch.mjs); holding the App keys away from it needs another account.
+const KEY_MARK = /PRIVATE(?:.{0,3}|\[\[:space:\]\])KEY|AGE.{0,2}SECRET.{0,2}KEY|-{5}BEGIN|-\{\d\}\s*BEGIN|BEGIN.{0,3}(?:RSA|EC|DSA|OPENSSH|ENCRYPTED|PRIVATE)|BEGIN.{0,30}KEY/i;
 const KEY_SEARCH = 'do not search for a private key: ao-pr.mjs and git get the tokens of your role for you; to scan the project for committed keys, use Grep, or git grep alone on its line from a folder of the project';
 // git grep options that read outside the files git tracks (--no-index, --untracked) or start a program
 // (--open-files-in-pager, -O alone or in a group such as -nO), by any start git takes for them; git log --output writes
@@ -70,7 +74,9 @@ const LOG_OUTSIDE = /^--ou/;
 // --work-tree), no variable set before it and no command run inside a word ($( or a backtick), running commit, log
 // without --output, or grep without GREP_OUTSIDE.
 function repoOnly(words) {
-  if (words.env.length > 0 || words.some((word) => word.includes('$(') || word.includes('`'))) return false;
+  // bash expands $ (variables, $( ), $'…'), backticks and braces before git sees the words, so a word with any of them
+  // may become an option the checks below never saw, such as {<mark>,--no-index} (review round 4 of shop PR #21).
+  if (words.env.length > 0 || words.some((word) => /[$`{}]/.test(word))) return false;
   if (programOf(words[0]) !== 'git') return false;
   const { index } = gitSubcommand(words);
   if (index !== 1) return false;

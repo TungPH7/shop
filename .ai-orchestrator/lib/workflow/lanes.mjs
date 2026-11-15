@@ -63,7 +63,15 @@ export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtecte
         held = true;
       } catch (error) {
         if (error.code !== 'EEXIST') throw error;
-        if (Date.now() - fs.statSync(mutex).mtimeMs > 60_000) fs.rmSync(mutex, { force: true });
+        // One released since the write met it is taken at the next try (review round 4 of shop PR #21).
+        let age;
+        try {
+          age = Date.now() - fs.statSync(mutex).mtimeMs;
+        } catch (gone) {
+          if (gone.code === 'ENOENT') continue;
+          throw gone;
+        }
+        if (age > 60_000) fs.rmSync(mutex, { force: true });
         else await sleep(100);
       }
     }

@@ -82,8 +82,15 @@ async function underMutex(dir, pid, decide, { fs, alive, sleep, tries = 50 }) {
       held = true;
     } catch (error) {
       if (error.code !== 'EEXIST') throw error;
-      // A mutex left by a process that died while it held it.
-      const owner = Number(fs.readFileSync(mutex, 'utf8'));
+      // A mutex left by a process that died while it held it. One released since the write met it is taken at the next
+      // try (review round 4 of shop PR #21).
+      let owner;
+      try {
+        owner = Number(fs.readFileSync(mutex, 'utf8'));
+      } catch (gone) {
+        if (gone.code === 'ENOENT') continue;
+        throw gone;
+      }
       if (!alive(owner)) fs.rmSync(mutex, { force: true });
       else await sleep(100);
     }

@@ -7,10 +7,9 @@
 # workflow and checkout are those of the base branch, and reviews through the run of the workflow PR review, which
 # holds no secret; there is no pull_request or pull_request_review trigger, whose workflows run from the PR. The token is
 # a secret of the environment jira-sync, which only the protected branches may use, so no workflow of a PR reaches it on
-# GitHub. The same token is a user variable on your machine, for /ao-release and qa. gh-guard refuses the plain ways an
-# agent could read it there, once the kit its hooks load (AO_KIT_DIR, or the kit copy) has these rules, as ao-step
-# warns; a script an agent writes and runs still could, and taking the token off the machine is the lasting fix
-# (reviews of shop PR #21).
+# GitHub. The same token is a user variable on your machine, for /ao-release and qa. gh-guard catches the usual ways an
+# agent could read it there, but it is no boundary: an agent runs as your Windows user. That is a risk you accept until
+# the CI token leaves the machine (reviews of shop PR #21).
 name: jira-sync
 
 on:
