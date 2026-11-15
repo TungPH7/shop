@@ -31,7 +31,7 @@ Mọi dòng của bảng Design System là "mới". Mọi dòng `user` dùng đ�
 
 ### Màu
 
-`user` giữ tên các vai trò semantic đã có (cột Token) và đổi giá trị theo bảng; vai trò mới của `design.md` có tên mới cùng tầng. Cột "Tên trong design.md" là tên `admin` dùng (`apps/admin/src/styles/tokens.css`, có khi PR #18 của SHOP-8 merge).
+`user` giữ tên các vai trò semantic đã có (cột Token) và đổi giá trị theo bảng; vai trò mới của `design.md` có tên mới cùng tầng. Cột "Tên trong design.md" là tên `admin` dùng (`apps/admin/src/styles/tokens.css` của SHOP-8).
 
 | Token | Tên trong design.md | Sáng | Tối | Dùng cho |
 |---|---|---|---|---|
@@ -151,7 +151,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `button-shadow` tối | Ước lượng | Khớp: `rgba(255,255,255,.28) 0 1px 0 inset, rgba(0,0,0,.12) 0 -1px 0 inset, accent 65% 0 6px 16px -6px` | Như bảng |
 | Ô "well" | Không có số | Khối "Downloads, 30 days" của trang Apps: nền well, đệm 12 14, bo 18 | Số đo |
 
-`admin` (SHOP-8) dùng các ước lượng. `docs/design-system/admin.md` (có khi PR #18 merge) ghi rằng các giá trị "ước lượng" của nó chưa đối chiếu. Các số đo ở bảng trên áp cho `admin` ở SHOP-9.
+`admin` (SHOP-8) dùng các ước lượng. `docs/design-system/admin.md` ghi rằng các giá trị "ước lượng" của nó chưa đối chiếu. Các số đo ở bảng trên áp cho `admin` ở SHOP-9.
 
 ## Classes
 
@@ -172,7 +172,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.visually-hidden` | | Chữ chỉ cho trình đọc màn hình: nhãn ẩn "Tìm theo tên", "Giảm", "Giá gốc:" |
 | `.tile`, `.tile--card`, `.tile--detail`, `.tile--row`, `.tile--<nhóm>`, `.tile__initial` | Ô giữ chỗ | Do `PlaceholderTile` đặt; không dùng tay |
 
-Tên class giống `admin` (`apps/admin/src/styles/components.css` của SHOP-8, có khi PR #18 merge), để một màn hình đọc như nhau ở hai app.
+Tên class giống `admin` (`apps/admin/src/styles/components.css` của SHOP-8), để một màn hình đọc như nhau ở hai app.
 
 ## Components Built Later
 
