@@ -1,6 +1,6 @@
 # Design: Danh mục sản phẩm
 
-> **Epic:** SHOP-7 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SHOP-7 · **Spec:** docs/specs/SHOP-7/spec.md · **Status:** Draft
+> **Epic:** SHOP-7 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SHOP-7 · **Spec:** docs/specs/SHOP-7/spec.md · **Status:** Approved 2026-11-15
 >
 > **Figma version:** none
 

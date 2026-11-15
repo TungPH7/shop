@@ -1,6 +1,6 @@
 # Spec: Danh mục sản phẩm
 
-> **Epic:** SHOP-7 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SHOP-7 · **Status:** Draft
+> **Epic:** SHOP-7 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SHOP-7 · **Status:** Approved 2026-11-15
 
 ## Objective
 
