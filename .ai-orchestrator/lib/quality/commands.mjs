@@ -27,6 +27,11 @@ const SESSION_NAMES = 'GIT_CONFIG\\w*|GIT_ASKPASS|SSH_ASKPASS|GIT_TERMINAL_PROMP
 const SESSION_VARIABLE = new RegExp(`^(?:${SESSION_NAMES})$`, 'i');
 // PowerShell reaches them through $env:, the Env: drive and [Environment]::SetEnvironmentVariable.
 const POWERSHELL_ENV = new RegExp(`(?:\\benv:[\\\\/]*|SetEnvironmentVariable\\(\\s*['"])(?:${SESSION_NAMES})\\b`, 'i');
+// Your user variables of Windows, where the kit keeps its tokens, the CI token among them (review round 2 of shop PR
+// #21, security): an agent runs as you, so gh-guard stops the plain ways to read them, the registry key and the User
+// target of .NET. The scripts of the kit read them for you; that the CI token stays off the machine is what would hold.
+const USER_VARIABLES = /\b(?:HKCU|HKEY_CURRENT_USER):?[\\/]*Environment\b|GetEnvironmentVariables?\s*\([^)]*(?:['"]User['"]|::User\b|,\s*1\s*\))|EnvironmentVariableTarget\]::User/i;
+const USER_VARIABLES_REASON = 'do not read the user variables of Windows: they hold the tokens of the kit, which its scripts read for you';
 // The scripts that start agents and buy their tokens (dev-workflow spec 2.3, plan decision 5), in any letter case, as
 // Windows reads them. Matched at the end of a word: an unquoted Windows path loses its backslashes in the shell.
 const ORCHESTRATION = /(ao-step|ao-agent|ao-git-credential)\.mjs$/i;
@@ -68,10 +73,32 @@ function repoOnly(words) {
 
 // Whether a command line searches for a private key: it holds a mark, and some part that holds it, or none of them when
 // the mark only shows across parts, is not repoOnly.
+// A command line with a mark that also moves to another folder or makes or points at another repository reaches any
+// folder through git (review round 2 of shop PR #21: cd to a folder, git init, git add -A, then git grep -A 40).
+const ELSEWHERE = new Set(['cd', 'pushd', 'popd', 'chdir']);
+const OTHER_REPO = /\bGIT_(?:DIR|WORK_TREE|INDEX_FILE|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|CEILING_DIRECTORIES|DISCOVERY_ACROSS_FILESYSTEM)\b/;
+function movesOrMakesRepo(parts, command) {
+  if (OTHER_REPO.test(command)) return true;
+  return parts.some((words) => {
+    if (ELSEWHERE.has(programOf(words[0]))) return true;
+    if (programOf(words[0]) !== 'git') return false;
+    const sub = words[gitSubcommand(words).index];
+    return ['init', 'clone', 'worktree', 'submodule'].includes(sub);
+  });
+}
+
+// Next to a part with a mark, the other parts of the line may only be git, or a filter of its output, with no expansion
+// at all: bash hands the last word of a command to the next one as $_, so `git log -S <mark>; grep -rl "$_" <folder>`
+// searched with the mark (review round 2 of shop PR #21, security).
+const FOLLOWERS = new Set(['git', 'head', 'tail', 'wc', 'sort', 'uniq', 'cut', 'grep']);
+const plainFollower = (words) => words.env.length === 0 && FOLLOWERS.has(programOf(words[0])) && !words.some((word) => word.includes('$') || word.includes('`'));
+
 function searchesForKey(command) {
   if (!KEY_MARK.test(command)) return false;
-  const marked = segments(command).filter((words) => KEY_MARK.test([...words.env, ...words].join(' ')));
-  return marked.length === 0 || !marked.every(repoOnly);
+  const parts = segments(command);
+  const marked = parts.filter((words) => KEY_MARK.test([...words.env, ...words].join(' ')));
+  if (marked.length === 0 || !marked.every(repoOnly) || movesOrMakesRepo(parts, command)) return true;
+  return !parts.every((words) => marked.includes(words) || plainFollower(words));
 }
 
 // What a path, or a glob or pattern of Grep and Glob, may not name: keys, the token of gh, the backups. undefined when
@@ -128,6 +155,7 @@ function checkCommand(command, role, gates, roster, depth = 0) {
   if (searchesForKey(command)) return deny(KEY_SEARCH);
   if (BACKUP_FILE.test(command)) return deny(BACKUP);
   if (POWERSHELL_ENV.test(command)) return deny(IDENTITY);
+  if (USER_VARIABLES.test(command)) return deny(USER_VARIABLES_REASON);
   for (const words of segments(command)) {
     const result = checkWords(words, role, gates, roster, depth);
     if (!result.allow) return result;

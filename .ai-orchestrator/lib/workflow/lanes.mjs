@@ -7,10 +7,11 @@
 //   projectDir
 //   gitIn(dir)                  (...args) => { status, stdout, stderr }: git in a folder
 //   install(dir)                installs the packages of the project and of the kit in a lane: { ok, reason, notes }
-//   fs                          { existsSync, mkdirSync, copyFileSync, cpSync, readdirSync, writeFileSync }
+//   fs                          { existsSync, mkdirSync, copyFileSync, cpSync, readdirSync, statSync, writeFileSync }
 //   pullsOf(branch)             resolves the PRs whose head is the branch: [{ number, state }], state open, closed or merged
 //   isProtected(branch)
-//   settings                    { worktrees, copy } of project.yaml (runsSettings)
+//   settings                    { worktrees, lanesMax, copy } of project.yaml (runsSettings)
+//   busy(key)                   whether another command runs on the item now: its lane is not pruned
 import { dirname, join } from 'node:path';
 import { checkoutBranch, laneDir, laneNote, laneOf, laneRoot, lanesToPrune } from './places.mjs';
 
@@ -19,7 +20,7 @@ const KEY = /^[A-Z][A-Z0-9_]*-\d+$/;
 // short, so the next run finishes it (review of shop PR #21: one whose install failed was taken as ready).
 const READY = join('.ai', 'lane-ready');
 
-export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtected, settings }) {
+export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtected, settings, busy = () => false }) {
   const git = gitIn(projectDir);
   const root = laneRoot(projectDir);
   const exists = (dir) => fs.existsSync(join(dir, '.git'));
@@ -55,6 +56,12 @@ export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtecte
     const dir = laneDir(projectDir, key);
     if (exists(dir) && ready(dir)) return { ok: true, dir, made: false, notes: [] };
     const made = !exists(dir);
+    // runs.lanes_max is also how many lanes are open at once, those of items that wait for you included (spec 5.1;
+    // review round 2 of shop PR #21): each holds a full install of the packages.
+    const open = made ? list() : [];
+    if (open.length >= (settings.lanesMax ?? Infinity)) {
+      return { ok: false, reason: `${open.length} lanes are open (${open.map(({ key: k }) => k).join(', ')}), the most runs.lanes_max allows: ${key} waits until the PR of one is merged or closed, which removes its lane at the next command` };
+    }
     if (made) {
       fs.mkdirSync(root, { recursive: true });
       const fetched = git('fetch', '--quiet', 'origin');
@@ -114,6 +121,11 @@ export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtecte
     for (const { branch } of lanes) if (branch) pulls.push(...(await pullsOf(branch)).map((pr) => ({ ...pr, headRef: branch })));
     const notes = [];
     for (const lane of lanesToPrune(lanes, pulls)) {
+      // Another command may be between making the lane and putting it on a new branch (review round 2 of shop PR #21).
+      if (busy(lane.key)) {
+        notes.push(`The lane of ${lane.key} stays: another command runs on ${lane.key}.`);
+        continue;
+      }
       const merged = pulls.some(({ headRef, state }) => headRef === lane.branch && state === 'merged');
       const held = unsaved(lane, merged);
       if (held) {
@@ -121,16 +133,25 @@ export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtecte
         continue;
       }
       const ledgers = join(lane.dir, '.ai', 'ledger');
-      const back = fs.existsSync(ledgers) ? fs.readdirSync(ledgers).filter((name) => name.endsWith('.md')) : [];
+      // A ledger comes back unless the project folder has it newer, such as one qa wrote there after the lane did (review
+      // round 2 of shop PR #21).
+      const ledgerFiles = fs.existsSync(ledgers) ? fs.readdirSync(ledgers).filter((name) => name.endsWith('.md')) : [];
+      const home = (name) => join(projectDir, '.ai', 'ledger', name);
+      const newerHome = ledgerFiles.filter((name) => fs.existsSync(home(name)) && fs.statSync(home(name)).mtimeMs > fs.statSync(join(ledgers, name)).mtimeMs);
+      const back = ledgerFiles.filter((name) => !newerHome.includes(name));
       for (const name of back) {
         fs.mkdirSync(join(projectDir, '.ai', 'ledger'), { recursive: true });
-        fs.copyFileSync(join(ledgers, name), join(projectDir, '.ai', 'ledger', name));
+        fs.copyFileSync(join(ledgers, name), home(name));
       }
       // The screenshots and API samples of the item's dev agents (review of shop PR #21).
       const preview = join('.ai', 'runs', lane.key, 'preview');
       const previewBack = fs.existsSync(join(lane.dir, preview));
       if (previewBack) fs.cpSync(join(lane.dir, preview), join(projectDir, preview), { recursive: true });
-      const kept = [...(back.length > 0 ? ['its ledgers are back in .ai/ledger/'] : []), ...(previewBack ? [`its preview in .ai/runs/${lane.key}/preview/`] : [])];
+      const kept = [
+        ...(back.length > 0 ? ['its ledgers are back in .ai/ledger/'] : []),
+        ...newerHome.map((name) => `.ai/ledger/${name} of the project folder is newer and stays`),
+        ...(previewBack ? [`its preview in .ai/runs/${lane.key}/preview/`] : []),
+      ];
       const removed = git('worktree', 'remove', '--force', lane.dir);
       notes.push(removed.status === 0 ? `Removed the lane of ${lane.key}: its PR is ${merged ? 'merged' : 'closed'}${kept.length > 0 ? `; ${kept.join(', ')}` : ''}.` : `The lane of ${lane.key} could not be removed: ${(removed.stderr || removed.stdout).trim()}`);
     }

@@ -8,7 +8,7 @@
 // Jira is read with ATLASSIAN_AGENT_TOKEN, GitHub with a read-only token of the ao-review App. Run it from the project
 // root; the kit is in AO_KIT_DIR when set.
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { freemem, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,7 +46,7 @@ import { CHANGES, decideStep, dockerGate } from '../lib/workflow/steps.mjs';
 import { restoreWip, saveWip } from '../lib/workflow/wip.mjs';
 import { laneKeeper, runsSettings } from '../lib/workflow/lanes.mjs';
 import { installLane, pullsOfBranch, qaWatcher, runPlacer, waitForRam } from '../lib/workflow/lane-runs.mjs';
-import { checkoutBranch, laneDir } from '../lib/workflow/places.mjs';
+import { checkoutBranch, laneDir, laneRoot } from '../lib/workflow/places.mjs';
 import { claimRole, claimsRole, liveLocks, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
 import { runsAtOnce } from '../lib/workflow/ports.mjs';
 
@@ -60,7 +60,7 @@ const projectDir = process.cwd();
 const runsDir = join(projectDir, '.ai', 'runs');
 // The locks of the commands that run agents, one file each (parallel-runs spec 5.1).
 const activeDir = join(runsDir, 'active');
-const lockFs = { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync };
+const lockFs = { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync };
 // The commands that stop a preview before they run: every one that may run an agent or switch the folder. /ao-ship runs
 // devops in the project folder with no checkout of its own (review of ao-sample PR #21), so the release commands too.
 const PREVIEW_STOPS = ['spec', 'plan', 'request', 'build', 'review', 'fix', 'qa', 'release', 'ship', 'rollback'];
@@ -230,14 +230,16 @@ async function main() {
     projectDir,
     gitIn,
     install: async (dir) => installLane(dir, { env: installEnv(), exists: existsSync, manager: managerFromLockfile, args: installArgs, run: runManager }),
-    fs: { existsSync, mkdirSync, copyFileSync, cpSync, readdirSync, writeFileSync },
+    fs: { existsSync, mkdirSync, copyFileSync, cpSync, readdirSync, statSync, writeFileSync },
     pullsOf: (branch) => pullsOfBranch(github, repo, branch),
     isProtected: (branch) => isProtected(branch, gates.protected_branches),
     settings: runs,
+    // A lane another command runs on is not pruned (review round 2 of shop PR #21).
+    busy: (k) => liveLocks(activeDir, { fs: lockFs, alive }).some((lock) => lock.key === k && lock.pid !== process.pid),
   });
   if (command === 'preview' && runs.worktrees) {
     // The dev agents wrote the preview in the lane of the item (review of shop PR #21).
-    const lanePreview = arg && /^[A-Z][A-Z0-9_]*-\d+$/.test(arg) ? join(laneDir(projectDir, arg), '.ai', 'runs', arg, 'preview') : join(laneDir(projectDir, '<KEY>'), '.ai', 'runs', '<KEY>', 'preview');
+    const lanePreview = arg && /^[A-Z][A-Z0-9_]*-\d+$/.test(arg) ? join(laneDir(projectDir, arg), '.ai', 'runs', arg, 'preview') : join(laneRoot(projectDir), '<KEY>', '.ai', 'runs', '<KEY>', 'preview');
     console.log('STOP: /ao-preview runs the apps from the project folder on the PR branch, and with runs.worktrees on that branch is checked out in the lane of the item');
     console.log(`Next: read the screenshots and API samples in ${lanePreview}, then /ao-review <PR>; or open the lane in your editor`);
     return;
@@ -322,6 +324,7 @@ async function main() {
       runs,
       apps: projectApps,
       waitForRam: (gb) => waitForRam(gb, { freeBytes: freemem, sleep, log: (line) => console.log(line) }),
+      othersRunning: () => liveLocks(activeDir, { fs: lockFs, alive }).some(({ pid }) => pid !== process.pid),
       log: (line) => console.log(line),
     });
     const gitOf = async (run) => {
@@ -608,7 +611,8 @@ function developHistory(tag) {
 }
 
 // /ao-release <vX.Y.0> <sha>, its one step (release-workflow spec 2.6): the Fix Versions and comments on Jira with the CI
-// token, which only your session holds, then the release branch with your gh login (Pilot 3, spec 2.9). The branch comes
+// token, a user variable of your Windows account that gh-guard keeps agents from reading (review round 2 of shop PR #21),
+// then the release branch with your gh login (Pilot 3, spec 2.9). The branch comes
 // last: once it is there the command stops at "release branch open", so a step cut short before it can be run again.
 async function releaseCut({ version, nextVersion, sha, included, after, cancelled = [] }, { repo, mapping, userToken }) {
   const notes = [];

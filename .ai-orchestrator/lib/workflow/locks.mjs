@@ -43,9 +43,10 @@ export function admit({ live, command, key, role, environment, cap }) {
 const what = ({ command, key, pid }) => `${command}${key ? ` ${key}` : ''} (process ${pid})`;
 const describe = (live) => live.map(what).join(', ');
 
-// The locks of commands still running; a lock whose process is gone is removed. fs: { existsSync, readdirSync,
-// readFileSync, rmSync }; alive(pid).
-export function liveLocks(dir, { fs, alive }) {
+// The locks of commands still running; a lock whose process is gone is removed. One that cannot be read is removed only
+// with clean, under the mutex: a read from outside, such as /ao-status, keeps it (review round 2 of shop PR #21). fs:
+// { existsSync, readdirSync, readFileSync, rmSync }; alive(pid).
+export function liveLocks(dir, { fs, alive, clean = false }) {
   if (!fs.existsSync(dir)) return [];
   const live = [];
   for (const file of fs.readdirSync(dir).filter((name) => name.endsWith('.json'))) {
@@ -56,9 +57,17 @@ export function liveLocks(dir, { fs, alive }) {
       lock = null;
     }
     if (lock && alive(lock.pid)) live.push({ ...lock, name: file.slice(0, -'.json'.length) });
-    else fs.rmSync(join(dir, file), { force: true });
+    else if (lock || clean) fs.rmSync(join(dir, file), { force: true });
   }
   return live;
+}
+
+// Writes a lock whole: a file aside, then a rename over the lock, so a read never meets half of it (review round 2 of
+// shop PR #21). fs adds renameSync.
+function writeLock(fs, file, lock) {
+  const aside = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(aside, `${JSON.stringify(lock)}\n`);
+  fs.renameSync(aside, file);
 }
 
 // Runs decide() under the mutex file of the folder, so two commands cannot both read the locks before either writes.
@@ -94,10 +103,10 @@ export async function takeLock(dir, holder, { fs, alive, cap, sleep, tries = 50 
     dir,
     holder.pid,
     () => {
-      const decided = admit({ live: liveLocks(dir, { fs, alive }), ...holder, cap });
+      const decided = admit({ live: liveLocks(dir, { fs, alive, clean: true }), ...holder, cap });
       if (!decided.ok) return decided;
       const file = join(dir, `${decided.name}.json`);
-      fs.writeFileSync(file, `${JSON.stringify({ ...holder, slot: decided.slot })}\n`);
+      writeLock(fs, file, { ...holder, slot: decided.slot });
       return { ok: true, file, slot: decided.slot };
     },
     { fs, alive, sleep, tries },
@@ -117,8 +126,8 @@ export async function claimRole(dir, file, role, { fs, alive, sleep, poll = 30_0
       () => {
         if (!fs.existsSync(file)) return { ok: false, reason: `the lock ${file} is gone` };
         const own = JSON.parse(fs.readFileSync(file, 'utf8'));
-        const busy = liveLocks(dir, { fs, alive }).find((lock) => join(dir, `${lock.name}.json`) !== file && DEV_COMMANDS.includes(lock.command) && lock.role === role);
-        fs.writeFileSync(file, `${JSON.stringify({ ...own, role: busy ? null : role })}\n`);
+        const busy = liveLocks(dir, { fs, alive, clean: true }).find((lock) => join(dir, `${lock.name}.json`) !== file && DEV_COMMANDS.includes(lock.command) && lock.role === role);
+        writeLock(fs, file, { ...own, role: busy ? null : role });
         return busy ? { ok: false, busy } : { ok: true, waited: attempt > 0 };
       },
       { fs, alive, sleep },

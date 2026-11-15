@@ -8,13 +8,15 @@ import { laneEnv, lanePorts, portOffset, portsNote } from './ports.mjs';
 // The run as it starts: in its lane when it has one, told so; its ports and the variables of runs.lane_env moved by its
 // slot when more than one run may go at once or it works in a lane, so it meets neither another run nor the apps and
 // database you run in the project folder. keeper: laneKeeper; runs: runsSettings; apps: the apps of project.yaml;
-// waitForRam(gb) resolves once that much RAM is free; log(line) gets what making the lane did.
-export function runPlacer({ keeper, command, cap, slot, runs, apps, waitForRam, log = () => {} }) {
+// waitForRam(gb) resolves once that much RAM is free; othersRunning() whether another command runs now; log(line) gets
+// what making the lane did.
+export function runPlacer({ keeper, command, cap, slot, runs, apps, waitForRam, othersRunning = () => true, log = () => {} }) {
   return async (run) => {
     const place = await keeper.placeOf(run, command);
     for (const line of place?.notes ?? []) log(line);
-    // Another agent starts only with enough free RAM (spec 5.1).
-    if (cap > 1) await waitForRam(runs.minFreeRamGb);
+    // Another agent starts only with enough free RAM (spec 5.1). Alone, a run waits for none: no other agent would free
+    // it (review round 2 of shop PR #21).
+    if (cap > 1 && othersRunning()) await waitForRam(runs.minFreeRamGb);
     const moved = cap > 1 || Boolean(place);
     const offset = moved ? portOffset(slot, runs.portStep) : 0;
     const env = moved ? laneEnv(runs.laneEnv, slot, offset) : {};

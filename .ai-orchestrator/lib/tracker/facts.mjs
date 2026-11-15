@@ -130,7 +130,9 @@ export async function githubGuards(github, { item, needed, contract, mapping, ap
     if (!cache.has(key)) cache.set(key, read());
     return cache.get(key);
   };
-  const allPulls = () => once('pulls', () => github.getAll('/pulls', { state: 'all', sort: 'created', direction: 'desc' }));
+  // A PR from a fork is never the item's, whatever its branch is called (review round 2 of shop PR #21).
+  const sameRepo = (pr) => pr.head?.repo?.full_name === pr.base?.repo?.full_name;
+  const allPulls = () => once('pulls', async () => (await github.getAll('/pulls', { state: 'all', sort: 'created', direction: 'desc' })).filter(sameRepo));
   const pullsOf = async (key) => (await allPulls()).filter(({ head }) => parseBranch(head.ref)?.key === key);
   const newest = async () => (await pullsOf(item.key))[0];
   const checks = (sha) => once(`checks ${sha}`, () => readChecks(github, sha));

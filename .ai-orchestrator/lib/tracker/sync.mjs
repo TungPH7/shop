@@ -25,12 +25,17 @@ const PR_EVENTS = ['pull_request', 'pull_request_target'];
 export async function itemsOf(event, payload, { jira, contract, mapping, space }) {
   const inSpace = (keys) => [...new Set(keys.filter(Boolean))].filter((key) => key.startsWith(`${space}-`));
   const ofBranch = (name) => parseBranch(name ?? '')?.key;
+  // A PR from a fork concerns no item (review round 2 of shop PR #21): pull_request_target runs jira-sync with the CI token
+  // for it too, and its branch and title are anyone's words. A head repository that is gone counts as a fork.
+  const ours = (repo) => Boolean(repo?.full_name) && repo.full_name === payload.repository?.full_name;
   switch (event) {
     case 'pull_request':
     case 'pull_request_target':
     case 'pull_request_review':
+      if (!ours(payload.pull_request.head.repo)) return [];
       return inSpace([ofBranch(payload.pull_request.head.ref), ...extractKeys(payload.pull_request.title ?? '')]);
     case 'workflow_run':
+      if (!ours(payload.workflow_run.head_repository)) return [];
       return inSpace([ofBranch(payload.workflow_run.head_branch)]);
     case 'workflow_dispatch':
       return inSpace(extractKeys(payload.inputs?.item ?? '').slice(0, 1));

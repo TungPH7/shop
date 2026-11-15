@@ -6,7 +6,9 @@
 # packages npm ci installs, and move any item with that token. So PR events come through pull_request_target, whose
 # workflow and checkout are those of the base branch, and reviews through the run of the workflow PR review, which
 # holds no secret; there is no pull_request or pull_request_review trigger, whose workflows run from the PR. The token is
-# a secret of the environment jira-sync, which only the protected branches may use, so no workflow of a PR reaches it.
+# a secret of the environment jira-sync, which only the protected branches may use, so no workflow of a PR reaches it on
+# GitHub. The same token is a user variable on your machine, for /ao-release and qa; gh-guard stops the plain ways an
+# agent could read it there, and taking it off the machine is the lasting fix (review round 2 of shop PR #21).
 name: jira-sync
 
 on:
@@ -41,6 +43,11 @@ jobs:
     environment:
       name: jira-sync
       deployment: false
+    # pull_request_target runs for a PR from a fork too, and so does a run of CI or PR review for one: they concern no item
+    # (review round 2 of shop PR #21). lib/tracker/sync.mjs says the same.
+    if: >-
+      (github.event_name != 'pull_request_target' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.event_name != 'workflow_run' || github.event.workflow_run.head_repository.full_name == github.repository)
     steps:
       # The base branch's commit on pull_request_target: never the head of the PR.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
