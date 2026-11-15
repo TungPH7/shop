@@ -42,7 +42,7 @@ class ProductSearchTermsTest {
 
   @ParameterizedTest
   @NullAndEmptySource
-  @ValueSource(strings = {" ", "  \t ", " 　"})
+  @ValueSource(strings = {" ", "  \t ", "\u00a0\u3000"})
   void of_withAKeywordBlankAfterTrimming_isNoSearch(String q) {
     assertThat(ProductSearchTerms.of(q)).isEmpty();
   }
