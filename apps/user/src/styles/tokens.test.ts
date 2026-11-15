@@ -98,14 +98,18 @@ describe('colour tokens match the Design System table', () => {
     },
   );
 
-  test('the dark block re-maps only semantic roles, never a primitive', () => {
-    const primitives = tokens
-      .names(':root')
-      .filter((name) => !DESIGN.some(([role]) => role === name));
-    const remapped = tokens.names('.dark');
-    expect(
-      remapped.filter((name) => primitives.includes(name) && !name.endsWith('-shadow')),
-    ).toEqual([]);
+  test('the dark block re-maps only semantic roles, never a primitive of the palette', () => {
+    const palette = /^--(graphite|slate|mist|white|blue|green|red|amber)-?/;
+    expect(tokens.names('.dark').filter((name) => palette.test(name))).toEqual([]);
+  });
+
+  test('the primary button gets lighter on hover in both themes', () => {
+    for (const theme of THEMES) {
+      const hover = tokens.value('--primary-hover', theme);
+      expect(hover).toBe(
+        `color-mix(in oklch, ${tokens.value('--primary', theme)}, oklch(1 0 0) 6%)`,
+      );
+    }
   });
 });
 

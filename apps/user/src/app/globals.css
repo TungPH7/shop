@@ -1,7 +1,8 @@
-/* Base style tối thiểu cho Phase 1.1. Design tokens (CSS-var, seam S4) ở
-   `~/styles/tokens.css` (folder 22) — file này TIÊU THỤ token semantic (vd var(--muted),
-   var(--surface)) nên đổi theme là cả app repaint. Engine Tailwind v4 (adapter) vẫn thuộc
-   Phase 1.2. `color-scheme` do next-themes quản theo theme (KHÔNG set ở đây — 1 chủ-sở-hữu). */
+/* Base style of user: reset, page background, body text and headings, from the design tokens of
+   src/styles/tokens.css (SHOP-10, docs/design-system/user.md). Shared classes (buttons, badges, glass card, fields,
+   skeleton, placeholder tile) are in src/styles/components.css. `color-scheme` is owned by next-themes. */
+
+@import '../styles/components.css';
 
 *,
 *::before,
@@ -9,18 +10,49 @@
   box-sizing: border-box;
 }
 
+html {
+  background-color: var(--background);
+}
+
+/* The page: the 135° gradient of the palette, with no shapes of the reference page. Body text 14/20.3, 500. */
 body {
+  min-height: 100vh;
   margin: 0;
-  /* Folder 20 — `--font-sans` do next/font (Inter, tự host) đặt qua class `sans.variable` trên <html>.
-     Fallback giữ nguyên: nếu vì lý do gì var trống thì vẫn rơi về font hệ thống (no FOIT). */
-  font-family:
-    var(--font-sans),
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    Roboto,
-    sans-serif;
-  line-height: 1.5;
+  color: var(--foreground);
+  font: var(--fw-regular) var(--fs-base) / var(--lh-base) var(--font);
+  background-color: var(--background);
+  background-image: linear-gradient(135deg, var(--background-from), var(--background-to));
+  background-attachment: fixed;
+}
+
+/* Page title, measured on the reference page: 38/39.5, 600, letter-spacing -0.025em; 28 under 768px. */
+h1 {
+  margin: 0 0 var(--space-4);
+  font: var(--fw-semibold) var(--fs-title) / var(--lh-tight) var(--font);
+  letter-spacing: -0.025em;
+}
+
+@media (width < 768px) {
+  h1 {
+    font-size: var(--fs-title-sm);
+  }
+}
+
+/* Section and dialog titles: 20/29, 700, letter-spacing -0.3px. */
+h2 {
+  margin: 0 0 var(--space-3);
+  font: var(--fw-bold) var(--fs-2xl) / var(--lh-base) var(--font);
+  letter-spacing: -0.3px;
+}
+
+a {
+  color: var(--primary-text);
+}
+
+/* Focus ring: 2px of --ring, 2px away, on every focusable element reached by keyboard. */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 main {
