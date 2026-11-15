@@ -158,7 +158,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.field`, `.field__meta`, `.field__messages`, `.field-warning`, `.field-counter`, `.field-icon` | Trường của form | Do `InputField`, `TextAreaField`, `SelectField` vẽ. Dòng cảnh báo màu `--warn-text` kèm biểu tượng; bộ đếm `--hint`, thành `--bad-text` khi vượt (`data-over`) |
 | `.input-group`, `.input-group__input`, `.input-group__affix` | Ô nhập có phần đầu hay hậu tố | Khung là `.input`; focus và lỗi vẽ trên khung (`:focus-within`, `:has([aria-invalid])`) |
 | `.segmented`, `.segmented__item`, `.segmented__radio`, `.choice` | Nút phân đoạn | Nhóm nền `--surface-2`, bo 999, rộng vừa các mục; mục cao 34, đệm 8 14, chữ 12,5/600 `--muted`; mục đang chọn (`aria-pressed`, hay radio `:checked`) nền `--line-2`, chữ `--text` |
-| `.pagination`, `.pagination__summary`, `.pagination__list`, `.pagination__page`, `.pagination__gap` | Phân trang (S1.11) | Nút là `.btn--secondary.btn--sm`; trang hiện tại (`aria-current`) nền `--line-2`, viền `--control-border` |
+| `.pagination`, `.pagination__summary`, `.pagination__list`, `.pagination__page`, `.pagination__gap` | Phân trang (S1.11) | Mục là liên kết mang class `.btn--secondary.btn--sm`; trang hiện tại (`aria-current`) nền `--line-2`, viền `--control-border` |
 | `.dialog`, `.dialog__header`, `.dialog__title`, `.dialog__close`, `.dialog__body`, `.dialog__error`, `.dialog__actions` | Hộp thoại (S3) | Nền `--dialog` kính, bo 30, rộng `min(92vw, 560px)`, đệm 22; màn che `--scrim` và blur 30; nút Đóng tròn 40; lỗi là `.banner--error` |
 | `.toasts`, `.toast`, `.toast__icon`, `.toast__message`, `.toast__close` | Toast (S1.12) | Đáy giữa, rộng `min(92vw, 480px)`; nền `--dialog`, bo 14, đệm 12 16, `--card-shadow`; biểu tượng màu theo `data-kind`; nút đóng tròn 34 |
 | `.tile` | Ô giữ chỗ | 40×40, bo `--r-thumb`, gradient 160° theo `data-group` |
@@ -203,11 +203,13 @@ Một kiểu vẽ, hai hành vi. Cả hai được điều khiển: nơi gọi g
 
 ### Pagination (`ui/pagination.tsx`)
 
-`<Pagination page pageSize totalItems onPageChange />` (S1.11).
+`<Pagination page pageSize totalItems hrefFor />` (S1.11).
 
-- `<nav>` có nhãn "Phân trang", dòng "Hiển thị 1–20 trên 25" với số theo ngôn ngữ (`10.000` ở `vi`), nút Trước, số trang, nút Sau. Ẩn khi chỉ có một trang.
-- Trang hiện tại có `aria-current="page"`; nút số trang có nhãn "Trang n". Bấm trang hiện tại không làm gì.
-- Trước và Sau khóa bằng `aria-disabled`, không bằng `disabled`: người dùng bàn phím đi tới trang cuối bằng Sau vẫn giữ focus trên nút.
+- Đổi trang là điều hướng (UI-001): mỗi mục là một liên kết `<a href>` tới URL của trang đó, do nơi gọi dựng bằng `hrefFor(page)` và giữ các tham số khác của danh sách (`?q=…&status=…&page=3`). Nên một trang mở được ở tab mới hay chép được link (AC4). Bấm thì đi qua router, không tải lại trang. URL là nguồn sự thật: nơi gọi đọc lại `page` từ `?page=`, component không có `onPageChange`.
+
+- `<nav>` có nhãn "Phân trang", dòng "Hiển thị 1–20 trên 25" với số theo ngôn ngữ (`10.000` ở `vi`), Trước, số trang, Sau. Ẩn khi chỉ có một trang.
+- Trang hiện tại có `aria-current="page"`; liên kết số trang có nhãn "Trang n".
+- Trước ở trang đầu và Sau ở trang cuối là liên kết bị khóa: `<a>` không có `href`, với `role="link"`, `aria-disabled="true"` và `tabIndex={0}`. Vẫn là cùng một phần tử `<a>` với liên kết đang dùng được, nên người dùng bàn phím đi tới trang cuối bằng Sau vẫn giữ focus trên Sau.
 - Tới 7 trang thì hiện đủ. Dài hơn: trang đầu, trang cuối, và một trang mỗi bên trang hiện tại; dấu "…" (`aria-hidden`) không bao giờ thay cho đúng một trang.
 - Nơi gọi đọc `?page=` một lần và truyền một trang hợp lệ: `page` không hợp lệ thì dùng trang 1 (S1.11), để dòng "Hiển thị…" khớp với các dòng của bảng. Component cũng chốt chặn theo đúng luật đó: trang vượt quá trang cuối, `NaN`, `0` hay `2.5` hiện như trang 1.
 

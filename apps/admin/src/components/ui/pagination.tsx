@@ -1,10 +1,16 @@
+import { type ReactNode } from 'react';
+
 import { useTranslation } from 'react-i18next';
+import { type To, useHref, useLinkClickHandler } from 'react-router';
 
 // Pagination of a list (S1.11): "Showing 1–20 of 25", Previous, the page numbers,
-// Next. Controlled: the caller owns the page (the ?page= of the URL) and gets
-// onPageChange(page). Hidden when everything fits on one page.
-// Previous and Next are locked with aria-disabled rather than disabled, so a keyboard
-// user who reaches the last page with Next keeps focus on the button.
+// Next. Hidden when everything fits on one page.
+// Changing page is navigation (UI-001): every item is a link to the URL of its page,
+// built by the caller with hrefFor(page), so a page opens in a new tab or is copied
+// (AC4). The URL stays the source of truth; the caller reads the page back from it.
+// Previous and Next on the first and last page are locked links: an <a> without href,
+// with aria-disabled and tabIndex 0. They stay the same element as the live link, so a
+// keyboard user who reaches the last page with Next keeps focus on it.
 // Up to seven pages are all listed. A longer list keeps the first and last pages and
 // one page on each side of the current one; an ellipsis never hides a single page.
 
@@ -17,7 +23,8 @@ interface PaginationProps {
   page: number;
   pageSize: number;
   totalItems: number;
-  onPageChange: (page: number) => void;
+  /** The URL of a page, keeping the other parameters of the list: `?q=…&page=3`. */
+  hrefFor: (page: number) => To;
 }
 
 const MAX_FULL_LIST = 7;
@@ -45,7 +52,36 @@ function pageItems(current: number, pageCount: number): PageItem[] {
   return items;
 }
 
-export function Pagination({ page, pageSize, totalItems, onPageChange }: PaginationProps) {
+interface PageLinkProps {
+  to: To;
+  isLocked?: boolean;
+  className: string;
+  'aria-label'?: string | undefined;
+  'aria-current'?: 'page' | undefined;
+  children: ReactNode;
+}
+
+// One <a> whether it is live or locked, so React keeps the node and its focus.
+function PageLink({ to, isLocked = false, children, ...attributes }: PageLinkProps) {
+  const href = useHref(to);
+  const handleClick = useLinkClickHandler<HTMLAnchorElement>(to);
+
+  if (isLocked) {
+    return (
+      <a role="link" aria-disabled="true" tabIndex={0} {...attributes}>
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <a href={href} onClick={handleClick} {...attributes}>
+      {children}
+    </a>
+  );
+}
+
+export function Pagination({ page, pageSize, totalItems, hrefFor }: PaginationProps) {
   const { t } = useTranslation();
   const pageCount = Math.ceil(totalItems / pageSize);
 
@@ -57,10 +93,6 @@ export function Pagination({ page, pageSize, totalItems, onPageChange }: Paginat
   const isFirst = current === 1;
   const isLast = current === pageCount;
 
-  function goTo(target: number) {
-    if (target !== current && target >= 1 && target <= pageCount) onPageChange(target);
-  }
-
   return (
     <nav className="pagination" aria-label={t('pagination.label')}>
       <p className="pagination__summary">
@@ -68,16 +100,13 @@ export function Pagination({ page, pageSize, totalItems, onPageChange }: Paginat
       </p>
       <ul className="pagination__list">
         <li>
-          <button
-            type="button"
+          <PageLink
+            to={hrefFor(isFirst ? current : current - 1)}
+            isLocked={isFirst}
             className="btn btn--secondary btn--sm"
-            aria-disabled={isFirst || undefined}
-            onClick={() => {
-              goTo(current - 1);
-            }}
           >
             {t('pagination.previous')}
-          </button>
+          </PageLink>
         </li>
         {pageItems(current, pageCount).map((item) =>
           item.kind === 'gap' ? (
@@ -86,31 +115,25 @@ export function Pagination({ page, pageSize, totalItems, onPageChange }: Paginat
             </li>
           ) : (
             <li key={item.page}>
-              <button
-                type="button"
+              <PageLink
+                to={hrefFor(item.page)}
                 className="btn btn--secondary btn--sm pagination__page"
                 aria-label={t('pagination.page', { page: item.page })}
                 aria-current={item.page === current ? 'page' : undefined}
-                onClick={() => {
-                  goTo(item.page);
-                }}
               >
                 {item.page}
-              </button>
+              </PageLink>
             </li>
           ),
         )}
         <li>
-          <button
-            type="button"
+          <PageLink
+            to={hrefFor(isLast ? current : current + 1)}
+            isLocked={isLast}
             className="btn btn--secondary btn--sm"
-            aria-disabled={isLast || undefined}
-            onClick={() => {
-              goTo(current + 1);
-            }}
           >
             {t('pagination.next')}
-          </button>
+          </PageLink>
         </li>
       </ul>
     </nav>
