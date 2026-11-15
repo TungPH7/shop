@@ -208,7 +208,8 @@ Một kiểu vẽ, hai hành vi. Cả hai được điều khiển: nơi gọi g
 - `<nav>` có nhãn "Phân trang", dòng "Hiển thị 1–20 trên 25" với số theo ngôn ngữ (`10.000` ở `vi`), nút Trước, số trang, nút Sau. Ẩn khi chỉ có một trang.
 - Trang hiện tại có `aria-current="page"`; nút số trang có nhãn "Trang n". Bấm trang hiện tại không làm gì.
 - Trước và Sau khóa bằng `aria-disabled`, không bằng `disabled`: người dùng bàn phím đi tới trang cuối bằng Sau vẫn giữ focus trên nút.
-- Tới 7 trang thì hiện đủ. Dài hơn: trang đầu, trang cuối, và một trang mỗi bên trang hiện tại; dấu "…" (`aria-hidden`) không bao giờ thay cho đúng một trang. `page` vượt quá trang cuối được hiểu là trang cuối.
+- Tới 7 trang thì hiện đủ. Dài hơn: trang đầu, trang cuối, và một trang mỗi bên trang hiện tại; dấu "…" (`aria-hidden`) không bao giờ thay cho đúng một trang.
+- Nơi gọi đọc `?page=` một lần và truyền một trang hợp lệ: `page` không hợp lệ thì dùng trang 1 (S1.11), để dòng "Hiển thị…" khớp với các dòng của bảng. Component cũng chốt chặn theo đúng luật đó: trang vượt quá trang cuối, `NaN`, `0` hay `2.5` hiện như trang 1.
 
 ### Dialog (`ui/dialog.tsx`)
 

@@ -130,12 +130,19 @@ describe('Pagination', () => {
     expect(pageLabels()).toEqual(['Previous', '1', '2', '3', '4', '5', '…', '20', 'Next']);
   });
 
-  it('treats a page past the end as the last page', () => {
+  // S1.11: an invalid page is page 1. The caller already reads ?page= that way, so this
+  // only guards against a caller that does not.
+  it.each([
+    ['past the last page', 99],
+    ['not a number', Number.NaN],
+    ['zero', 0],
+    ['not a whole number', 2.5],
+  ])('shows page 1 for a page %s', (_, page) => {
     renderWithProviders(
-      <Pagination page={99} pageSize={20} totalItems={60} onPageChange={vi.fn()} />,
+      <Pagination page={page} pageSize={20} totalItems={60} onPageChange={vi.fn()} />,
     );
 
-    expect(screen.getByRole('button', { name: 'Page 3' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByText('Showing 41–60 of 60')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Page 1' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByText('Showing 1–20 of 60')).toBeInTheDocument();
   });
 });

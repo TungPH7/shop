@@ -9,7 +9,11 @@ import { useTranslation } from 'react-i18next';
 // one page on each side of the current one; an ellipsis never hides a single page.
 
 interface PaginationProps {
-  /** The current page, from 1. A page past the end counts as the last one. */
+  /**
+   * The current page, from 1. The caller reads it from ?page= once and passes a valid
+   * page (S1.11). As a guard, anything else (past the last page, NaN, 0, 2.5) shows as
+   * page 1, the same rule, so the range never says NaN.
+   */
   page: number;
   pageSize: number;
   totalItems: number;
@@ -47,7 +51,7 @@ export function Pagination({ page, pageSize, totalItems, onPageChange }: Paginat
 
   if (pageCount <= 1) return null;
 
-  const current = Math.min(Math.max(1, Math.trunc(page)), pageCount);
+  const current = Number.isInteger(page) && page >= 1 && page <= pageCount ? page : 1;
   const from = (current - 1) * pageSize + 1;
   const to = Math.min(current * pageSize, totalItems);
   const isFirst = current === 1;
