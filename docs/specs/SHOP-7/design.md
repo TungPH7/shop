@@ -17,6 +17,13 @@
 
 AC7 (gọi thẳng API), AC27 (thẻ meta, JSON-LD) và AC28 (sitemap) không hiện ra màn hình, nên không có khối nào gắn với chúng. Chữ của giao diện viết ở YAML dưới đây, bản `vi` và bản `en`; giá luôn theo `formatPrice` (`1.250.000 ₫`) ở cả hai ngôn ngữ.
 
+Quyết định ngày 2026-11-15, khi bạn đồng ý các đề xuất của `ux`:
+
+- **S2 là trang riêng, không phải hộp thoại** như ảnh 02, vì SPEC liệt kê thêm và sửa là route và form có mô tả tới 5.000 ký tự. S2 dùng kiểu thẻ, nhãn, ô nhập, nút của hộp thoại ở ảnh; hộp thoại chỉ dùng cho S3. Đường dẫn do `sa` chốt trong plan; design dùng `/products/new` và `/products/:productId/edit` (hiện `admin` có `/admin/products/:productId/edit` sau lớp đăng nhập).
+- **S5 không có ảnh.** `05-app-detail.png` không phải trang chi tiết: thanh điều hướng ở mục Apps nhưng nội dung là trang “Studio Overview”, giống ảnh 04, nên có vẻ ảnh chụp lúc đang chuyển trang. Ảnh 05 không đưa vào `design/`. S5 vẽ bằng ASCII, dựng từ thẻ kính và ô “well” của ảnh 03. Nếu sau này có ảnh chi tiết thật, đổi S5 thành màn hình Ảnh.
+- **Chữ ngoài SPEC** (trạng thái trống, lỗi, đang tải, “Đã lưu sản phẩm”, cảnh báo đổi slug, chữ 404, nhãn Active và Hidden) do `ux` viết ở YAML. Đổi chữ chỉ sửa file i18n.
+- **Khung trang.** Bỏ thanh công cụ dọc bên trái của ảnh 04 (tìm, thêm, lịch, chia sẻ…): đó là công cụ của template, không phải của sản phẩm. `user` hiện chưa có thanh điều hướng, nên S4 đến S6 thêm viên thuốc điều hướng với ba đường dẫn có sẵn (Trang chủ, Sản phẩm, Giới thiệu). `admin` giữ các mục đang có; nút “thanh bên” demo của `admin` không vẽ ở S1 và S2, và `ba` hay `sa` quyết có gỡ nó khỏi `admin` hay không.
+
 ## Flow
 
 Mũi tên liền là thao tác của người dùng; mũi tên đứt là tác động giữa hai app: một thay đổi lưu ở `admin` hiện ở trang khách trong vòng 60 giây.
@@ -52,8 +59,9 @@ blocks:
   1:
     name: Thanh điều hướng
     type: nav
-    content: "Ba viên thuốc như thanh trên cùng của ảnh. Trái: tên app “tungph7 codebase”. Giữa: Trang chủ, Sản phẩm (đang chọn), Giới thiệu. Phải: đổi ngôn ngữ, đổi giao diện, Đăng nhập, giữ như `admin` đang có. Không có thanh công cụ dọc bên trái của ảnh"
-    a11y: "`<nav>` có nhãn “Điều hướng chính”; mục đang chọn có aria-current=page. Dưới 1024 px xem Open Questions"
+    content: "Ba viên thuốc như thanh trên cùng của ảnh. Trái: tên app “tungph7 codebase”. Giữa: Trang chủ, Sản phẩm (đang chọn), Giới thiệu. Phải: đổi ngôn ngữ, đổi giao diện, Đăng nhập, giữ như `admin` đang có. Không có thanh công cụ dọc bên trái của ảnh, và không vẽ nút “thanh bên” demo"
+    behavior: "`admin` thiết kế cho máy tính, từ 1024 px (SPEC: quản trị viên dùng trên máy tính); không có bố cục điện thoại"
+    a11y: "`<nav>` có nhãn “Điều hướng chính”; mục đang chọn có aria-current=page"
   2:
     name: Tiêu đề trang
     type: heading
@@ -90,7 +98,7 @@ blocks:
   6:
     name: Bảng sản phẩm
     type: table
-    content: "Nằm trong một thẻ kính như khung “table section” của trang mẫu. Cột: Sản phẩm (ô giữ chỗ 40 px, tên, slug mờ bên dưới), Giá bán (căn phải, `1.250.000 ₫`), Trạng thái, Tình trạng, Thao tác. Mới nhất trước, 20 dòng mỗi trang. Huy hiệu Đang bán (xanh dương), Ẩn (xám), Còn hàng (xanh lá), Hết hàng (vàng hổ phách), luôn có chấm và chữ"
+    content: "Nằm trong một thẻ kính như khung “table section” của trang mẫu. Cột: Sản phẩm (ô giữ chỗ 40 px, tên, slug mờ bên dưới), Giá bán (căn phải, `1.250.000 ₫`), Trạng thái, Tình trạng, Thao tác. Mới nhất trước, 20 dòng mỗi trang. Huy hiệu Đang bán (xanh dương), Ẩn (xám), Còn hàng (xanh lá), Hết hàng (vàng hổ phách), luôn có chấm và chữ. Bảng không có trong ảnh 01 (nằm dưới phần chụp): dòng cao 64 px, đường kẻ line, hover surface-2 là ước lượng của `ux`, cùng token “table header cell” và “table section” của Epic. Dưới 1024 px bảng cuộn ngang trong thẻ của nó, vùng cuộn có tabindex=0 và nhãn “Danh sách sản phẩm”"
     states:
       loading: 6 dòng khung xương, vùng aria-busy=true
       error: "Dòng thông báo “Không tải được danh sách sản phẩm.” (en “Couldn't load the products.”) kèm nút phụ “Thử lại” (en “Try again”), role=alert"
@@ -159,7 +167,7 @@ blocks:
 ```yaml
 screen: S2
 route: "/products/new (thêm) và /products/:productId/edit (sửa)"
-screenshot: "chụp bằng Playwright ngày 2026-11-14, hộp thoại “New experiment” của trang Growth ở trang mẫu https://demo.codeandchill.store/vitrea/#/growth, 1600x1000, giao diện tối. Ảnh là hộp thoại; S2 là trang riêng dùng kiểu thẻ, nhãn, ô nhập, nút của hộp thoại đó (xem Open Questions)"
+screenshot: "chụp bằng Playwright ngày 2026-11-14, hộp thoại “New experiment” của trang Growth ở trang mẫu https://demo.codeandchill.store/vitrea/#/growth, 1600x1000, giao diện tối. Ảnh là hộp thoại; S2 là trang riêng dùng kiểu thẻ, nhãn, ô nhập, nút của hộp thoại đó"
 blocks:
   1:
     name: Thanh điều hướng
@@ -273,9 +281,9 @@ blocks:
     content:
       vi: "Thêm sản phẩm (chế độ thêm), Lưu thay đổi (chế độ sửa)"
       en: "Add product (add mode), Save changes (edit mode)"
-    behavior: "Nút chính. Kiểm cả form: có lỗi thì không gửi, hiện lỗi dưới từng ô sai, giữ nguyên những gì đã nhập, focus về ô sai đầu tiên. Hợp lệ thì gửi; thành công về S1 và hiện S1.12"
+    behavior: "Nút chính. Kiểm cả form: có lỗi thì không gửi, hiện lỗi dưới từng ô sai, giữ nguyên những gì đã nhập, focus về ô sai đầu tiên. Hợp lệ thì gửi; thành công về S1 và hiện S1.12. Nút luôn bấm được, trừ lúc đang lưu, vì AC6 cần hiện lỗi ở từng ô sau khi lưu; nền như nút chính (nút “Create draft” ở ảnh 02 không có nền, không lấy làm mẫu)"
     states:
-      saving: "Chữ “Đang lưu…” (en “Saving…”), khóa nút, aria-busy=true; nút không bị khóa trước khi gửi"
+      saving: "Chữ “Đang lưu…” (en “Saving…”), khóa nút, aria-busy=true"
     ac: [AC5, AC9]
 ```
 
@@ -360,8 +368,9 @@ blocks:
   1:
     name: Thanh điều hướng
     type: nav
-    content: "Ba viên thuốc như thanh trên cùng của hai ảnh. Trái: tên site. Giữa: Trang chủ, Sản phẩm (đang chọn), Giới thiệu, ba đường dẫn có sẵn. Phải: tài khoản (như `AuthStatus` đang có), đổi ngôn ngữ vi và en, đổi giao diện Sáng, Tối, Hệ thống. Không có thanh công cụ dọc bên trái của ảnh"
-    a11y: "`<nav>` có nhãn “Điều hướng chính”; mục đang chọn có aria-current=page. Dưới 768 px xem Open Questions"
+    content: "Ba viên thuốc như thanh trên cùng của hai ảnh. Trái: tên site. Giữa: Trang chủ, Sản phẩm (đang chọn), Giới thiệu, ba đường dẫn có sẵn; `user` hiện chưa có thanh điều hướng nên đây là phần mới. Phải: tài khoản (như `AuthStatus` đang có), đổi ngôn ngữ vi và en, đổi giao diện Sáng, Tối, Hệ thống. Không có thanh công cụ dọc bên trái của ảnh"
+    behavior: "Dưới 768 px: hàng 1 gồm tên site và khối tiện ích (đổi ngôn ngữ dạng “VI/EN”, đổi giao diện và tài khoản dạng nút biểu tượng); hàng 2 là viên thuốc điều hướng chiếm hết bề rộng, ba mục chỉ có chữ, không có menu ẩn"
+    a11y: "`<nav>` có nhãn “Điều hướng chính”; mục đang chọn có aria-current=page"
   2:
     name: Tiêu đề trang
     type: heading
@@ -385,13 +394,13 @@ blocks:
     content:
       vi: "Nhãn “Sắp xếp”; lựa chọn Mới nhất, Giá thấp đến cao, Giá cao đến thấp, và Liên quan nhất chỉ khi đang tìm"
       en: "Label “Sort by”; options Newest, Price: low to high, Price: high to low, and Most relevant only while searching"
-    behavior: "Ô chọn (select) nằm bên phải hàng tìm kiếm, ở vị trí “Sort by” của ảnh 03. Mặc định Mới nhất; khi đang tìm thì mặc định Liên quan nhất. Đổi là áp dụng ngay, không có nút Áp dụng; đổi `?sort=` và về 24 sản phẩm đầu"
+    behavior: "Ô chọn (select) nằm bên phải hàng tìm kiếm, ở vị trí “Sort by” của ảnh 03. Dùng ô chọn thay cho nút phân đoạn của ảnh, vì bốn lựa chọn bằng chữ tiếng Việt không vừa một hàng ở 320 px. Dưới 768 px [3] và [4] xếp chồng, mỗi ô một hàng. Mặc định Mới nhất; khi đang tìm thì mặc định Liên quan nhất. Đổi là áp dụng ngay, không có nút Áp dụng; đổi `?sort=` và về 24 sản phẩm đầu"
     a11y: Là `<select>` gốc có nhãn nhìn thấy
     ac: [AC18, AC19, AC20]
   5:
     name: Lưới sản phẩm
     type: list
-    content: "Lưới thẻ như ảnh 03. Cột: 1 dưới 640 px, 2 từ 640, 3 từ 1024, 4 từ 1440; khoảng cách 16 px; 24 thẻ mỗi lần tải, chia hết cho 1, 2, 3 và 4 cột. Chỉ có sản phẩm Đang bán, mới nhất trước, không có nút xóa"
+    content: "Lưới thẻ như ảnh 03. Cột: 1 dưới 640 px, 2 từ 640, 3 từ 1024, 4 từ 1440; khoảng cách 16 px; 24 thẻ mỗi lần tải, chia hết cho 1, 2, 3 và 4 cột. Chỉ có sản phẩm Đang bán, mới nhất trước, không có nút xóa. Ở 320 px không có thanh cuộn ngang"
     states:
       loading: "8 thẻ khung xương, vùng aria-busy=true"
       error: "Trang lỗi có sẵn của app “Đã xảy ra lỗi” kèm nút “Thử lại”"
@@ -400,7 +409,7 @@ blocks:
   6:
     name: Thẻ sản phẩm
     type: link
-    content: "Thẻ kính như thẻ “Tally” của ảnh 03: ô màu giữ chỗ 4:3 với chữ cái đầu của tên, màu nhóm như ô “Your apps” của ảnh 04; dưới ô là tên (tối đa 2 dòng), giá bán, và khi có giá gốc thì giá gốc gạch ngang kèm “-16%”. Hết hàng thì có huy hiệu “Hết hàng” (en “Out of stock”) đè góc trên trái ô màu; còn hàng thì không có huy hiệu"
+    content: "Thẻ kính như thẻ “Tally” của ảnh 03: ô màu giữ chỗ 4:3 với chữ cái đầu của tên, màu nhóm như ô “Your apps” của ảnh 04, chọn theo `id` của sản phẩm (Design System, Ô giữ chỗ); dưới ô là tên (tối đa 2 dòng), giá bán, và khi có giá gốc thì giá gốc gạch ngang kèm “-16%”. Hết hàng thì có huy hiệu “Hết hàng” (en “Out of stock”) đè góc trên trái ô màu; còn hàng thì không có huy hiệu"
     behavior: Bấm thẻ mở S5 của sản phẩm. Hover nâng thẻ 2 px và sáng viền
     states:
       out-of-stock: Có huy hiệu Hết hàng, giá và tên vẫn như thường
@@ -513,7 +522,7 @@ blocks:
   3:
     name: Ảnh giữ chỗ
     type: image
-    content: "Ô vuông 1:1, bo 22, màu nhóm của sản phẩm (cùng màu với thẻ ở S4), chữ cái đầu của tên viết hoa, cỡ lớn. Desktop: nằm trong thẻ kính cùng [4] đến [10], chiếm 40% bề rộng bên trái. Điện thoại: rộng hết hàng, tỷ lệ 4:3"
+    content: "Ô vuông 1:1, bo 22, màu nhóm của sản phẩm theo `id` (cùng màu với thẻ ở S4), chữ cái đầu của tên viết hoa, cỡ lớn. Desktop: nằm trong thẻ kính cùng [4] đến [10], chiếm 40% bề rộng bên trái. Điện thoại: rộng hết hàng, tỷ lệ 4:3"
     a11y: "aria-hidden=true: chữ cái đầu chỉ để trang trí, tên sản phẩm ở ngay [4]"
     ac: [AC24]
   4:
@@ -546,7 +555,7 @@ blocks:
     content:
       vi: "Còn hàng; hoặc Hết hàng"
       en: "In stock; or Out of stock"
-    behavior: Huy hiệu good “Còn hàng” hay warn “Hết hàng”, có chấm và chữ. Trang không có nút mua vì giỏ hàng nằm ngoài Epic
+    behavior: "Huy hiệu good “Còn hàng” hay warn “Hết hàng”, có chấm và chữ. Trang không có nút mua vì giỏ hàng nằm ngoài Epic: chỗ đó để trống tới khi có Epic giỏ hàng, không vẽ nút khóa"
     ac: [AC24]
   9:
     name: Tiêu đề Mô tả
@@ -628,7 +637,14 @@ blocks:
 
 **App:** admin (S1, S2, S3) và user (S4, S5, S6) · **Design system của app:** chưa có (`docs/design-system/admin.md` và `docs/design-system/user.md` đều chưa có)
 
-Giá trị đọc từ ảnh và từ token Epic đã đo ngày 2026-11-14 ở giao diện tối. Giao diện sáng do `ux` dựng (TW3) từ cùng các vai trò màu. Dùng chung cho hai app. Mọi mục đều “mới” vì cả hai app chưa có file design system, nên `sa` đặt hai Task “Design system của admin” và “Design system của user” lên đầu plan.
+Giá trị đọc từ ảnh và từ token Epic đã đo ngày 2026-11-14 ở giao diện tối. Giao diện sáng do `ux` dựng (TW3) từ cùng các vai trò màu; mọi cặp chữ và nền ở cả hai giao diện đã tính tương phản WCAG AA. Dùng chung cho hai app. Mọi mục đều “mới” vì cả hai app chưa có file design system, nên `sa` đặt hai Task “Design system của admin” và “Design system của user” lên đầu plan.
+
+Quyết định ngày 2026-11-15, khi bạn đồng ý các đề xuất của `ux`:
+
+- **Chỉ lấy style, token và bố cục.** Ảnh trong `design/` chỉ để tham chiếu. Không dựng logo “vitrea”, dải “BUY THIS TEMPLATE”, tên các app, bong bóng và dải cong của trang mẫu; nền trang chỉ là gradient của bảng màu.
+- **Giao diện sáng và hai chỗ của trang mẫu chưa đạt WCAG AA** đã sửa ở dòng `hint` và `control-border` (lý do ở hai dòng đó). Ô nhập vì vậy có viền đậm hơn ở ảnh 02.
+- **Ảnh không có** nút nguy hiểm, ô nhập có lỗi, banner lỗi và cảnh báo, toast. Dùng các giá trị `ux` đề xuất trong bảng, lấy màu bad và warn của trang mẫu.
+- **Giá trị ghi “ước lượng”** (huy hiệu “Running” và “Draft” không có số đo, vì token “status badge” của Epic có vẻ đo nhãn “5 experiments”; màu coral của “-16%”; cỡ chữ cái đầu và bo góc ô giữ chỗ ở dòng bảng; tiêu đề trang 34/36; thời lượng chuyển động) là ước lượng của `ux`. `fe-dev` đối chiếu từng giá trị với trang mẫu khi làm Task design system và ghi giá trị đo vào `docs/design-system/<app>.md`.
 
 | Loại | Tên | Giá trị | Có hay mới |
 |---|---|---|---|
@@ -638,8 +654,8 @@ Giá trị đọc từ ảnh và từ token Epic đã đo ngày 2026-11-14 ở g
 | Màu | dialog | Tối #1c1c20db; sáng #fffffff0. Nền hộp thoại và toast | mới |
 | Màu | text | Tối #f6f8fc; sáng #0f1724. Chữ chính, nhãn trường | mới |
 | Màu | muted | Tối #c9d1de; sáng #3b475a. Chữ phụ, tiêu đề cột bảng, chữ huy hiệu Ẩn | mới |
-| Màu | hint | Tối #9aa1ad (`--ink-mark` của trang mẫu); sáng #556074. Gợi ý, placeholder, slug dưới tên, giá gốc, chân trang. Thay `--faint` #7d8696 cho chữ (xem Open Questions) | mới |
-| Màu | control-border | Tối #7d8696 (`--faint` của trang mẫu); sáng #667184. Viền ô nhập, ô chọn, vùng văn bản; từ 3,8:1 so với nền ô | mới |
+| Màu | hint | Tối #9aa1ad (`--ink-mark` của trang mẫu); sáng #556074. Gợi ý, placeholder, slug dưới tên, giá gốc, chân trang. Thay `--faint` #7d8696 cho chữ, vì #7d8696 chỉ 3,7:1 ở mép sáng của thẻ và 4,0:1 làm placeholder | mới |
+| Màu | control-border | Tối #7d8696 (`--faint` của trang mẫu); sáng #667184. Viền ô nhập, ô chọn, vùng văn bản; từ 3,8:1 so với nền ô. Viền #ffffff2e của trang mẫu chỉ 1,75:1 so với nền thẻ, dưới 3:1 của WCAG 1.4.11 | mới |
 | Màu | line, line-2 | Tối #ffffff1a và #ffffff2e; sáng #0f17241a và #0f17242e. Đường kẻ, viền nút phụ, nền mục đang chọn của nút phân đoạn | mới |
 | Màu | surface-2, well | Tối #ffffff14 và #c8c8d71a; sáng #0f17240d cho cả hai. Nền nút phụ và ô nhập; ô “well” chứa giá ở S5 | mới |
 | Màu | accent | Tối #7aaef0; sáng #2b63c4. Nền nút chính | mới |
@@ -653,7 +669,7 @@ Giá trị đọc từ ảnh và từ token Epic đã đo ngày 2026-11-14 ở g
 | Màu | destructive | Tối nền #e98278 chữ #1a0a08 (7,3:1); sáng nền #b42318 chữ #ffffff (6,6:1). Nút Xóa của S3; `ux` đề xuất, ảnh không có nút nguy hiểm | mới |
 | Màu | Màu nhóm (6) | Gradient 160°, chữ trên ô: blue #354a6a đến #283953, chữ #eef4fd; coral #6a423d đến #52322e, #fdeeeb; green #375741 đến #29432f, #eef9f1; orange #66503a đến #4e3d2b, #fdf3e6; teal #31574f đến #24433d, #ecf8f5; ink #3b3e46 đến #2c2e34, #f1f2f5. Ô giữ chỗ của sản phẩm; giống nhau ở hai giao diện, chữ từ 6,9:1 | mới |
 | Màu | Tương phản đã tính | `ux` tính bằng công thức WCAG 2.1: mọi cặp chữ và nền ở trên từ 4,5:1 ở cả hai giao diện, kể cả mép sáng của thẻ (nền #2e2e30) và nền ô nhập; nền huy hiệu là màu fill ở 16% (tối) hay 14% (sáng), chữ trên đó từ 5,3:1 | mới |
-| Font | family | `"Urbanist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif`. Google Fonts, OFL, tự host: `user` có `next/font/google` (giữ CSP `font-src 'self'`), `admin` tự thêm file font. Hiện `user` dùng Inter, `admin` dùng system-ui | mới |
+| Font | family | `"Urbanist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif`. Google Fonts, OFL, tự host: `user` có `next/font/google` (giữ CSP `font-src 'self'`), `admin` tự thêm file font. Hiện `user` dùng Inter, `admin` dùng system-ui. `ux` chưa kiểm được Urbanist có đủ chữ có dấu tiếng Việt (ạ, ế, ữ, đ…): `fe-dev` kiểm bằng chrome-devtools khi làm Task design system. Nếu thiếu, giữ Urbanist cho chữ Latin và để chữ có dấu rơi về font dự phòng của `--font`; nếu nhìn lệch thì đổi sang một font OFL có tiếng Việt như Be Vietnam Pro, ghi vào mô tả PR (dependency) và `docs/design-system/<app>.md` | mới |
 | Font | body | 14/20,3, 500. Chữ thường, nhãn trường 14/500 | mới |
 | Font | Cỡ chữ | 11, 12, 12,5, 13,5, 14, 15, 17, 20, 22, 26, 34 px (`--fs-2xs` đến `--fs-display`) | mới |
 | Font | Tiêu đề trang | 34/36, 700 ở desktop; 26 ở điện thoại. Ước lượng từ ảnh, Epic không đo | mới |
@@ -669,19 +685,19 @@ Giá trị đọc từ ảnh và từ token Epic đã đo ngày 2026-11-14 ở g
 | Bo góc, bóng | button-shadow | Nút chính tối `inset 0 1px 0 #ffffff47, inset 0 -1px 0 #0000001f, 0 6px 16px -6px #7aaef0a6`; sáng `0 6px 16px -8px #2b63c499` (ước lượng) | mới |
 | Bo góc, bóng | Kính | Thẻ: blur 14 px, bão hòa 175% (`--blur`, `--sat`). Nền sau hộp thoại: blur 30 px (`--blur-thick`) và tối đi. Không dùng bộ lọc SVG riêng của trang mẫu. Khi `prefers-reduced-transparency: reduce` hay thiếu `backdrop-filter`: dùng nền solid | mới |
 | Chuyển động | ease | `cubic-bezier(.2, .8, .2, 1)`, 150 đến 250 ms (ước lượng); tắt khi `prefers-reduced-motion: reduce` | mới |
-| Điểm ngắt | sm, md, lg, xl | 640, 768, 1024, 1440 px; hỗ trợ từ 320 px. Cột lưới sản phẩm 1, 2, 3, 4. `ux` đề xuất, ảnh đều 1600 px nên không đo được | mới |
+| Điểm ngắt | sm, md, lg, xl | 640, 768, 1024, 1440 px. `user` hỗ trợ từ 320 px, không có thanh cuộn ngang; cột lưới sản phẩm 1, 2, 3, 4; thanh điều hướng hai hàng dưới 768 px (S4.1). `admin` thiết kế cho từ 1024 px; dưới 1024 px bảng S1.6 cuộn ngang trong thẻ, form S2 một cột dưới 640 px. `ux` đề xuất, ảnh đều 1600 px nên không đo được | mới |
 | Component | Nút chính | Cao 42, đệm 0 18, bo 999, chữ 13,5/600 màu on-accent, nền accent, button-shadow. hover sáng hơn 6%; focus-visible vòng accent-line; active lún 1 px; đang lưu: đổi chữ, aria-busy, khóa; không khóa trước khi gửi form | mới |
 | Component | Nút phụ | Cao 42 (form, hộp thoại) hay 34 (danh sách, dòng bảng), bo 999, nền surface-2, viền line-2, chữ text 13,5/600 hay 12,5/600. Cùng trạng thái với nút chính; khóa thì mờ 50% | mới |
 | Component | Nút nguy hiểm | Như nút chính, nền destructive. Chỉ dùng cho nút Xóa của S3 | mới |
 | Component | Viên thuốc điều hướng | Thanh cao 49,6, bo 999, nền surface; mục cao 39,6, đệm 10 16, chữ 13,5/600; mục đang chọn nền surface-2 và aria-current=page; hover đổi nền surface-2. Ba viên: tên app, điều hướng, tiện ích | mới |
 | Component | Nút phân đoạn | Nhóm bo 999; mục cao 34, đệm 8 14, chữ 12,5/600; mục đang chọn nền line-2. Dùng cho bộ lọc S1.4 và nhóm chọn S2.11, S2.12 | mới |
 | Component | Ô tìm | Viên thuốc cao 44, nền surface-2, viền control-border, kính lúp bên trái, chữ 14/500, placeholder hint. focus: viền accent-line và vầng 3 px accent 18% | mới |
-| Component | Ô nhập, vùng văn bản, ô chọn | Cao 44 (vùng văn bản tối thiểu 144), bo 14, đệm 10 14, nền surface-2, viền control-border, chữ 14/500 (16 dưới 768 px). focus như ô tìm. lỗi: viền bad, dòng lỗi bad 12,5/500 dưới ô kèm biểu tượng, aria-invalid, aria-describedby. khóa: mờ 50% | mới |
+| Component | Ô nhập, vùng văn bản, ô chọn | Cao 44 (vùng văn bản tối thiểu 144), bo 14, đệm 10 14, nền surface-2, viền control-border, chữ 14/500 (16 dưới 768 px, vì iOS phóng to trang khi ô nhập nhỏ hơn 16 px). focus như ô tìm. lỗi: viền bad, dòng lỗi bad 12,5/500 dưới ô kèm biểu tượng, aria-invalid, aria-describedby. khóa: mờ 50% | mới |
 | Component | Nhãn trường | 14/500 màu text, đặt trên ô; trường bắt buộc có dấu `*` (aria-hidden) và thuộc tính required, trường tùy chọn ghi “(không bắt buộc)” | mới |
 | Component | Thẻ kính | Nền surface, blur, bo 26, đệm 18, card-shadow, không viền | mới |
 | Component | Hộp thoại | Nền dialog, bo 30, rộng min(92vw, 560 px), đệm 22, card-shadow; tiêu đề 20/700; nút đóng tròn 40 px ở góc phải trên; màn che tối và mờ 30 px | mới |
 | Component | Huy hiệu trạng thái | Cao 24, bo 999, đệm 4 10, chấm tròn 6 px và chữ 12/600. Sắc: info (Đang bán), neutral (Ẩn: chữ muted, nền surface-2), good (Còn hàng), warn (Hết hàng), bad (“-16%”). Luôn có chữ. Kích thước ước lượng | mới |
-| Component | Ô giữ chỗ | Gradient màu nhóm, chữ cái đầu của tên viết hoa, 700, màu chữ của nhóm. Thẻ 4:3 bo 22; chi tiết 1:1 bo 22; dòng bảng 40×40 bo 12. Màu nhóm chọn theo mã sản phẩm. aria-hidden | mới |
+| Component | Ô giữ chỗ | Gradient màu nhóm, chữ cái đầu của tên viết hoa, 700, màu chữ của nhóm. Thẻ 4:3 bo 22; chi tiết 1:1 bo 22; dòng bảng 40×40 bo 12. Màu nhóm chọn từ `id` của sản phẩm (băm `id` vào 6 màu nhóm), không theo tên hay slug, để đổi tên hay slug không đổi màu; chữ cái đầu thì theo tên hiện tại. `sa` bảo đảm API trả `id` ở danh sách và chi tiết. aria-hidden | mới |
 | Component | Thẻ sản phẩm | Thẻ kính, đệm 18: ô giữ chỗ 4:3, tên 15/600 tối đa 2 dòng, giá bán 17/700, giá gốc 13,5/500 hint gạch ngang, huy hiệu “-xx%”; huy hiệu Hết hàng đè góc trên trái ô. hover nâng 2 px và sáng viền; focus-visible vòng accent-line; cả thẻ là một liên kết | mới |
 | Component | Giá | `1.250.000 ₫` do `formatPrice`, cùng một hàm ở hai ngôn ngữ; giá gốc gạch ngang có chữ ẩn “Giá gốc:”; “-16%” có chữ ẩn “Giảm” | mới |
 | Component | Bảng | Trong thẻ kính. Tiêu đề cột 12/600 muted, đệm 10 12; dòng cao 64, đệm 12, đường kẻ line, hover surface-2; cột giá căn phải, cột thao tác căn phải | mới |
@@ -694,21 +710,6 @@ Ghi chú: `apps/user/src/styles/tokens.css` đã có tầng semantic (background
 
 ## Open Questions
 
-Nobody answers in this session, so each point has the answer `ux` proposes; `sa` and the dev agents build from it unless you change it.
+Không có. Ngày 2026-11-15 bạn đồng ý cả 16 đề xuất của `ux`, và mỗi câu trả lời đã thành quyết định ở mục của nó: ở ghi chú dưới bảng Screens, ở khối của màn hình, hoặc ở bảng Design System.
 
-- **Ảnh 05 không phải trang chi tiết.** `05-app-detail.png` có thanh điều hướng ở mục Apps nhưng nội dung là trang “Studio Overview”, giống ảnh 04, nên có vẻ ảnh chụp lúc đang chuyển trang. Vì vậy S5 không có ảnh, vẽ bằng ASCII, và ảnh 05 không đưa vào `design/`. Đề xuất: S5 dựng từ thẻ kính và ô “well” của ảnh 03. Nếu bạn có ảnh chi tiết thật, gửi vào `.ai/design-inbox/SHOP-7/` và `ux` đổi S5 thành màn hình Ảnh.
-- **Ảnh mang nhãn hiệu của trang mẫu.** Ảnh có logo “vitrea”, dải “BUY THIS TEMPLATE”, tên các app và hình trang trí (bong bóng, dải cong). Chúng nằm trong `design/` chỉ để tham chiếu. Đề xuất: không dựng chúng; nền trang chỉ là gradient của bảng màu, đúng mục Never của SPEC.
-- **Giao diện sáng và hai điểm chưa đạt WCAG AA của trang mẫu.** Bảng màu sáng do `ux` dựng, không có ảnh nào để đối chiếu; mọi cặp màu đã tính tương phản (dòng “Tương phản đã tính”). Hai chỗ của trang mẫu tôi đã sửa: chữ `--faint` #7d8696 chỉ 3,7:1 ở mép sáng của thẻ và 4,0:1 làm placeholder, nên chữ gợi ý dùng #9aa1ad (token `--ink-mark` của trang mẫu), còn `--faint` chỉ làm viền ô nhập; viền ô nhập của trang mẫu (#ffffff2e) chỉ 1,75:1 so với nền thẻ, dưới 3:1 của WCAG 1.4.11. Đề xuất: giữ cả bảng màu sáng lẫn hai sửa đổi này. Hậu quả: ô nhập có viền đậm hơn ở ảnh 02.
-- **Font Urbanist và dấu tiếng Việt.** `ux` chưa kiểm được Urbanist có đủ chữ có dấu tiếng Việt (ạ, ế, ữ, đ…) hay không. Đề xuất: `fe-dev` kiểm bằng chrome-devtools khi làm Task design system. Nếu thiếu, giữ Urbanist cho chữ Latin, để chữ có dấu rơi về font dự phòng trong `--font`, và báo bạn; nếu nhìn lệch thì đổi sang một font OFL có tiếng Việt, ví dụ Be Vietnam Pro.
-- **Bảng của S1 không có trong ảnh.** Ảnh 01 chụp ở 1600×1000 nên chỉ thấy lưới thẻ; bảng “Keywords” nằm dưới phần chụp. Cột, độ cao dòng, màu khi rê chuột lấy từ token “table header cell”, “table section” của Epic và ước lượng của `ux`. Đề xuất: dòng cao 64 px, đường kẻ line, hover surface-2.
-- **Bố cục điện thoại và máy tính bảng không có trong ảnh** (mọi ảnh 1600 px). Đề xuất cho `user` (S4 đến S6), dưới 768 px: hàng 1 gồm tên site và khối tiện ích (đổi ngôn ngữ dạng “VI/EN”, đổi giao diện và tài khoản dạng nút biểu tượng); hàng 2 là viên thuốc điều hướng chiếm hết bề rộng, ba mục chỉ có chữ, không có menu ẩn; ô tìm và ô sắp xếp xếp chồng, mỗi ô một hàng; lưới 1 cột dưới 640 px, 2 cột từ 640, 3 từ 1024, 4 từ 1440. Cần không có thanh cuộn ngang ở 320 px (SPEC). Đề xuất cho `admin` (SPEC: dùng trên máy tính): thiết kế cho từ 1024 px; dưới 1024 px bảng S1.6 cuộn ngang trong thẻ của nó (vùng cuộn có tabindex=0 và nhãn “Danh sách sản phẩm”), form S2 một cột dưới 640 px.
-- **Form S2 là trang, không phải hộp thoại.** Ảnh 02 là hộp thoại, còn SPEC liệt kê thêm và sửa là route, và form có mô tả tới 5.000 ký tự cùng các thông báo. Đề xuất: S2 là trang riêng dùng kiểu thẻ, nhãn, ô nhập, nút của hộp thoại ở ảnh; hộp thoại chỉ dùng cho S3. Đường dẫn do `sa` chốt trong plan, đề xuất `/products/new` và `/products/:productId/edit` (hiện `admin` có `/admin/products/:productId/edit` sau lớp đăng nhập).
-- **Nút “Create draft” của ảnh 02 không có nền**, không rõ có phải trạng thái khóa. Đề xuất: nút Lưu luôn bấm được trừ lúc đang lưu, vì AC6 cần hiện lỗi ở từng ô sau khi lưu; nền như nút chính.
-- **Ảnh không có nút nguy hiểm, ô nhập lỗi, banner lỗi và cảnh báo, toast.** Đề xuất: dùng các giá trị ở bảng Design System (màu bad, warn và destructive; màu bad, warn của trang mẫu đã có sẵn).
-- **Sắp xếp dùng ô chọn, không dùng nút phân đoạn như ảnh 03.** Bốn lựa chọn bằng chữ tiếng Việt không vừa một hàng ở 320 px. Đề xuất: ô chọn gốc ở S4.4; bộ lọc ba mục của S1.4 và nhóm chọn của S2 vẫn dạng nút phân đoạn.
-- **Chữ ngoài SPEC.** Chữ cho trạng thái trống, lỗi, đang tải, “Đã lưu sản phẩm”, chữ cảnh báo đổi slug (AC12), chữ 404 và nhãn tiếng Anh của trạng thái Đang bán, Ẩn (Active, Hidden) do `ux` viết ở YAML. Đề xuất: dùng như đã viết; đổi chữ chỉ sửa file i18n.
-- **Màu ô giữ chỗ theo mã sản phẩm.** SPEC nói mỗi sản phẩm giữ cố định một màu, kể cả khi đổi tên hay slug. Đề xuất: chọn màu nhóm từ `id` của sản phẩm (băm `id` vào 6 màu nhóm); `sa` cần chắc API trả `id` ở danh sách và chi tiết. Chữ cái đầu thì theo tên hiện tại.
-- **Khung trang.** Ảnh 04 có thanh công cụ dọc bên trái (tìm, thêm, lịch, chia sẻ…) là công cụ của template, không phải của sản phẩm. `user` hiện không có thanh điều hướng; `admin` có thêm nút “thanh bên” demo. Đề xuất: bỏ thanh dọc ở cả hai app; thêm viên thuốc điều hướng cho `user` với ba đường dẫn có sẵn (Trang chủ, Sản phẩm, Giới thiệu); `admin` giữ các mục đang có và S1, S2 không vẽ nút thanh bên demo. `ba` hay `sa` quyết có gỡ nút đó khỏi `admin` hay không.
-- **Trang chi tiết không có nút mua**, vì giỏ hàng nằm ngoài Epic. Đề xuất: chừa trống tới khi có Epic giỏ hàng, không vẽ nút khóa.
-- **Cỡ chữ ô nhập trên điện thoại.** Ảnh dùng 14 px; iOS tự phóng to trang khi ô nhập nhỏ hơn 16 px. Đề xuất: ô nhập 16 px dưới 768 px, 14 px từ 768 px.
-- **Giá trị ước lượng.** Ảnh không có số đo cho huy hiệu “Running” và “Draft” (token “status badge” của Epic có vẻ đo nhãn “5 experiments”), nên cỡ huy hiệu, màu coral của “-16%”, cỡ chữ cái đầu của ô giữ chỗ, bo góc ô giữ chỗ ở dòng bảng, tiêu đề trang 34/36 và thời lượng chuyển động là ước lượng của `ux`. Đề xuất: `fe-dev` đối chiếu từng giá trị với trang mẫu khi làm Task design system và ghi giá trị đo vào `docs/design-system/<app>.md`.
+Câu hỏi mới ở các chặng sau của Epic: agent làm theo đề xuất của mình và ghi quyết định vào artifact của chặng đó. Agent chỉ hỏi bạn những việc cần quyền mà agent không có.
