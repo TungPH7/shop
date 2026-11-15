@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { clearAll, dismiss, getSnapshot, notify, subscribe } from './notification-store';
+import {
+  clearAll,
+  dismiss,
+  getSnapshot,
+  notify,
+  pauseTimers,
+  resumeTimers,
+  subscribe,
+} from './notification-store';
 
 describe('notification store', () => {
   beforeEach(() => {
@@ -43,14 +51,64 @@ describe('notification store', () => {
     expect(getSnapshot()).not.toBe(before);
   });
 
-  it('auto-dismisses after the per-kind duration', () => {
+  it('auto-dismisses every kind after 6 seconds (S1.12)', () => {
     vi.useFakeTimers();
-    notify.error('e'); // 8000ms
-    notify.info('i'); // 4000ms
-    expect(getSnapshot()).toHaveLength(2);
+    notify.error('e');
+    notify.success('s');
+    notify.info('i');
+    vi.advanceTimersByTime(5999);
+    expect(getSnapshot()).toHaveLength(3);
+    vi.advanceTimersByTime(1);
+    expect(getSnapshot()).toHaveLength(0);
+  });
+
+  it('stops the countdown while paused and finishes the rest of it on resume', () => {
+    vi.useFakeTimers();
+    notify.success('Product added');
     vi.advanceTimersByTime(4000);
-    expect(getSnapshot()).toHaveLength(1); // info gone
-    vi.advanceTimersByTime(4000);
-    expect(getSnapshot()).toHaveLength(0); // error gone
+
+    pauseTimers();
+    vi.advanceTimersByTime(60_000);
+    expect(getSnapshot()).toHaveLength(1);
+
+    resumeTimers();
+    vi.advanceTimersByTime(1999);
+    expect(getSnapshot()).toHaveLength(1);
+    vi.advanceTimersByTime(1);
+    expect(getSnapshot()).toHaveLength(0);
+  });
+
+  it('holds a notification added while paused until resume', () => {
+    vi.useFakeTimers();
+    pauseTimers();
+    notify.info('x');
+    vi.advanceTimersByTime(60_000);
+    expect(getSnapshot()).toHaveLength(1);
+
+    resumeTimers();
+    vi.advanceTimersByTime(6000);
+    expect(getSnapshot()).toHaveLength(0);
+  });
+
+  it('ignores a second pause and a resume without a pause', () => {
+    vi.useFakeTimers();
+    resumeTimers();
+    notify.info('x');
+    pauseTimers();
+    pauseTimers();
+    resumeTimers();
+    vi.advanceTimersByTime(6000);
+    expect(getSnapshot()).toHaveLength(0);
+  });
+
+  it('forgets the timer of a notification dismissed by hand', () => {
+    vi.useFakeTimers();
+    const id = notify.info('x');
+    pauseTimers();
+    dismiss(id);
+    resumeTimers();
+    notify.info('y');
+    vi.advanceTimersByTime(6000);
+    expect(getSnapshot()).toHaveLength(0);
   });
 });

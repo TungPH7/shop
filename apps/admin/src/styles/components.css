@@ -826,3 +826,87 @@ textarea.input {
   justify-content: flex-end;
   margin-top: var(--space-6);
 }
+
+/* --- Toast -------------------------------------------------------------------------- */
+
+/* <Notifications> (components/feedback/notifications.tsx), S1.12: toasts stacked at the
+   bottom centre. The empty region lets clicks through. */
+.toasts {
+  position: fixed;
+  bottom: var(--space-6);
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: center;
+  width: min(92vw, 480px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  gap: var(--space-2-5);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  color: var(--text);
+  font: var(--fw-regular) var(--fs-base) / var(--lh-base) var(--font);
+  background: var(--dialog);
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+  border-radius: var(--r-field);
+  box-shadow: var(--card-shadow);
+  pointer-events: auto;
+  animation: toast-in var(--dur-slow) var(--ease);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-2));
+  }
+}
+
+.toast__icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: var(--info-text);
+}
+
+.toast[data-kind='success'] .toast__icon {
+  color: var(--good-text);
+}
+
+.toast[data-kind='error'] .toast__icon {
+  color: var(--bad-text);
+}
+
+.toast__message {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Smaller than the round button of the dialog: the height of a small button. */
+.toast__close {
+  width: 34px;
+  height: 34px;
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .dialog,
+  .toast {
+    background: var(--solid);
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .dialog,
+  .toast {
+    background: var(--solid);
+    backdrop-filter: none;
+  }
+}

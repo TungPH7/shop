@@ -17,15 +17,21 @@ export interface Notification {
   readonly message: string;
 }
 
-// Errors linger so the user can actually read them; confirmations clear faster.
-const DURATION_MS: Record<NotificationKind, number> = {
-  error: 8000,
-  success: 4000,
-  info: 4000,
-};
+// Every toast stays 6 s (design.md, S1.12), and the countdown stops while the person
+// hovers or focuses the toasts (pauseTimers / resumeTimers, called by <Notifications>),
+// so a toast is never gone while it is being read (WCAG 2.2.1).
+const DURATION_MS = 6000;
+
+interface Timer {
+  remaining: number;
+  startedAt: number;
+  handle: ReturnType<typeof setTimeout> | undefined;
+}
 
 let nextId = 1;
 let notifications: readonly Notification[] = [];
+const timers = new Map<number, Timer>();
+let paused = false;
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -46,7 +52,37 @@ export function getSnapshot(): readonly Notification[] {
   return notifications;
 }
 
+function startTimer(id: number, timer: Timer): void {
+  timer.startedAt = Date.now();
+  timer.handle = setTimeout(() => {
+    dismiss(id);
+  }, timer.remaining);
+}
+
+// Stops every countdown, keeping the time each toast has left.
+export function pauseTimers(): void {
+  if (paused) return;
+  paused = true;
+  for (const timer of timers.values()) {
+    clearTimeout(timer.handle);
+    timer.handle = undefined;
+    timer.remaining = Math.max(0, timer.remaining - (Date.now() - timer.startedAt));
+  }
+}
+
+// Starts every countdown again with the time it had left.
+export function resumeTimers(): void {
+  if (!paused) return;
+  paused = false;
+  for (const [id, timer] of timers) startTimer(id, timer);
+}
+
 export function dismiss(id: number): void {
+  const timer = timers.get(id);
+  if (timer !== undefined) {
+    clearTimeout(timer.handle);
+    timers.delete(id);
+  }
   const next = notifications.filter((notification) => notification.id !== id);
   if (next.length !== notifications.length) {
     notifications = next;
@@ -55,6 +91,9 @@ export function dismiss(id: number): void {
 }
 
 export function clearAll(): void {
+  for (const timer of timers.values()) clearTimeout(timer.handle);
+  timers.clear();
+  paused = false;
   if (notifications.length > 0) {
     notifications = [];
     emit();
@@ -67,13 +106,10 @@ function add(kind: NotificationKind, message: string): number {
   notifications = [...notifications, { id, kind, message }];
   emit();
 
-  // Auto-dismiss. `setTimeout` exists in both browser and Node, so the store
-  // stays environment-agnostic; we still guard for exotic runtimes.
-  if (typeof setTimeout === 'function') {
-    setTimeout(() => {
-      dismiss(id);
-    }, DURATION_MS[kind]);
-  }
+  // Auto-dismiss, unless the toasts are paused: then the countdown starts on resume.
+  const timer: Timer = { remaining: DURATION_MS, startedAt: Date.now(), handle: undefined };
+  timers.set(id, timer);
+  if (!paused) startTimer(id, timer);
   return id;
 }
 
