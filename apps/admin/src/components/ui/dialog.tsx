@@ -1,11 +1,12 @@
-import { type ReactNode, useEffect, useId, useRef } from 'react';
+import { type KeyboardEvent, type ReactNode, useEffect, useId, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
 // Confirmation dialog of admin (Design System: "Hộp thoại"; S3). A native <dialog>
 // opened with showModal(), so the page behind is inert and Tab stays in the dialog.
 // - role=alertdialog, aria-modal, named by its title and described by its body;
-// - the first focus is on Cancel, the safe button;
+// - the first focus is on Cancel, the safe button; Tab and Shift+Tab wrap around
+//   inside (S3.1), where a bare <dialog> would let focus out to the browser;
 // - Esc (the cancel event of <dialog>) acts as Cancel, and so does a close by the
 //   browser; the caller owns `open` and closes it in onCancel;
 // - on close, focus goes back to the element that had it when the dialog opened
@@ -28,6 +29,26 @@ interface DialogProps {
   error?: string | undefined;
 }
 
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), ' +
+  'textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// Keeps Tab inside: from the last focusable element to the first, and back.
+function wrapTab(event: KeyboardEvent<HTMLDialogElement>) {
+  if (event.key !== 'Tab') return;
+  const focusable = [...event.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)];
+  const first = focusable[0];
+  const last = focusable.at(-1);
+  if (first === undefined || last === undefined) return;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function CloseIcon() {
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
@@ -48,6 +69,10 @@ function OpenDialog({
   const { t } = useTranslation();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  // Set when this component closes the dialog itself, so onClose can tell that close
+  // from one by the browser. StrictMode runs the effect twice in development: the
+  // close of the first cleanup must not count as a Cancel.
+  const closingRef = useRef(false);
   const id = useId();
   const titleId = `${id}-title`;
   const bodyId = `${id}-body`;
@@ -60,6 +85,7 @@ function OpenDialog({
     dialog?.showModal();
     cancelRef.current?.focus();
     return () => {
+      closingRef.current = true;
       dialog?.close();
       if (opener?.isConnected === true) opener.focus();
     };
@@ -77,13 +103,17 @@ function OpenDialog({
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={bodyId}
+      onKeyDown={wrapTab}
       onCancel={(event) => {
         event.preventDefault();
         cancel();
       }}
       onClose={() => {
-        // Only the browser closes it while it is mounted (OpenDialog unmounts first
-        // when the caller closes it).
+        if (closingRef.current) {
+          closingRef.current = false;
+          return;
+        }
+        // Closed by the browser, not by the caller.
         if (isBusy) dialogRef.current?.showModal();
         else onCancel();
       }}

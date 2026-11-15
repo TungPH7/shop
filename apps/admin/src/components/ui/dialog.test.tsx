@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { StrictMode, useState } from 'react';
 
 import { describe, expect, it, vi } from 'vitest';
 
@@ -81,10 +81,44 @@ describe('Dialog', () => {
     );
   });
 
+  it('stays open under StrictMode, which runs its effect twice', async () => {
+    const { user } = renderWithProviders(
+      <StrictMode>
+        <DeleteHarness />
+      </StrictMode>,
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Delete Quần jean nam' }));
+
+    expect(screen.getByRole('alertdialog')).toHaveAttribute('open');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+  });
+
   it('puts the first focus on Cancel, the safe button', async () => {
     await openDialog();
 
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+  });
+
+  it('wraps Tab from the last button to the first, and Shift+Tab back', async () => {
+    const { user } = await openDialog();
+    const close = screen.getByRole('button', { name: 'Close' });
+    const remove = screen.getByRole('button', { name: 'Delete' });
+
+    remove.focus();
+    await user.tab();
+    expect(close).toHaveFocus();
+
+    await user.tab({ shift: true });
+    expect(remove).toHaveFocus();
+  });
+
+  it('lets Tab move between the buttons inside', async () => {
+    const { user } = await openDialog();
+
+    await user.tab();
+
+    expect(screen.getByRole('button', { name: 'Delete' })).toHaveFocus();
   });
 
   it('cancels with the Cancel button and gives focus back to the opener', async () => {
