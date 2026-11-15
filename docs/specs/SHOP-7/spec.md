@@ -6,7 +6,7 @@
 
 Ba app của `shop` đều có phần sản phẩm lấy từ template, nhưng không khớp nhau. `api` lưu giá theo USD có số lẻ và trả cả danh sách một lần. `admin` tính giá bằng xu USD, và trang sửa nằm sau lớp đăng nhập của template. `user` gọi API NestJS cũ và còn nút xóa sản phẩm. Vì vậy chưa ai thêm được sản phẩm thật, và khách chưa xem được sản phẩm nào.
 
-Epic này làm cho quản trị viên thêm, sửa, ẩn và xóa được sản phẩm trong `admin`, và cho khách tìm, sắp xếp và xem chi tiết sản phẩm trong `user`. Cả ba app dùng chung một hợp đồng API của `api`. Epic xong khi bản `v0.3.0` mang các việc này lên Production (Open Question 1).
+Epic này làm cho quản trị viên thêm, sửa, ẩn và xóa được sản phẩm trong `admin`, và cho khách tìm, sắp xếp và xem chi tiết sản phẩm trong `user`. Cả ba app dùng chung một hợp đồng API của `api`. Epic xong khi bản `v0.3.0` mang các việc này lên Production. Epic ghi `v0.2.0`, nhưng số đó đã thuộc bản chép kit của SHOP-6, lên Production ngày 2026-11-15.
 
 Màn hình của Epic do `ux` viết ở `docs/specs/SHOP-7/design.md`, theo trang mẫu ở mục Reference Design của Epic và các ảnh trong `.ai/design-inbox/SHOP-7/`. Chữ trong các AC dưới đây là bản tiếng Việt; bản tiếng Anh ghi trong `design.md`.
 
@@ -23,8 +23,8 @@ Màn hình của Epic do `ux` viết ở `docs/specs/SHOP-7/design.md`, theo tra
   - danh mục (category), biến thể (size, màu), SKU, số lượng tồn kho;
   - giỏ hàng, đơn hàng, thanh toán, đánh giá; sắp xếp Bán chạy và Đánh giá;
   - nội dung sản phẩm theo từng ngôn ngữ: sản phẩm nhập một lần, hiện như nhau ở hai ngôn ngữ;
-  - chuyển hướng từ slug cũ sang slug mới (Open Question 8);
-  - đăng nhập và phân quyền của `admin` và `user` (Epic đăng nhập), cùng các E2E đăng nhập còn lại (Open Question 6);
+  - chuyển hướng từ slug cũ sang slug mới: đổi slug thì đường dẫn cũ trả 404, và form cảnh báo trước khi lưu (AC12);
+  - đăng nhập và phân quyền của `admin` và `user` (Epic đăng nhập), cùng hai E2E đăng nhập và đăng xuất còn bỏ qua (TW4);
   - mở Production cho mọi người.
 
 ### Product Rules
@@ -34,9 +34,9 @@ Các trường của một sản phẩm, theo chuẩn ngành (Shopify, Google Me
 | Trường | Quy tắc |
 |---|---|
 | Tên | Bắt buộc. Bỏ khoảng trắng ở đầu và cuối, rồi dài 1–150 ký tự. |
-| Slug | Tự sinh từ tên khi thêm sản phẩm; quản trị viên sửa được. Chỉ gồm chữ thường a–z, số và dấu gạch ngang đơn, không bắt đầu hay kết thúc bằng gạch ngang, tối đa 100 ký tự. Không trùng, không phân biệt chữ hoa, chữ thường. Đổi tên không đổi slug. |
-| Mô tả | Không bắt buộc. Chữ thường có xuống dòng, tối đa 5.000 ký tự. Không bao giờ được hiểu là HTML (Open Question 7). |
-| Giá bán | Bắt buộc. Đồng Việt Nam, số nguyên, từ 1 tới 999.999.999 (Open Question 12). |
+| Slug | Tự sinh từ tên khi thêm sản phẩm; quản trị viên sửa được. Chỉ gồm chữ thường a–z, số và dấu gạch ngang đơn, không bắt đầu hay kết thúc bằng gạch ngang, tối đa 100 ký tự. Không trùng, không phân biệt chữ hoa, chữ thường. Đổi tên không đổi slug. Đổi slug thì đường dẫn có slug cũ trả 404 (AC12). |
+| Mô tả | Không bắt buộc. Chữ thường có xuống dòng, tối đa 5.000 ký tự. Lưu nguyên văn và luôn hiện như chữ, kể cả thẻ HTML, không bao giờ được hiểu là HTML (AC25). Không từ chối khi lưu, vì mô tả thường như "kích thước < 5 cm" cũng có các ký tự đó. |
+| Giá bán | Bắt buộc. Đồng Việt Nam, số nguyên, từ 1 tới 999.999.999. |
 | Giá gốc | Không bắt buộc. Nếu có: số nguyên, lớn hơn giá bán, tối đa 999.999.999. |
 | Trạng thái | Đang bán hoặc Ẩn. Sản phẩm mới mặc định Đang bán. Khách chỉ thấy sản phẩm Đang bán. |
 | Tình trạng | Còn hàng hoặc Hết hàng. Sản phẩm mới mặc định Còn hàng. Sản phẩm Hết hàng vẫn có trong danh sách của khách. |
@@ -55,11 +55,11 @@ Các trường của một sản phẩm, theo chuẩn ngành (Shopify, Google Me
 
 **Phần trăm giảm:** chỉ hiện khi có giá gốc, bằng `(giá gốc − giá bán) × 100 / giá gốc`, làm tròn xuống, tối thiểu 1. Làm tròn xuống để không bao giờ báo mức giảm cao hơn thật. Ví dụ 250.000 ₫ còn 200.000 ₫ là `-20%`; 1.500.000 ₫ còn 1.250.000 ₫ là `-16%`.
 
-**Ảnh giữ chỗ:** mọi sản phẩm dùng một ảnh giữ chỗ chung theo design system: chữ cái đầu của tên, viết hoa, trên nền một màu nhóm của design system. Mỗi sản phẩm giữ cố định một màu.
+**Ảnh giữ chỗ:** mọi sản phẩm dùng một ảnh giữ chỗ chung theo design system: chữ cái đầu của tên, viết hoa, trên nền một màu nhóm của design system. Mỗi sản phẩm giữ cố định một màu. Ảnh giữ chỗ không phải file ảnh, nên JSON-LD `Product` của AC27 không có `image`, và trang chi tiết dùng ảnh Open Graph chung đang có của site. Google có thể chưa hiện sản phẩm ở dạng "merchant listing" có ảnh, tới khi có ảnh thật.
 
 **Tìm theo tên** (cả hai app): bỏ khoảng trắng thừa; không phân biệt chữ hoa, chữ thường hay dấu (`đ` khớp `d`). Mỗi từ của từ khóa phải khớp phần đầu của một từ trong tên, theo thứ tự bất kỳ. Vì vậy `ao th` ra "Áo thun", còn `ao` không ra "Bao tay". Từ khóa trống là không tìm. Từ khóa dài hơn 100 ký tự bị cắt ở 100.
 
-**Sắp xếp của khách:** Mới nhất (theo ngày tạo, mặc định), Giá thấp đến cao, Giá cao đến thấp. Khi đang tìm thì có thêm Liên quan nhất, và đó là mặc định. Hai sản phẩm bằng giá thì sản phẩm mới hơn đứng trước. Thứ tự Liên quan nhất gồm ba nhóm, trong mỗi nhóm thì mới nhất trước (Open Question 3):
+**Sắp xếp của khách:** Mới nhất (theo ngày tạo, mặc định), Giá thấp đến cao, Giá cao đến thấp. Khi đang tìm thì có thêm Liên quan nhất, và đó là mặc định. Hai sản phẩm bằng giá thì sản phẩm mới hơn đứng trước. Thứ tự Liên quan nhất gồm ba nhóm, trong mỗi nhóm thì mới nhất trước:
 
 1. tên bắt đầu bằng nguyên cụm từ khóa;
 2. tên có nguyên cụm từ khóa ở đầu một từ;
@@ -67,7 +67,14 @@ Các trường của một sản phẩm, theo chuẩn ngành (Shopify, Google Me
 
 **Phân trang:** khách xem 24 sản phẩm mỗi lần, với nút "Xem thêm" thay cho số trang. `admin` có số trang, 20 sản phẩm mỗi trang, mới nhất trước.
 
-**Độ trễ:** một thay đổi lưu ở `admin` hiện ở trang của khách, gồm danh sách, trang chi tiết và sitemap, trong vòng 60 giây (Open Question 11).
+**Độ trễ:** một thay đổi lưu ở `admin` hiện ở trang của khách, gồm danh sách, trang chi tiết và sitemap, trong vòng 60 giây. `admin` và `user` là hai app riêng, và `user` đang cache danh sách theo giờ, nên `sa` chọn cách đạt mốc này, như cache ngắn hay báo `user` làm mới.
+
+**Sản phẩm có từ trước Epic này:** cột giá cũ là `NUMERIC(12,2)` ghi là USD, và cho phép giá 0. Khi nâng database:
+
+- giá giữ nguyên con số và được coi là đồng, không quy đổi từ USD, làm tròn tới đồng;
+- sản phẩm có giá 0 thành Ẩn, để khách không thấy giá 0 ₫; quản trị viên phải nhập giá lớn hơn 0 khi sửa nó;
+- mọi sản phẩm cũ còn lại là Đang bán, và mọi sản phẩm cũ là Còn hàng;
+- tên dài hơn 150 ký tự được giữ, và chỉ phải sửa khi quản trị viên lưu lại sản phẩm đó.
 
 ### User Stories
 
@@ -133,12 +140,12 @@ Là khách, tôi muốn xem trang chi tiết của một sản phẩm, để bi�
 
 Việc kỹ thuật đi cùng Epic. Plan biến chúng thành Task, và chúng không có AC riêng.
 
-- **TW1 · Schema của `app.products`**, theo luật expand/contract, vì `v0.3.0` nâng một database Production đã có dữ liệu: giá bán số nguyên đồng, giá gốc, trạng thái, tình trạng, tên 150 ký tự, mô tả 5.000 ký tự, và chỗ để tìm không phân biệt dấu. `v0.3.0` chỉ thêm, giữ cột cũ để rollback về `v0.2.0`; bỏ cột cũ là việc của một bản sau. Dữ liệu cũ được chuyển theo Open Question 5.
+- **TW1 · Schema của `app.products`**, theo luật expand/contract, vì `v0.3.0` nâng một database Production đã có dữ liệu: giá bán số nguyên đồng, giá gốc, trạng thái, tình trạng, tên 150 ký tự, mô tả 5.000 ký tự, và chỗ để tìm không phân biệt dấu. `v0.3.0` chỉ thêm, giữ cột cũ để rollback về `v0.2.0`; bỏ cột cũ là việc của một bản sau. Dữ liệu cũ được chuyển theo mục "Sản phẩm có từ trước Epic này" ở Product Rules.
 - **TW2 · Hợp đồng API sản phẩm**, dùng chung cho `api`, `admin` và `user`: danh sách có tìm, lọc trạng thái, sắp xếp và phân trang; chi tiết theo slug; thêm, sửa, xóa; kiểm dữ liệu vào; lỗi theo Problem Details như `api` đang làm. Hợp đồng này thay các endpoint cũ: danh sách trả hết một lần, `PUT /api/products/{id}/price` và `PUT /api/products/bulk-price/{slug}`. `sa` ghi hợp đồng trong plan.
-- **TW3 · Design system của `user` và của `admin`**, theo token ở mục Reference Design của Epic, gồm cả giao diện sáng (Open Question 2). Chỉ lấy style, design token và cách bố trí của trang mẫu.
-- **TW4 · Gỡ phần sản phẩm của API NestJS cũ:** DAL, model và mock MSW sản phẩm của `user`, nút xóa và Server Action xóa, mock origin `ecom-nest.t2g.io.vn` trong E2E của `admin`, cùng phần demo của template trên trang sản phẩm (Open Question 10). Viết lại `apps/user/e2e/products.spec.ts`, phần Products của `apps/user/e2e/accessibility.spec.ts` và `apps/admin/e2e/product-crud.spec.ts` theo các AC; hai test sản phẩm trong `apps/user/e2e/auth.spec.ts` theo Open Question 6.
+- **TW3 · Design system của `user` và của `admin`**, theo token ở mục Reference Design của Epic. Chỉ lấy style, design token và cách bố trí của trang mẫu. Trang mẫu chỉ được đo ở giao diện tối, nên `ux` dựng bảng màu sáng từ cùng các vai trò màu (nền, bề mặt, chữ, nhấn, trạng thái), giữ độ tương phản WCAG AA. Mặc định vẫn theo giao diện của hệ thống, như hai app đang làm.
+- **TW4 · Gỡ phần sản phẩm của API NestJS cũ:** DAL, model và mock MSW sản phẩm của `user`, nút xóa và Server Action xóa, mock origin `ecom-nest.t2g.io.vn` trong E2E của `admin`. Gỡ luôn phần demo của template trên trang sản phẩm của khách: nút đổi mật độ, nút đổi lưới hay danh sách, badge đếm sản phẩm cùng route `api/products/count`, nút làm mới, nút phóng ảnh và ảnh `picsum.photos`; dòng "Đã xem 24 trên 30 sản phẩm" của AC21 thay badge đếm. Viết lại `apps/user/e2e/products.spec.ts`, phần Products của `apps/user/e2e/accessibility.spec.ts` và `apps/admin/e2e/product-crud.spec.ts` theo các AC. Trong `apps/user/e2e/auth.spec.ts`, xóa hai test kiểm nút xóa trên trang của khách ("nút Xoá hiện trên /products" và "xoá sản phẩm E2E"). Hai test đăng nhập và đăng xuất còn lại vẫn bỏ qua, và giữ mock auth cũ cho Epic đăng nhập. `reason:` của chúng ghi "login Epic" tới khi Epic đó có key trên Jira, vì ngày 2026-11-15 SHOP chưa có Epic đăng nhập.
 - **TW5 · Ba finding Low của review `shop` PR #10:** gom `isLocal` vào `apps/user/e2e/support/env.ts` và `apps/admin/e2e/support/env.ts`; `ActuatorProbesIntegrationTest` kiểm thêm `/actuator/health/db` trả 401; `reason:` của mọi test còn bỏ qua trỏ tới đúng Epic của chúng.
-- **TW6 · Năm sản phẩm thử trên Production**, trước gate ④ của `v0.3.0`, để lần nâng database chạy trên dữ liệu thật (Open Question 4).
+- **TW6 · Năm sản phẩm thử trên Production**, để lần nâng database chạy trên dữ liệu thật. Claude thêm chúng qua `POST /api/products` của `api` đang chạy trên Production, qua `/api` của `shop-admin` (có basic auth), sau gate ② và trước gate ④ của `v0.3.0`. Giá nhập là số nguyên đồng như `250000.00`, vì API cũ nhận giá có hai số lẻ. Trong năm sản phẩm có ít nhất một tên có dấu, một mô tả nhiều dòng và một slug do người gõ, để lần nâng database kiểm được cả các trường hợp đó.
 
 ## Tech Stack
 
@@ -208,7 +215,7 @@ export function discountPercent(price: number, compareAtPrice: number): number {
 
 ## Testing Strategy
 
-- **`api`:** unit test viết theo TDD cho sinh slug (các ví dụ ở Product Rules), quy tắc kiểm dữ liệu, tìm và sắp xếp. WebMvc test cho Problem Details của từng lỗi: 400 kèm trường sai, 404, và 409 cho slug trùng hay sửa chồng (AC13). Integration test với Testcontainers PostgreSQL 17 cho tìm không dấu, ba nhóm Liên quan nhất, phân trang và migration: dựng schema V3 với dữ liệu giống Production, chạy migration mới, rồi kiểm từng dòng cũ theo Open Question 5.
+- **`api`:** unit test viết theo TDD cho sinh slug (các ví dụ ở Product Rules), quy tắc kiểm dữ liệu, tìm và sắp xếp. WebMvc test cho Problem Details của từng lỗi: 400 kèm trường sai, 404, và 409 cho slug trùng hay sửa chồng (AC13). Integration test với Testcontainers PostgreSQL 17 cho tìm không dấu, ba nhóm Liên quan nhất, phân trang và migration: dựng schema V3 với dữ liệu giống Production, chạy migration mới, rồi kiểm từng dòng cũ theo mục "Sản phẩm có từ trước Epic này" ở Product Rules.
 - **`admin`:** Vitest, Testing Library và MSW cho form (từng lỗi của AC6), ô giá, slug tự điền, hộp thoại xóa và lọc trên URL.
 - **`user`:** Vitest cho `formatPrice`, `discountPercent`, đọc tham số URL (AC22), meta và JSON-LD; render test cho thẻ, trang chi tiết và trang 404.
 - **E2E:** mỗi AC một test Playwright trở lên, tên bắt đầu bằng mã AC, chạy trên app thật và `api` thật, không mock API sản phẩm. E2E của `admin` ở `apps/admin/e2e/`, của `user` ở `apps/user/e2e/`. Development dùng chung, nên mỗi test tạo sản phẩm riêng qua `/api` của `admin`, với tên có tiền tố riêng của lần chạy, tìm theo tiền tố đó để đếm (như AC21), và xóa những gì nó tạo khi xong. Các AC có "trong vòng 60 giây" chờ bằng `expect.poll` tới 60 giây. Nửa sau của AC23 (chưa có sản phẩm nào) chỉ chạy được trên app dựng tại chỗ, nên mang tag `@local`.
@@ -221,16 +228,15 @@ export function discountPercent(price: number, compareAtPrice: number): number {
   - lọc sản phẩm Đang bán ở `api` và ở phía server của `user`, không chỉ ẩn trên giao diện;
   - hiện mô tả như chữ thường;
   - định dạng giá bằng một hàm duy nhất trong mỗi app;
-  - dọn dữ liệu mà E2E tạo trên môi trường.
-- **Ask first:**
-  - thêm extension PostgreSQL, hay sửa script init của database;
-  - thêm dependency, như gói font, thư viện UI hay Tailwind;
-  - đổi CSP, `deploy.yaml` hay biến môi trường của app;
-  - bất kỳ thay đổi nào làm `v0.2.0` không chạy được trên database đã nâng.
+  - dọn dữ liệu mà E2E tạo trên môi trường;
+  - khi thêm dependency, như gói font, thư viện UI hay Tailwind, hay khi đổi CSP: ghi lý do trong mô tả PR, để reviewer và security xét.
+- **Ask first:** chỉ những việc cần quyền mà agent không có.
+  - thêm extension PostgreSQL vào database đang chạy của Development, Staging hay Production: việc này cần quyền trên VPS; script init trong repo sửa được, nhưng chỉ chạy trên volume mới;
+  - đổi `deploy.yaml`, nằm trong đường dẫn được bảo vệ `.ai-orchestrator/**`, hay secret và biến môi trường của app trên VPS.
 - **Never:**
   - lưu hay tính giá bằng số thực;
   - render mô tả như HTML;
-  - bỏ cột cũ của `app.products` trong `v0.3.0`;
+  - làm `v0.2.0` không chạy được trên database đã nâng, như bỏ cột cũ của `app.products` trong `v0.3.0`;
   - chép code, logo, ảnh, icon riêng hay tên của template trang mẫu;
   - gọi API NestJS cũ, hay mock API sản phẩm trong E2E chạy trên môi trường;
   - ghi basic auth của môi trường vào file, commit hay log.
@@ -240,29 +246,16 @@ export function discountPercent(price: number, compareAtPrice: number): number {
 Ngoài DoD của Epic trong `.ai-orchestrator/docs/sdlc.md`:
 
 - Mọi Story của US1–US6 đạt DoD: E2E của từng AC từ AC1 tới AC28 pass trên Development.
-- Không mock nào, trong E2E hay unit test của `admin` và `user`, còn trả sản phẩm theo dạng của API NestJS cũ. Các test còn bỏ qua chỉ là test đăng nhập (Open Question 6), với `reason:` trỏ tới Epic đăng nhập.
+- Không mock nào, trong E2E hay unit test của `admin` và `user`, còn trả sản phẩm theo dạng của API NestJS cũ. Chỉ còn hai test bỏ qua, thay vì tám: đăng nhập và đăng xuất trong `apps/user/e2e/auth.spec.ts`, với `reason:` trỏ tới Epic đăng nhập (TW4).
 - Ba finding Low của PR #10 đã sửa như TW5.
 - `api` không còn endpoint trả cả danh sách một lần, hay endpoint đổi giá cũ; OpenAPI ở `/v3/api-docs` mô tả đúng hợp đồng mới.
 - axe không báo vi phạm WCAG A/AA nào trên các trang ở mục Testing Strategy. Ở bề rộng 320 px, danh sách và trang chi tiết của `user` không có thanh cuộn ngang.
-- Lần nâng database chạy không lỗi trên bản sao dữ liệu của Production, với năm sản phẩm thử. Sau khi nâng, mỗi sản phẩm cũ còn đủ tên, slug, mô tả, và có giá theo Open Question 5. Bản `v0.2.0` vẫn khởi động và đọc được sản phẩm trên database đã nâng, để rollback được.
+- Lần nâng database chạy không lỗi trên bản sao dữ liệu của Production, với năm sản phẩm thử. Sau khi nâng, mỗi sản phẩm cũ còn đủ tên, slug, mô tả, và có giá, trạng thái, tình trạng theo mục "Sản phẩm có từ trước Epic này" ở Product Rules. Bản `v0.2.0` vẫn khởi động và đọc được sản phẩm trên database đã nâng, để rollback được.
 - `v0.3.0` lên Production sau gate ⑤, và smoke test sau deploy pass.
 - Yêu cầu phi chức năng, như thời gian tải trang, cache và giới hạn của API, do `sa` ghi; Epic đạt khi chúng đạt.
 
 ## Open Questions
 
-1. **Bản phát hành.** Epic ghi `v0.2.0`, nhưng `v0.2.0` đã lên Production ngày 2026-11-15 với SHOP-6 (chép kit), như `CHANGELOG.md` ghi. Đề xuất: Epic vào `v0.3.0`, và các sản phẩm thử có trước gate ④ của `v0.3.0`. SPEC này đã viết theo đề xuất đó.
-2. **Giao diện sáng** (Open Point của Epic). Trang mẫu chỉ được đo ở giao diện tối, mà `user` và `admin` có cả sáng lẫn tối. Đề xuất: `ux` dựng bảng màu sáng từ cùng các vai trò màu (nền, bề mặt, chữ, nhấn, trạng thái), giữ độ tương phản WCAG AA; mặc định vẫn theo hệ thống như hai app đang làm.
-3. **Thứ tự Liên quan nhất** (Open Point của Epic). Đề xuất của Epic là tên bắt đầu bằng từ khóa, rồi tên chứa từ khóa, rồi mới nhất trước. Tôi đề xuất thêm hai điều: tìm theo từng từ, nên tên có đủ các từ, dù không liền nhau, vẫn ra kết quả và đứng ở nhóm thứ ba; và một từ chỉ khớp phần đầu của một từ trong tên, nên `ao` không ra "Bao tay". Product Rules, AC18 và AC19 đã viết theo đề xuất này.
-4. **Sản phẩm thử trên Production** (Open Point của Epic). Đề xuất của Epic: Claude thêm năm sản phẩm qua `POST /api/products` của `api` đang chạy, qua `/api` của `shop-admin` (có basic auth). Tôi đề xuất thêm: làm sau khi bạn duyệt plan và trước gate ④ của `v0.3.0`; giá nhập là số nguyên đồng như `250000.00`, vì API cũ nhận giá có hai số lẻ; trong năm sản phẩm có ít nhất một tên có dấu, một mô tả nhiều dòng, và một slug do người gõ. Như vậy lần nâng database kiểm được cả các trường hợp đó.
-5. **Dữ liệu cũ khi nâng database.** Cột giá cũ là `NUMERIC(12,2)` ghi là USD, và cho phép giá 0. Đề xuất:
-   - giữ nguyên con số và coi là đồng, không quy đổi từ USD, làm tròn tới đồng;
-   - sản phẩm cũ có giá 0 thành Ẩn, để khách không thấy giá 0 ₫, và quản trị viên phải nhập giá lớn hơn 0 khi sửa;
-   - mọi sản phẩm cũ còn lại là Đang bán, và mọi sản phẩm cũ là Còn hàng;
-   - tên cũ dài hơn 150 ký tự được giữ, và chỉ phải sửa khi quản trị viên lưu lại sản phẩm đó.
-6. **Bốn E2E đăng nhập đang bỏ qua.** Epic để chúng ngoài phạm vi, nhưng hai trong bốn test của `apps/user/e2e/auth.spec.ts` ("nút Xoá hiện trên /products" và "xoá sản phẩm E2E") kiểm nút xóa trên trang của khách, mà Epic này gỡ, và dùng mock sản phẩm cũ. Đề xuất: xóa hai test đó trong Epic này; giữ hai test đăng nhập và đăng xuất, vẫn bỏ qua, cùng mock auth cũ cho Epic đăng nhập; `reason:` ghi "login Epic" tới khi Epic đó có key trên Jira, vì hôm nay SHOP chưa có Epic đăng nhập. Sau Epic này còn hai test bỏ qua, thay vì tám.
-7. **Mô tả có thẻ HTML.** "Không nhận HTML" có thể là từ chối khi lưu, hoặc lưu nguyên văn và hiện như chữ. Đề xuất: lưu nguyên văn và hiện như chữ, như AC25, vì từ chối sẽ chặn cả mô tả thường như "kích thước < 5 cm".
-8. **Đổi slug.** Đề xuất: đường dẫn có slug cũ trả 404 và không chuyển hướng; form cảnh báo trước khi lưu, như AC12. Chuyển hướng từ slug cũ, như Shopify có, để một Epic sau nếu cần.
-9. **Ảnh trong dữ liệu cấu trúc.** Ảnh giữ chỗ là chữ trên nền màu chứ không phải file ảnh, nên JSON-LD `Product` của AC27 không có `image`. Hệ quả: Google có thể chưa hiện sản phẩm ở dạng "merchant listing" có ảnh, tới khi có ảnh thật. Đề xuất: chấp nhận điều đó, và dùng ảnh Open Graph chung đang có của site cho trang chi tiết. Cách khác là sinh một ảnh cho mỗi sản phẩm (chữ cái đầu trên nền màu), nhưng việc này thêm phạm vi.
-10. **Phần demo của template trên trang sản phẩm của khách.** Trang đang có nút đổi mật độ, nút đổi lưới hay danh sách, badge đếm sản phẩm (route `api/products/count`), nút làm mới, nút phóng ảnh và ảnh `picsum.photos`. Đề xuất: gỡ hết, vì không khách nào cần, và chúng gắn với API cũ. Dòng "Đã xem 24 trên 30 sản phẩm" của AC21 thay badge đếm.
-11. **Độ trễ từ `admin` tới trang khách.** `admin` và `user` là hai app riêng, và `user` đang cache danh sách theo giờ. Đề xuất: thay đổi hiện ở trang khách trong vòng 60 giây; `sa` chọn cách, như cache ngắn hay báo `user` làm mới. Nếu bạn muốn thấy ngay ở lần tải trang kế tiếp, các AC có "trong vòng 60 giây" sẽ đổi theo.
-12. **Các giới hạn tôi tự đặt theo chuẩn ngành**, vì Epic chưa nêu: giá bán và giá gốc tối đa 999.999.999 ₫; slug tối đa 100 ký tự, như `api` đang kiểm; từ khóa tìm tối đa 100 ký tự; `admin` hiện 20 sản phẩm mỗi trang, mới nhất trước; sản phẩm mới mặc định Đang bán và Còn hàng. Đề xuất: giữ như vậy.
+Không có. Ngày 2026-11-15 bạn đồng ý cả 12 đề xuất, và mỗi câu trả lời đã thành quyết định ở mục của nó.
+
+Câu hỏi mới ở các chặng sau của Epic: agent làm theo đề xuất của mình và ghi quyết định vào artifact của chặng đó. Agent chỉ hỏi bạn những việc cần quyền mà agent không có (mục Boundaries, Ask first).
