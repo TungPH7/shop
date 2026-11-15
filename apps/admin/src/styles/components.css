@@ -691,3 +691,48 @@ textarea.input {
 .choice > .field-hint {
   margin-bottom: 0;
 }
+
+/* --- Pagination --------------------------------------------------------------------- */
+
+/* <Pagination> (components/ui/pagination.tsx), S1.11: the range on the left, the
+   buttons on the right. The current page comes from aria-current. */
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.pagination__summary {
+  margin: 0;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pagination__page {
+  min-width: 34px;
+  padding: 0 var(--space-2-5);
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination__page[aria-current='page'] {
+  background: var(--line-2);
+  border-color: var(--control-border);
+}
+
+.pagination__gap {
+  min-width: 20px;
+  color: var(--hint);
+  text-align: center;
+}

@@ -22,5 +22,19 @@
   "state": {
     "loading": "Loading…"
   },
-  "greeting": "Hello, {{name}}"
+  "greeting": "Hello, {{name}}",
+  "pagination": {
+    "label": "Pagination",
+    "summary": "Showing {{from, number}}–{{to, number}} of {{total, number}}",
+    "previous": "Previous",
+    "next": "Next",
+    "page": "Page {{page}}"
+  },
+  "dialog": {
+    "close": "Close"
+  },
+  "notifications": {
+    "label": "Notifications",
+    "dismiss": "Dismiss notification"
+  }
 }

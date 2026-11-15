@@ -22,5 +22,19 @@
   "state": {
     "loading": "Đang tải…"
   },
-  "greeting": "Xin chào, {{name}}"
+  "greeting": "Xin chào, {{name}}",
+  "pagination": {
+    "label": "Phân trang",
+    "summary": "Hiển thị {{from, number}}–{{to, number}} trên {{total, number}}",
+    "previous": "Trước",
+    "next": "Sau",
+    "page": "Trang {{page}}"
+  },
+  "dialog": {
+    "close": "Đóng"
+  },
+  "notifications": {
+    "label": "Thông báo",
+    "dismiss": "Đóng thông báo"
+  }
 }
