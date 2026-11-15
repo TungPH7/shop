@@ -26,11 +26,11 @@ Design system của `user` là CSS variables và CSS thường, không có Tailw
 
 ## Tokens
 
-Mọi dòng của bảng Design System là "mới"; dòng nào không có ở đây là dòng chỉ `admin` dùng (nút nguy hiểm, hộp thoại, toast, banner, bảng, phân trang, nút phân đoạn).
+Mọi dòng của bảng Design System là "mới". Mọi dòng `user` dùng đều có ở đây: token ở mục này, class ở mục Classes, và hai component chưa có class (viên thuốc điều hướng, thẻ sản phẩm) ở mục Components Built Later, với giá trị của `design.md` và item sẽ làm chúng. Dòng không có ở đây là dòng chỉ `admin` dùng (nút nguy hiểm, hộp thoại, toast, banner, bảng, phân trang, nút phân đoạn).
 
 ### Màu
 
-`user` giữ tên các vai trò semantic đã có (cột Token) và đổi giá trị theo bảng; vai trò mới của `design.md` có tên mới cùng tầng. Cột "Tên trong design.md" là tên `admin` dùng (`apps/admin/src/styles/tokens.css`).
+`user` giữ tên các vai trò semantic đã có (cột Token) và đổi giá trị theo bảng; vai trò mới của `design.md` có tên mới cùng tầng. Cột "Tên trong design.md" là tên `admin` dùng (`apps/admin/src/styles/tokens.css`, có khi PR #18 của SHOP-8 merge).
 
 | Token | Tên trong design.md | Sáng | Tối | Dùng cho |
 |---|---|---|---|---|
@@ -150,7 +150,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `button-shadow` tối | Ước lượng | Khớp: `rgba(255,255,255,.28) 0 1px 0 inset, rgba(0,0,0,.12) 0 -1px 0 inset, accent 65% 0 6px 16px -6px` | Như bảng |
 | Ô "well" | Không có số | Khối "Downloads, 30 days" của trang Apps: nền well, đệm 12 14, bo 18 | Số đo |
 
-`admin` (SHOP-8) dùng các ước lượng; `docs/design-system/admin.md` ghi rằng số đo của SHOP-10 sẽ được cập nhật vào file đó. Các số đo ở bảng trên áp cho `admin` ở SHOP-9.
+`admin` (SHOP-8) dùng các ước lượng. `docs/design-system/admin.md` (có khi PR #18 merge) ghi rằng các giá trị "ước lượng" của nó chưa đối chiếu. Các số đo ở bảng trên áp cho `admin` ở SHOP-9.
 
 ## Classes
 
@@ -171,7 +171,16 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.visually-hidden` | | Chữ chỉ cho trình đọc màn hình: nhãn ẩn "Tìm theo tên", "Giảm", "Giá gốc:" |
 | `.tile`, `.tile--card`, `.tile--detail`, `.tile--row`, `.tile--<nhóm>`, `.tile__initial` | Ô giữ chỗ | Do `PlaceholderTile` đặt; không dùng tay |
 
-Tên class giống `admin` (`apps/admin/src/styles/components.css`), để một màn hình đọc như nhau ở hai app.
+Tên class giống `admin` (`apps/admin/src/styles/components.css` của SHOP-8, có khi PR #18 merge), để một màn hình đọc như nhau ở hai app.
+
+## Components Built Later
+
+Hai dòng Component của bảng Design System là của `user` nhưng chưa có class: chúng là bố cục của một màn hình, nên item làm màn hình đó dựng chúng từ token và class ở trên, rồi chuyển dòng của chúng lên mục Classes. Giá trị dưới đây là của `design.md`, chưa đo lại.
+
+| Component của `design.md` | Giá trị | Làm ở |
+|---|---|---|
+| Viên thuốc điều hướng (S4.1) | Ba viên: tên app, điều hướng, tiện ích. Thanh cao 49,6, bo 999 (`--r-ctl`), nền `--surface`. Mục cao 39,6, đệm 10 16, chữ 13,5/600 (`--fs-md`, `--fw-semibold`). Mục đang chọn nền `--muted` và `aria-current="page"`, chọn bằng thuộc tính đó, không bằng class riêng. Hover đổi nền `--muted` | SHOP-11 |
+| Thẻ sản phẩm (S4.6) | Thẻ kính `.card`, đệm 18. Ô giữ chỗ 4:3 (`PlaceholderTile`). Tên 15/600 (`--fs-lg`), tối đa 2 dòng. Giá bán 17/700 (`--fs-xl`, `--fw-bold`); giá gốc 13,5/500 `--hint` gạch ngang; huy hiệu "-xx%" `.badge--bad .badge--plain`. Huy hiệu Hết hàng đè góc trên trái ô. Hover nâng 2 px và sáng viền; `:focus-visible` vòng `--ring`. Cả thẻ là một liên kết | SHOP-25 (US5a) |
 
 ## PlaceholderTile
 
@@ -195,10 +204,11 @@ Tên class giống `admin` (`apps/admin/src/styles/components.css`), để một
   | `0193a2b5-0091-770e-851f-c07d23ef7c9d` | orange |
   | `0193a2b5-0da4-72b1-bdb4-0727dd873f80` | teal |
   | `0193a2b5-02b2-7292-afeb-59babb00064f` | ink |
+
 - **Chữ:** `placeholderInitial(name)` bỏ mọi khoảng trắng, chuẩn hóa NFC, lấy ký tự đầu (theo code point, nên một chữ gõ kiểu tổ hợp như "a" + dấu sắc vẫn là "Á"), rồi `toLocaleUpperCase('vi')`. Tên rỗng cho chuỗi rỗng.
 - Ô là `<span aria-hidden="true">` có `data-group` và `data-variant`, nên dùng được trong một liên kết; tên sản phẩm phải có ở chữ của liên kết. Chữ cái 700, 40% chiều cao ô: `.tile` là container của chính nó, và chữ đặt bằng `cqi` (30cqi ở ô 4:3, 40cqi ở ô vuông).
 
 ## Not Yet Built
 
-- Khung trang: thanh điều hướng S4.1, chân trang S4.11, `--gutter` và `--app-max` vào bố cục (SHOP-11).
-- Thẻ sản phẩm, hiển thị giá và `formatPrice`, lưới S4.5: Story của S4 và S5.
+- Khung trang: thanh điều hướng S4.1 (giá trị ở Components Built Later), chân trang S4.11, `--gutter` và `--app-max` vào bố cục (SHOP-11).
+- Thẻ sản phẩm S4.6 (giá trị ở Components Built Later) và lưới S4.5: SHOP-25 (US5a). Hiển thị giá và `formatPrice`: Story của S4 và S5.

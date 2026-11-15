@@ -1,7 +1,7 @@
 /* Shared classes of user (SHOP-10), built only from the semantic tokens of tokens.css. Each class is listed in
    docs/design-system/user.md with the component of design.md it draws. The class names are the ones admin uses
-   (apps/admin/src/styles/components.css), so a screen reads the same in both apps. The page frame (navigation, footer)
-   comes in SHOP-11. */
+   (apps/admin/src/styles/components.css of SHOP-8, there once PR #18 merges), so a screen reads the same in both
+   apps. The page frame (navigation, footer) comes in SHOP-11. */
 
 /* --- Utilities -------------------------------------------------------------- */
 
