@@ -5,7 +5,8 @@
 //   agent(run, { log })           starts ao-agent.mjs for one run and resolves { lines, stopped } when it ends; log is the
 //                                 name of its stream-json log in .ai/runs/<KEY>/; stopped: it stayed alive after its
 //                                 result and was stopped (lib/workflow/agent-process.mjs)
-//   git(checkout)                 puts the checkout on a branch; resolves { ok, reason }
+//   git(checkout, run)            puts the checkout of the run on a branch: the project folder, or the lane of its item
+//                                 when project.yaml turns runs.worktrees on (parallel-runs spec 4); resolves { ok, reason }
 //   dispatch(action)              asks GitHub to run jira-sync for an item (the second /ao-plan)
 //   pack(run, facts)              writes the context pack of a full review run; resolves its path, or null (optional)
 //   worktree                      { add(spec), remove(spec) } for a run that has a worktree (a review: the code of its PR at
@@ -15,14 +16,15 @@
 //                                 Jira); run carries its startedAt; resolves notes for state.json and last.md (optional)
 //   act(step)                     a script step of a release command, such as cutting the release branch; resolves notes
 //                                 for last.md. It is the one step of its command (optional)
-//   wip                           { save(run), restore(wip) } (lib/workflow/wip.mjs): save puts aside the work a run left
+//   wip                           { save(run), restore(wip, run) } (lib/workflow/wip.mjs): save puts aside the work a run left
 //                                 uncommitted when it stopped before its end, resolving { stash, branch }, null, or
 //                                 { error }; restore applies it again before the run goes on in its session, resolving
 //                                 { ok, notes } or { ok: false, reason } (optional; live-run-fixes spec 2.1)
 //   store                         { readState(key), writeState(key, state), writeLast(key, text) }; a run is written when it
 //                                 starts and again when it ends
 //   sleep(ms), now(), log(line)
-// Agents run one after another, never two at once.
+// Within one command, agents run one after another, never two at once; runs.lanes_max lets several commands run side
+// by side, each on its own item (parallel-runs spec 5).
 import { packNote, qaWorktreeNote, wipNote, worktreeNote } from './prompts.mjs';
 import { readRun } from './runs.mjs';
 import { decideStep } from './steps.mjs';
@@ -94,7 +96,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       break;
     }
     if (next.checkout) {
-      const ready = await git(next.checkout);
+      const ready = await git(next.checkout, next);
       if (!ready.ok) {
         reason = ready.reason;
         break;
@@ -108,7 +110,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     let restored = false;
     let wipNotes = [];
     if (resumed?.wip && wip) {
-      const back = await wip.restore(resumed.wip);
+      const back = await wip.restore(resumed.wip, next);
       if (!back.ok) {
         reason = back.reason;
         break;
@@ -143,6 +145,8 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       log: logName,
       startedAt,
       ...(next.resume && { resumed: true }),
+      // The Story of a Sub-task: its run works in the lane of the Story (parallel-runs spec 4).
+      ...(next.story && { story: next.story }),
       ...(next.checkout && { checkout: next.checkout }),
       ...(next.head && { head: next.head }),
       ...(next.note && { note: next.note }),
@@ -157,12 +161,14 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     // session of its log (release-workflow T22). What its session cost so far stays, for the run that resumes it.
     store.writeState(key, { ...state, runs: [...state.runs, { ...run, session: next.resume ?? null, outcome: 'unfinished', turns: 0, durationMs: 0, costUsd: 0, ...(resumed?.cumulative && { cumulative: resumed.cumulative }) }] });
     let lines;
+    let superseded;
     let stopped;
     let runNotes = [];
     try {
-      ({ lines, stopped } = await agent(notes.length > 0 ? { ...next, prompt: [next.prompt, ...notes].join('\n\n') } : next, { log: logName }));
+      ({ lines, stopped, superseded } = await agent(notes.length > 0 ? { ...next, prompt: [next.prompt, ...notes].join('\n\n') } : next, { log: logName }));
       // With the start of the run: qa attaches only what it wrote since (live-run-fixes spec 2.5).
-      if (after) runNotes = await after({ ...next, startedAt }, { tree, facts });
+      // A superseded qa run attaches nothing: what it saw was a version that no longer runs.
+      if (after && !superseded) runNotes = await after({ ...next, startedAt }, { tree, facts });
     } finally {
       if (tree) {
         const removed = await worktree.remove(next.worktree);
@@ -170,7 +176,10 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       }
     }
     if (stopped) log(`${next.role} stayed alive after its result and was stopped with what it left running`);
+    if (superseded) log(superseded);
     const read = readRun(lines, resumed);
+    // A qa run stopped because another deploy came during it: it reported nothing, and is made again on the new version.
+    if (superseded) read.outcome = 'superseded';
     const record = {
       ...run,
       session: read.session,
@@ -183,7 +192,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       denials: read.denials.length,
       endedAt: new Date(now()).toISOString(),
       ...(stopped && { stoppedAfterResult: true }),
-      ...(wipNotes.length + runNotes.length > 0 && { notes: [...wipNotes, ...runNotes] }),
+      ...(wipNotes.length + runNotes.length + (superseded ? 1 : 0) > 0 && { notes: [...wipNotes, ...runNotes, ...(superseded ? [superseded] : [])] }),
       text: read.text.length > TEXT_MAX ? `${read.text.slice(0, TEXT_MAX)} … [cut at ${TEXT_MAX} characters; the whole answer is in ${logName}]` : read.text,
     };
     // state.json is written before anything else, so a stopped shell can go on from here.

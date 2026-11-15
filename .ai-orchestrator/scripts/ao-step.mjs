@@ -8,8 +8,8 @@
 // Jira is read with ATLASSIAN_AGENT_TOKEN, GitHub with a read-only token of the ao-review App. Run it from the project
 // root; the kit is in AO_KIT_DIR when set.
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { freemem, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -44,6 +44,12 @@ import { removeInstructions } from '../lib/workflow/review-tree.mjs';
 import { agentCommand, formatDecision, runGo } from '../lib/workflow/runner.mjs';
 import { CHANGES, decideStep, dockerGate } from '../lib/workflow/steps.mjs';
 import { restoreWip, saveWip } from '../lib/workflow/wip.mjs';
+import { laneKeeper, runsSettings } from '../lib/workflow/lanes.mjs';
+import { installLane, pullsOfBranch, qaWatcher, runPlacer, waitForRam } from '../lib/workflow/lane-runs.mjs';
+import { checkoutBranch, laneDir, laneRoot } from '../lib/workflow/places.mjs';
+import { claimRole, claimsRole, liveLocks, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
+import { runsAtOnce } from '../lib/workflow/ports.mjs';
+import { hookKitDrift, hookKitNote } from '../lib/workflow/hook-kit.mjs';
 
 const COMMANDS = ['status', 'intake', 'preview', 'spec', 'plan', 'request', 'build', 'review', 'fix', 'qa', 'release', 'ship', 'rollback'];
 const USAGE = 'usage: node .ai-orchestrator/scripts/ao-step.mjs <status|intake|preview|spec|plan|request|build|review|fix|qa|release|ship|rollback> [<KEY>|<PR>|<vX.Y.0> <sha>|<vX.Y.Z>|<environment> [<sha>]] [--go] [--answers <file>] [--note <file>] [--change <word>] [--stop]';
@@ -53,11 +59,16 @@ const RELEASE_COMMANDS = ['qa', 'release', 'ship', 'rollback', 'status'];
 const kitDir = resolve(process.env.AO_KIT_DIR ?? fileURLToPath(new URL('..', import.meta.url)));
 const projectDir = process.cwd();
 const runsDir = join(projectDir, '.ai', 'runs');
+// The locks of the commands that run agents, one file each (parallel-runs spec 5.1).
+const activeDir = join(runsDir, 'active');
+const lockFs = { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync };
 // The commands that stop a preview before they run: every one that may run an agent or switch the folder. /ao-ship runs
 // devops in the project folder with no checkout of its own (review of ao-sample PR #21), so the release commands too.
 const PREVIEW_STOPS = ['spec', 'plan', 'request', 'build', 'review', 'fix', 'qa', 'release', 'ship', 'rollback'];
 // maxBuffer: the full text of a file or a diff may pass the 1 MiB default, which ends git with ENOBUFS and no output.
 const git = (...args) => spawnSync('git', args, { cwd: projectDir, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+// git in another folder: a lane of an item (parallel-runs spec 4).
+const gitIn = (dir) => (...args) => spawnSync('git', args, { cwd: dir, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
 // /ao-preview on this machine (human-loop spec 4.3): its files, the facts it reads, starting and stopping the apps.
 const preview = previewRunner({
   projectDir,
@@ -75,10 +86,7 @@ const preview = previewRunner({
   cliOf: (tool) => (tool === 'pnpm' ? pnpmCli() : npmCli()),
   cleared: CLEARED_ENV,
   // The lock of this very process, taken for --go, is not another run.
-  agentRunning: () => {
-    const holder = readJson(join(runsDir, 'active.json'));
-    return holder && holder.pid !== process.pid && alive(holder.pid) ? holder : null;
-  },
+  agentRunning: () => liveLocks(activeDir, { fs: lockFs, alive }).find(({ pid }) => pid !== process.pid) ?? null,
 });
 const previewActive = preview.paths.active;
 
@@ -154,23 +162,6 @@ export function runsFile(projectDir, file) {
   return path;
 }
 
-// Takes the lock of the runs (one agent at a time) for `holder`, or returns the live holder that has it. The file is
-// created only if it is not there, so two runs started at once cannot both take it; a holder whose process is gone is
-// replaced.
-export function takeLock(lock, holder, alive) {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      writeFileSync(lock, JSON.stringify(holder), { flag: 'wx' });
-      return null;
-    } catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      const current = readJson(lock);
-      if (current && alive(current.pid)) return current;
-      rmSync(lock, { force: true });
-    }
-  }
-  throw new Error(`cannot take the lock ${lock}`);
-}
 
 async function main() {
   const { values, positionals } = parseArgs({ allowPositionals: true, options: { go: { type: 'boolean', default: false }, answers: { type: 'string' }, note: { type: 'string' }, change: { type: 'string' }, stop: { type: 'boolean', default: false } } });
@@ -227,8 +218,35 @@ async function main() {
   const appEnv = { ...process.env, AO_REVIEW_APP: apps.review, AO_REVIEW_APP_ID: setting('AO_REVIEW_APP_ID', settings) };
   const { token } = await installationToken({ ...appCredentials('review', { env: appEnv }), repo, permissions: READ_PERMISSIONS });
   const github = createGitHubClient({ repo, token });
+  // The lanes of the project (parallel-runs spec 4): off unless project.yaml turns runs.worktrees on.
+  const projectYaml = join(projectDir, '.ai-orchestrator', 'project.yaml');
+  const runs = runsSettings(existsSync(projectYaml) ? parse(readFileSync(projectYaml, 'utf8')) : {});
+  // A lane installs with none of your secrets in its environment (spec 4.2).
+  const installEnv = () => {
+    const env = { ...process.env };
+    for (const name of CLEARED_ENV) delete env[name];
+    return env;
+  };
+  const keeper = laneKeeper({
+    projectDir,
+    gitIn,
+    install: async (dir) => installLane(dir, { env: installEnv(), exists: existsSync, manager: managerFromLockfile, args: installArgs, run: runManager }),
+    fs: { existsSync, mkdirSync, copyFileSync, cpSync, readdirSync, rmSync, statSync, writeFileSync },
+    pullsOf: (branch) => pullsOfBranch(github, repo, branch),
+    isProtected: (branch) => isProtected(branch, gates.protected_branches),
+    settings: runs,
+    // A lane another command runs on is not pruned (review round 2 of shop PR #21).
+    busy: (k) => liveLocks(activeDir, { fs: lockFs, alive }).some((lock) => lock.key === k && lock.pid !== process.pid),
+  });
+  if (command === 'preview' && runs.worktrees) {
+    // The dev agents wrote the preview in the lane of the item (review of shop PR #21).
+    const lanePreview = arg && /^[A-Z][A-Z0-9_]*-\d+$/.test(arg) ? join(laneDir(projectDir, arg), '.ai', 'runs', arg, 'preview') : join(laneRoot(projectDir), '<KEY>', '.ai', 'runs', '<KEY>', 'preview');
+    console.log('STOP: /ao-preview runs the apps from the project folder on the PR branch, and with runs.worktrees on that branch is checked out in the lane of the item');
+    console.log(`Next: read the screenshots and API samples in ${lanePreview}, then /ao-review <PR>; or open the lane in your editor`);
+    return;
+  }
   const files = {
-    ledger: (key) => existsSync(join(projectDir, '.ai', 'ledger', `${key}.md`)),
+    ledger: (key) => keeper.ledgerExists(key),
     runState: readRunState,
     runStates: () => (existsSync(runsDir) ? readdirSync(runsDir).map(readRunState).filter(Boolean) : []),
     // The docs branch of an Epic on this checkout, where stage spec commits before it pushes.
@@ -249,7 +267,10 @@ async function main() {
   const gatherAll = () => gatherFacts({ command, arg, extra, jira, github, deploys, history: developHistory, local: files, contract, mapping, roster, gates, apps, approvers, space, kitCopy });
   // /ao-preview also reads this machine: project.yaml, the preview that runs, the folder and the ports (spec 4.3).
   const gather = async () => {
-    const facts = await gatherAll();
+    const gathered = await gatherAll();
+    // With lanes on, the dev agents write the preview of an item in its lane (review of shop PR #21).
+    const itemKey = gathered.item?.key;
+    const facts = runs.worktrees && itemKey ? { ...gathered, previewDir: `${join(laneDir(projectDir, itemKey), '.ai', 'runs', itemKey, 'preview').replaceAll('\\', '/')}/` } : gathered;
     if (command === 'status') return { ...facts, previewRunning: readJson(previewActive) };
     return command === 'preview' ? { ...facts, preview: await preview.facts(values.stop, facts.pr) } : facts;
   };
@@ -263,26 +284,87 @@ async function main() {
   const dockerRunning = () => dockerAnswered(spawnSync('docker', DOCKER_INFO, { encoding: 'utf8', timeout: 20000 }));
   const decision = dockerGate(decideStep(command, facts, options), { java, dockerRunning });
   console.log(formatDecision(decision));
+  // Agents run the hooks of the kit in AO_KIT_DIR: one that differs from the kit copy of the project is named (review round
+  // 3 of shop PR #21).
+  const readText = (path) => {
+    try {
+      return readFileSync(path, 'utf8');
+    } catch {
+      return null;
+    }
+  };
+  const listFiles = (dir) => (existsSync(dir) ? readdirSync(dir, { recursive: true, withFileTypes: true }).filter((entry) => entry.isFile()).map((entry) => relative(dir, join(entry.parentPath, entry.name))) : []);
+  const drift = process.env.AO_KIT_DIR ? hookKitNote(hookKitDrift({ kitDir, copyDir: join(projectDir, '.ai-orchestrator'), read: readText, list: listFiles }), kitDir) : null;
+  if (drift) console.log(drift);
+  if (command === 'status' && runs.worktrees) {
+    const lanes = keeper.list();
+    console.log(lanes.length > 0 ? `Lanes: ${lanes.map(({ key: k, branch }) => `${k} on ${branch || 'no branch yet'}`).join('; ')}` : 'Lanes: none');
+  }
+  if (command === 'status') {
+    const live = liveLocks(activeDir, { fs: lockFs, alive });
+    if (live.length > 0) console.log(`Running: ${live.map(({ command: c, key: k, slot, startedAt }) => `${c} ${k} in slot ${slot}, ${Math.round((Date.now() - Date.parse(startedAt)) / 60000)} min`).join('; ')}`);
+  }
   if (!values.go || !decision.go) return;
 
   // A release command has no work item: its runs and report go under the release (.ai/runs/v0.1.0/).
   const key = facts.item?.key ?? facts.runKey;
-  const lock = join(runsDir, 'active.json');
   mkdirSync(join(runsDir, key), { recursive: true });
-  const holder = takeLock(lock, { pid: process.pid, command, arg, startedAt: new Date().toISOString() }, alive);
-  if (holder) {
-    console.log(`STOP: ao-step is already running ${holder.command} ${holder.arg} (process ${holder.pid}); agents run one at a time`);
+  // How many commands may run at once, and this one's place among them (parallel-runs spec 5.1).
+  const cap = runsAtOnce(runs.lanesMax, process.env);
+  const firstRun = decision.runs?.[0] ?? {};
+  const taken = await takeRunLock(activeDir, { pid: process.pid, command, arg, key, role: firstRun.role, environment: firstRun.qa?.environment, startedAt: new Date().toISOString() }, { fs: lockFs, alive, cap, sleep: (ms) => new Promise((done) => setTimeout(done, ms)) });
+  if (!taken.ok) {
+    console.log(`STOP: ${taken.reason}`);
     return;
   }
+  const lock = taken.file;
+  const projectApps = existsSync(projectYaml) ? (parse(readFileSync(projectYaml, 'utf8'))?.apps ?? {}) : {};
+  const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
   try {
     console.log('');
+    if (runs.worktrees) {
+      // A lane that cannot be checked now is checked at the next command; the runs go on.
+      const pruned = await keeper.prune().catch((error) => [`The lanes were not checked for closed PRs: ${error.message}`]);
+      for (const note of pruned) console.log(note);
+    }
+    // A run in a lane starts there, told so, with the ports and services of its slot; git and the work put aside go
+    // there too (parallel-runs spec 4 and 5.2). lib/workflow/lane-runs.mjs has the how.
+    const placed = runPlacer({
+      keeper,
+      command,
+      cap,
+      slot: taken.slot,
+      runs,
+      apps: projectApps,
+      waitForRam: (gb) => waitForRam(gb, { freeBytes: freemem, sleep, log: (line) => console.log(line) }),
+      othersRunning: () => liveLocks(activeDir, { fs: lockFs, alive }).some(({ pid }) => pid !== process.pid),
+      log: (line) => console.log(line),
+    });
+    const gitOf = async (run) => {
+      const place = await keeper.placeOf(run, command);
+      return place ? gitIn(place.dir) : git;
+    };
+    // A qa run stops at once when another deploy reaches its environment during the run (spec 5.1); the runner decides
+    // again, and qa tests the new version, twice at most.
+    const watchQa = deploys
+      ? qaWatcher({ readSha: async (environment) => (await readRunning(deploys, mapping))[environment]?.sha ?? null, kill: (pid) => killTree(pid, { spawnSync, kill: (target, signal) => process.kill(target, signal) }) })
+      : (run, start) => start(run);
+    // Each run of build or fix takes its dev agent on the lock first: one item at a time per agent (review of shop PR #21).
+    const claim = async (run) => {
+      if (!claimsRole(command) || !run.role) return;
+      const claimed = await claimRole(activeDir, lock, run.role, { fs: lockFs, alive, sleep, onWait: (busy) => console.log(`Waiting for ${run.role}: it is at work on ${busy.key} (process ${busy.pid}), and builds one item at a time`) });
+      if (!claimed.ok) throw new Error(claimed.reason);
+    };
     const { decision: final, facts: last } = await runGo({
       command,
       arg,
       options,
       gather,
       // qa on Development or Staging gets the basic auth from AO_ENV_AUTH, as variables, never as arguments.
-      agent: (run, { log }) => startAgent(run.qa?.auth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run, join(runsDir, key, log)),
+      agent: async (run, { log }) => {
+        await claim(run);
+        return watchQa(await placed(run.qa?.auth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run), (ready, onStart) => startAgent(ready, join(runsDir, key, log), onStart));
+      },
       // A defect you reported is checked like a QA run: its evidence goes to the item too (human-loop spec 5.1).
       after: (run, { tree }) => (['qa', 'qa-defect'].includes(run.purpose) ? afterQa(run, tree, { deploys, mapping }) : []),
       act: (step) => {
@@ -295,11 +377,11 @@ async function main() {
         if (step.action === 'preview-stop') return preview.stop().then(({ notes }) => notes);
         return releaseCut(step, { repo, mapping, userToken });
       },
-      git: (checkout) => prepareCheckout(checkout),
+      git: (checkout, run) => keeper.checkout(checkout, run, command),
       // The work a run left uncommitted when it stopped goes aside, and comes back when it goes on (live-run-fixes 2.1).
       wip: {
-        save: (run) => saveWip({ git, run, isProtected: (branch) => isProtected(branch, gates.protected_branches) }),
-        restore: (aside) => restoreWip({ git, wip: aside }),
+        save: async (run) => saveWip({ git: await gitOf(run), run, isProtected: (branch) => isProtected(branch, gates.protected_branches) }),
+        restore: async (aside, run) => restoreWip({ git: await gitOf(run), wip: aside }),
       },
       dispatch: (action) => dispatchJiraSync(action.key),
       pack: reviewPackWriter({ github, jira }),
@@ -358,14 +440,19 @@ function alive(pid) {
 }
 
 // One run: ao-agent.mjs with its stream-json output appended to the log as it comes; resolves with the lines.
-function startAgent(run, logFile) {
+function startAgent(run, logFile, onStart) {
   const { command, args, env } = agentCommand(run, kitDir);
   return startAgentProcess({
-    spawn,
+    // onStart gets the pid, for a watch that may stop the run (watchQa).
+    spawn: (...args) => {
+      const child = spawn(...args);
+      onStart?.(child.pid);
+      return child;
+    },
     command,
     args,
     env: { ...process.env, ...env },
-    cwd: projectDir,
+    cwd: run.cwd ?? projectDir,
     append: (stream, chunk) => appendFileSync(stream === 'stdout' ? logFile : `${logFile}.stderr`, chunk),
     kill: (pid) => killTree(pid, { spawnSync, kill: (target, signal) => process.kill(target, signal) }),
   });
@@ -444,24 +531,8 @@ const savePack = (dir) => (name, text) => {
 
 // Puts the checkout on `branch` before a run: from origin when it is there, else new from origin/<from>. A checkout with
 // changes is left alone.
-function prepareCheckout({ branch, from, pull }) {
-  const dirty = git('status', '--porcelain', '--untracked-files=no').stdout.trim();
-  if (dirty) return { ok: false, reason: `the checkout has changes not committed (${dirty.split('\n').length} files): commit or stash them, then run the command again` };
-  const fetched = git('fetch', '--quiet', 'origin');
-  if (fetched.status !== 0) return { ok: false, reason: `git fetch failed: ${fetched.stderr.trim()}` };
-  const onOrigin = git('rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`).status === 0;
-  const local = git('rev-parse', '--verify', '--quiet', `refs/heads/${branch}`).status === 0;
-  let result;
-  if (local) result = git('switch', '--quiet', branch);
-  else if (onOrigin) result = git('switch', '--quiet', '--track', `origin/${branch}`);
-  // --no-track: the new branch must not take origin/develop as its upstream, or the agent's push would go there.
-  else result = git('switch', '--quiet', '--no-track', '-c', branch, `origin/${from ?? 'develop'}`);
-  if (result.status !== 0) return { ok: false, reason: `git could not switch to ${branch}: ${result.stderr.trim()}` };
-  if ((pull || local) && onOrigin) {
-    const merged = git('merge', '--ff-only', '--quiet', `origin/${branch}`);
-    if (merged.status !== 0) return { ok: false, reason: `${branch} has commits that are not on origin/${branch}: ${merged.stderr.trim()}` };
-  }
-  return { ok: true };
+function prepareCheckout(spec) {
+  return checkoutBranch(git, spec);
 }
 
 // The worktree of a PR for its review (Pilot 1, T10): the code at the head the review is on, never committed. It is in
@@ -553,7 +624,9 @@ function developHistory(tag) {
 }
 
 // /ao-release <vX.Y.0> <sha>, its one step (release-workflow spec 2.6): the Fix Versions and comments on Jira with the CI
-// token, which only your session holds, then the release branch with your gh login (Pilot 3, spec 2.9). The branch comes
+// token, a user variable of your Windows account, which an agent running as you can read past gh-guard: a risk you accept
+// until the CI token leaves the machine (reviews of shop PR #21),
+// then the release branch with your gh login (Pilot 3, spec 2.9). The branch comes
 // last: once it is there the command stops at "release branch open", so a step cut short before it can be run again.
 async function releaseCut({ version, nextVersion, sha, included, after, cancelled = [] }, { repo, mapping, userToken }) {
   const notes = [];

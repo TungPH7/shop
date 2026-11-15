@@ -119,9 +119,11 @@ export const findingId = (finding) => createHash('sha256').update(identity(findi
 
 // How long a risk may stay accepted: at most this many days after the approval that accepts it.
 export const ACCEPT_MAX_DAYS = 90;
-// A line that starts with "Accept risk", alone or as an item of a list.
-const ACCEPT_START = /^\s*(?:[-*]\s+)?accept risk\b/i;
-const ACCEPT_LINE = /^\s*(?:[-*]\s+)?accept risk:\s*(\S+)\s+until\s+(\S+?)\s*:(.*)$/i;
+// A line that starts with "Accept risk", read without its Markdown (review round 4 of shop PR #13): a quote, an item of
+// a list, bold, italics and code marks around the words or the id, which would otherwise make it accept nothing, unsaid.
+const plainLine = (line) => line.replace(/^[\s>]*(?:[-+*]\s+)?/, '').replace(/[*_`]/g, '');
+const ACCEPT_START = /^\s*accept risk\b/i;
+const ACCEPT_LINE = /^\s*accept risk:\s*(\S+)\s+until\s+(\S+?)\s*:(.*)$/i;
 const FINDING_ID = /^[0-9a-f]{8}$/;
 
 // A day written YYYY-MM-DD as a number of days, or NaN when it is not a real day, such as 2026-02-30.
@@ -144,7 +146,7 @@ export function acceptedRisks(reviews, { approvers, head, on }) {
     const last = lastDecision(reviews, login);
     if (last?.state !== 'APPROVED' || last.commit_id !== head) continue;
     const approvedOn = String(last.submitted_at ?? '').slice(0, 10);
-    for (const text of (last.body ?? '').split(/\r?\n/).filter((line) => ACCEPT_START.test(line))) {
+    for (const text of (last.body ?? '').split(/\r?\n/).map(plainLine).filter((line) => ACCEPT_START.test(line))) {
       const match = text.match(ACCEPT_LINE);
       if (!match) {
         problems.push(`"${text.trim()}" of ${login}: write it as "Accept risk: <id> until <YYYY-MM-DD>: <why>"`);
