@@ -1,8 +1,7 @@
 /* Base style of user: reset, page background, body text and headings, from the design tokens of
    src/styles/tokens.css (SHOP-10, docs/design-system/user.md). Shared classes (buttons, badges, glass card, fields,
-   skeleton, placeholder tile) are in src/styles/components.css. `color-scheme` is owned by next-themes. */
-
-@import '../styles/components.css';
+   skeleton, placeholder tile) are in src/styles/components.css; the root layout imports tokens.css, components.css and
+   this file, in that order. `color-scheme` is owned by next-themes. */
 
 *,
 *::before,
@@ -47,6 +46,14 @@ h2 {
 
 a {
   color: var(--primary-text);
+}
+
+/* Form controls take the font of the page, not the one of the browser. */
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 /* Focus ring: 2px of --ring, 2px away, on every focusable element reached by keyboard. */
