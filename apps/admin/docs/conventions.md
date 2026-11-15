@@ -131,12 +131,12 @@ pnpm format:check # Prettier kiểm tra (dùng trong CI)
 
 ## 13. Client state (Redux Toolkit + nuqs — enforce: ESLint seam + review)
 
-- **Seam #2:** client/UI state qua **Redux Toolkit**; server state KHÔNG ở đây (§12). Store **chỉ** giữ state UI/đồng bộ (theme, sidebar…), không nhồi data API.
+- **Seam #2:** client/UI state qua **Redux Toolkit**; server state KHÔNG ở đây (§12). Store **chỉ** giữ state UI/đồng bộ (theme…), không nhồi data API.
 - **Cấu trúc `src/stores/` (shared):** `store.ts` (`makeStore` factory + `store` singleton + `RootState`/`AppDispatch`), `hooks.ts` (typed `useAppSelector`/`useAppDispatch` qua `.withTypes()`), `store-provider.tsx` (`StoreProvider` bọc react-redux `Provider`), `<domain>/<domain>-slice.ts` + `<domain>/use-<domain>.ts` (facade), `persistence.ts`.
-- **⭐ Domain-hook FACADE = seam:** component **chỉ** dùng facade (`useTheme`/`useSidebar`), **không bao giờ** import `react-redux`/`@reduxjs/toolkit` trực tiếp → đổi store impl (vd Zustand) chỉ sửa facade. **Enforce bằng ESLint** `no-restricted-imports` (chặn 2 lib đó ngoài `src/stores/**`). `StoreProvider` để app layer khỏi phải import react-redux.
+- **⭐ Domain-hook FACADE = seam:** component **chỉ** dùng facade (`useTheme`), **không bao giờ** import `react-redux`/`@reduxjs/toolkit` trực tiếp → đổi store impl (vd Zustand) chỉ sửa facade. **Enforce bằng ESLint** `no-restricted-imports` (chặn 2 lib đó ngoài `src/stores/**`). `StoreProvider` để app layer khỏi phải import react-redux.
 - **Slice (RTK 2.x):** `createSlice` + Immer (viết "mutating"), co-located `selectors` (đọc root tại `state[name]`); export `actions`/`selectors`/`reducer`. **KHÔNG** `createAsyncThunk` cho data fetching (đó là server state → Query). Store compose qua `reducer: { ... }`.
 - **Selector hẹp:** facade select primitive → component chỉ re-render khi đúng slice đó đổi (Vercel `rerender-defer-reads`).
-- **Persistence:** tự viết, **versioned + tối thiểu** (`{ v, ... }`), validate khi đọc bằng **Zod** (localStorage = external input → type-at-boundary); shape lạ / version cũ → bỏ qua, fallback default. Ghi **chỉ khi đổi** (subscribe). KHÔNG `redux-persist` (nặng, phải hack `serializableCheck`). State ephemeral (sidebar) **không** persist.
+- **Persistence:** tự viết, **versioned + tối thiểu** (`{ v, ... }`), validate khi đọc bằng **Zod** (localStorage = external input → type-at-boundary); shape lạ / version cũ → bỏ qua, fallback default. Ghi **chỉ khi đổi** (subscribe). KHÔNG `redux-persist` (nặng, phải hack `serializableCheck`). State ephemeral **không** persist.
 - **URL state = nuqs:** state nên ở URL (search/filter/pagination) dùng **nuqs** (`useQueryState` + `parseAsString.withDefault`), bọc trong facade (`useProductFilters`). `NuqsAdapter` (`nuqs/adapters/react-router/v7`) đặt trong `root-layout` (cần React Router context). Set rỗng → ghi `null` để xoá param (URL sạch).
 - **Provider order (`AppProvider`):** `StoreProvider` › `QueryClientProvider` › `RouterProvider`; `NuqsAdapter` trong layout.
 

@@ -1,6 +1,6 @@
 # 15 — UI & Accessibility
 
-> Accessibility là **[MUST] ngay hôm nay** và được lint kiểm. Phần styling là **[PLANNED]** — codebase đang ở giai đoạn UI-agnostic.
+> Accessibility và styling đều là **[MUST]**. Accessibility được lint kiểm. Styling theo design system của `admin`: CSS variables và CSS thường, không Tailwind hay thư viện UI, mô tả ở [`docs/design-system/admin.md`](../../../../../docs/design-system/admin.md).
 
 ## 15.1 Accessibility
 
@@ -41,11 +41,11 @@ Trạng thái lỗi/thành công phải kèm chữ hoặc icon, không chỉ đ�
 
 Nếu không `getByRole` / `getByLabelText` được thì thường chính component đó chưa accessible. Test và a11y củng cố lẫn nhau. → `16-testing.md`
 
-## 15.2 Hợp đồng UI-agnostic
+## 15.2 Hợp đồng props của component dùng chung
 
-### UI-008 [MUST] Component dùng chung giữ contract props ổn định, độc lập thư viện UI
+### UI-008 [MUST] Component dùng chung giữ contract props ổn định, độc lập cách vẽ
 
-Component ở `src/components/` hiện dùng markup tối giản, chưa gắn thư viện UI nào. Khi thay markup bằng thư viện UI, **props không đổi** ⇒ call-site không phải sửa.
+Component ở `src/components/` vẽ bằng class của `components.css` (15.3). Khi đổi markup hay class bên trong, **props không đổi** ⇒ call-site không phải sửa.
 
 Hệ quả khi viết mới: props mô tả **ý định** (`label`, `error`, `isLoading`), không mô tả **cách vẽ** (`className`, `borderColor`).
 
@@ -57,15 +57,30 @@ Thư viện chỉ được import trong đúng file wrapper đó, không rải r
 
 Chấp nhận inline style khi giá trị là **chức năng** và chỉ biết lúc chạy (chiều cao/vị trí do đo đạc, transform của virtualization). Không dùng inline style cho quyết định **thẩm mỹ**.
 
-## 15.3 Styling ⏳ [PLANNED]
+## 15.3 Styling
 
-Chưa áp dụng vào codebase. Đã chốt hướng, sẽ chuyển thành rule `[MUST]` khi lớp UI adapter được thực hiện:
+Design system của `admin` là CSS variables và CSS thường, không có Tailwind hay thư viện UI: mục 14 của Architecture Decisions trong `docs/specs/SHOP-7/plan.md`, và NFR13 của SPEC. Từng token, từng class và chỗ của chúng trong code nằm ở [`docs/design-system/admin.md`](../../../../../docs/design-system/admin.md).
 
-| Hạng mục | Hướng đã chốt |
+| File | Nội dung |
 |---|---|
-| Engine | Utility-first (Tailwind v4) + gom biến thể bằng `cva` |
-| Theming | CSS variables — độc lập engine, đổi adapter không phải viết lại token |
-| Component | Mô hình "own-your-code" trên nền primitive accessible |
-| Nguyên tắc | Không rải chuỗi class ma; biến thể khai tập trung tại component |
+| `src/styles/tokens.css` | Mọi token: màu, chữ, khoảng cách, bo góc, bóng, kính, chuyển động |
+| `src/styles/global.css` | Nền trang, chữ thân, h1–h3, liên kết, vòng focus |
+| `src/styles/components.css` | Class dùng chung: nút, huy hiệu, thẻ kính, ô nhập, bảng, banner, khung xương, khung trang |
 
-**Cho tới lúc đó:** không thêm thư viện styling mới, không thêm CSS toàn cục ngoài reset, không tự dựng hệ thống token song song. Giữ `UI-008` để lần chuyển đổi chỉ đụng markup bên trong component.
+### UI-011 [MUST] Chỉ dùng token của `tokens.css`, không tự đặt giá trị
+
+Màu, cỡ chữ, độ đậm, khoảng cách, bo góc, bóng và thời gian chuyển động lấy từ biến của `tokens.css`. CSS của màn hình không viết mã màu hay số `px`, `rem` tự đặt. Cần một giá trị mới thì thêm token vào `tokens.css` và một dòng vào `docs/design-system/admin.md`, trong cùng PR.
+
+✅ `color: var(--muted); padding: var(--space-3);` ❌ `color: #3b475a; padding: 13px;`
+
+### UI-012 [MUST] Dùng class của `components.css` trước khi viết CSS mới
+
+Nút, huy hiệu, thẻ, ô nhập, bảng, banner và khung trang dùng class sẵn có. Một biến thể mới khai ở `components.css`, cạnh class gốc, không rải ở từng màn hình. Trạng thái lấy từ thuộc tính ngữ nghĩa khi có, như `[aria-current='page']`, `[aria-invalid='true']` hay `:disabled`, không thêm một class `--active` song song.
+
+### UI-013 [MUST] Không thêm thư viện styling hay thư viện UI
+
+Không Tailwind, CSS-in-JS, preprocessor hay thư viện component. Dependency duy nhất của design system là gói font mà SPEC cho phép (NFR13).
+
+### UI-014 [MUST] Sáng và tối đi qua token, không qua component
+
+Token màu viết bằng `light-dark(sáng, tối)`. Component không đọc theme và không có CSS riêng cho giao diện tối. Giá trị nào `light-dark()` không chở được, như bóng, thì khai ở `tokens.css`. Theme đổi qua facade `useTheme()` (`09-state-management.md`). Chỉ `public/theme-init.js` và `syncThemeToDocument` đặt `data-theme` trên `<html>`.

@@ -15,6 +15,23 @@ _(Chưa có thay đổi chờ phát hành.)_
 
 ## v1
 
+### [1.1.0] — 2026-11-15
+
+Design system của `admin` (SHOP-8, mục 14 của plan `docs/specs/SHOP-7/plan.md`): CSS variables và CSS thường, không Tailwind hay thư viện UI (NFR13). Mục 15.3 cũ chỉ là hướng `[PLANNED]`, chưa áp dụng khi review, nên thay nó bằng rule mới là thay đổi MINOR, không phải `v2/`.
+
+**Added**
+- `UI-011 [MUST] Chỉ dùng token của tokens.css, không tự đặt giá trị`. Minh chứng: `src/styles/tokens.css`, PR #18.
+- `UI-012 [MUST] Dùng class của components.css trước khi viết CSS mới`. Minh chứng: `src/styles/components.css`, PR #18.
+- `UI-013 [MUST] Không thêm thư viện styling hay thư viện UI`.
+- `UI-014 [MUST] Sáng và tối đi qua token, không qua component`. Minh chứng: `light-dark()` trong `tokens.css`, `public/theme-init.js`, `syncThemeToDocument`.
+- Checklist PR và bảng anti-pattern ở `20-quick-reference.md` nhắc `UI-011`, `UI-012`.
+
+**Changed**
+- `15-ui-and-accessibility.md`: bỏ hướng `[PLANNED]` "Tailwind v4 + `cva`" của 15.3 và câu "UI-agnostic" ở đầu chương. 15.2 đổi tên thành "Hợp đồng props của component dùng chung"; `UI-008` giữ nguyên ý (props mô tả ý định), nhưng không còn nói tới việc thay markup bằng thư viện UI.
+
+**Fixed**
+- Ví dụ ở `04-naming-conventions.md` và `09-state-management.md`: `ui-slice.ts` thành `theme-slice.ts`, `toggleTheme` thành `setTheme`, vì PR #18 gỡ slice `ui`.
+
 ### [1.0.0] — 2026-07-22
 
 Phát hành lần đầu bộ coding convention, biên soạn bám sát codebase thực tế (`src/`, 124 file) và cấu hình đang chạy (`eslint.config.js`, `tsconfig.base.json`, `.prettierrc.json`, `.lintstagedrc.json`, `.github/workflows/ci.yml`). Gồm 21 tài liệu (00–20).

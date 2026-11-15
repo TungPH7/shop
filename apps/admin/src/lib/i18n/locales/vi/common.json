@@ -3,6 +3,7 @@
     "title": "tungph7 codebase"
   },
   "nav": {
+    "label": "Điều hướng chính",
     "home": "Trang chủ",
     "products": "Sản phẩm",
     "about": "Giới thiệu",
@@ -12,13 +13,14 @@
   "language": {
     "label": "Ngôn ngữ"
   },
+  "theme": {
+    "label": "Giao diện",
+    "light": "Sáng",
+    "dark": "Tối",
+    "system": "Hệ thống"
+  },
   "state": {
     "loading": "Đang tải…"
-  },
-  "sidebar": {
-    "open": "Mở thanh bên",
-    "close": "Đóng thanh bên",
-    "content": "Nội dung thanh bên (demo client-state)."
   },
   "greeting": "Xin chào, {{name}}"
 }

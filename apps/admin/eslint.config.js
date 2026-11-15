@@ -142,7 +142,7 @@ export default tseslint.config(
   },
 
   // 3b) Client-state seam: ONLY src/stores/** may import the Redux libraries.
-  //     Everywhere else must consume domain-hook facades (useTheme, useSidebar…)
+  //     Everywhere else must consume domain-hook facades (useTheme…)
   //     so the store implementation stays swappable (locked decision: Zustand).
   {
     files: ['src/**/*.{ts,tsx}'],
@@ -191,6 +191,12 @@ export default tseslint.config(
     files: ['**/*.{js,mjs,cjs}'],
     extends: [js.configs.recommended, tseslint.configs.disableTypeChecked],
     languageOptions: { globals: globals.node },
+  },
+
+  // 4a) Classic scripts that index.html loads from public/ (theme-init.js): browser.
+  {
+    files: ['public/**/*.js'],
+    languageOptions: { globals: globals.browser },
   },
 
   // 4b) Test files & test utilities are never fast-refreshed (not in the app
