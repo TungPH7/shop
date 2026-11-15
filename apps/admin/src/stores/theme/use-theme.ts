@@ -1,8 +1,20 @@
 import { useAppDispatch, useAppSelector } from '@/stores/hooks';
-import { selectTheme, setTheme as setThemeAction, type Theme } from '@/stores/theme/theme-slice';
+import {
+  selectTheme,
+  setTheme as setThemeAction,
+  type Theme,
+  themeValues,
+} from '@/stores/theme/theme-slice';
+
+export type { Theme };
+
+export function isTheme(value: string): value is Theme {
+  return (themeValues as readonly string[]).includes(value);
+}
 
 export interface UseThemeResult {
   theme: Theme;
+  themes: readonly Theme[];
   setTheme: (theme: Theme) => void;
 }
 
@@ -16,6 +28,7 @@ export function useTheme(): UseThemeResult {
   const dispatch = useAppDispatch();
   return {
     theme,
+    themes: themeValues,
     setTheme: (next) => dispatch(setThemeAction(next)),
   };
 }
