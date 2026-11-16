@@ -1,5 +1,6 @@
 package com.tungph7.learnpostgres.common.error;
 
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -9,16 +10,22 @@ import jakarta.servlet.http.HttpServletRequest;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.MessageSourceResolvable;
+import org.springframework.core.MethodParameter;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -121,6 +128,49 @@ public class GlobalExceptionHandler {
     extra.put("parameter", paramName);
     extra.put("rejectedValue", rejectedValue);
     extra.put("expectedType", expectedType);
+
+    ProblemDetail body =
+        problemFactory.from(
+            ErrorCode.INVALID_PARAMETER, HttpStatus.BAD_REQUEST, detail, request, extra);
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+  }
+
+  /**
+   * A {@code @RequestParam} or {@code @PathVariable} that breaks a constraint of its handler
+   * method, such as {@code @Min(0) int offset} (NFR3). Without this handler the catch-all made it a
+   * 500. The body names the first invalid parameter, in the order of the method, as the type
+   * mismatch above does.
+   *
+   * <p>A return value that breaks a constraint is a bug of the app, not of the request, so it stays
+   * a 500.
+   */
+  @ExceptionHandler(HandlerMethodValidationException.class)
+  public ResponseEntity<ProblemDetail> handleMethodValidation(
+      HandlerMethodValidationException ex, HttpServletRequest request) {
+    ParameterValidationResult first =
+        ex.getParameterValidationResults().stream()
+            .filter(result -> result.getMethodParameter().getParameterIndex() >= 0)
+            .min(Comparator.comparingInt(result -> result.getMethodParameter().getParameterIndex()))
+            .orElse(null);
+    if (first == null) {
+      return handleAny(ex, request);
+    }
+    String paramName = parameterName(first.getMethodParameter());
+    Object rejectedValue = first.getArgument();
+    String reason =
+        first.getResolvableErrors().stream()
+            .map(MessageSourceResolvable::getDefaultMessage)
+            .filter(message -> message != null && !message.isBlank())
+            .findFirst()
+            .orElse("is invalid");
+    String detail =
+        "Parameter '%s' has invalid value '%s' (%s).".formatted(paramName, rejectedValue, reason);
+
+    log.warn("Invalid parameter at {}: {}", request.getRequestURI(), detail);
+
+    Map<String, Object> extra = new LinkedHashMap<>();
+    extra.put("parameter", paramName);
+    extra.put("rejectedValue", rejectedValue);
 
     ProblemDetail body =
         problemFactory.from(
@@ -281,6 +331,23 @@ public class GlobalExceptionHandler {
   // =================================================================
   // Helpers
   // =================================================================
+
+  /**
+   * The name the client sent a parameter under: the name of its {@code @RequestParam} or {@code
+   * PathVariable} when it gives one, else the name of the Java parameter.
+   */
+  private static String parameterName(MethodParameter parameter) {
+    RequestParam requestParam = parameter.getParameterAnnotation(RequestParam.class);
+    if (requestParam != null && !requestParam.name().isEmpty()) {
+      return requestParam.name();
+    }
+    PathVariable pathVariable = parameter.getParameterAnnotation(PathVariable.class);
+    if (pathVariable != null && !pathVariable.name().isEmpty()) {
+      return pathVariable.name();
+    }
+    String name = parameter.getParameterName();
+    return name != null ? name : "arg" + parameter.getParameterIndex();
+  }
 
   /** Finds the root-cause message — used for logging only, never echoed to the client. */
   private static String rootMessage(Throwable t) {

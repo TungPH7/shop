@@ -1,6 +1,7 @@
 package com.tungph7.learnpostgres.feature.product.service;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -16,7 +17,10 @@ import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailabil
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 import com.tungph7.learnpostgres.feature.product.domain.ProductSlugs;
 import com.tungph7.learnpostgres.feature.product.dto.AdminProduct;
+import com.tungph7.learnpostgres.feature.product.dto.AdminProductSummary;
 import com.tungph7.learnpostgres.feature.product.dto.CreateProductRequest;
+import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
+import com.tungph7.learnpostgres.feature.product.dto.ProductStatusFilter;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
 
 /**
@@ -72,6 +76,15 @@ public class AdminProductService {
         saved.getSlug(),
         correlation.currentId().orElse(NO_CORRELATION_ID));
     return AdminProduct.from(saved);
+  }
+
+  public ProductPage<AdminProductSummary> list(
+      String q, ProductStatusFilter status, int offset, int limit) {
+    throw new UnsupportedOperationException();
+  }
+
+  public void delete(UUID id) {
+    throw new UnsupportedOperationException();
   }
 
   private Product createWithTypedSlug(CreateProductRequest request) {
