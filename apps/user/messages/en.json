@@ -127,7 +127,16 @@
   "Products": {
     "metaTitle": "Products",
     "metaDescription": "Browse products fetched server-side through the Data Access Layer, validated at the boundary and cached for performance.",
-    "title": "Products"
+    "title": "Products",
+    "list": "Product list",
+    "originalPrice": "Original price:",
+    "discount": "Off",
+    "outOfStock": "Out of stock",
+    "progress": "Viewed {shown, number} of {total, plural, one {# product} other {# products}}",
+    "loadMore": "Load more",
+    "loading": "Loading…",
+    "loadMoreError": "Couldn't load more. Please try again.",
+    "empty": "No products yet."
   },
   "ProductDetail": {
     "back": "Products",

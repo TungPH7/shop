@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { PAGE_SIZE, parseProductQuery, productsSearch } from './product-query';
+import { PAGE_SIZE, parseProductQuery, productsHref } from './product-query';
 
 describe('parseProductQuery', () => {
   test('defaults page to 1 when the URL has none', () => {
@@ -31,13 +31,13 @@ describe('parseProductQuery', () => {
   });
 });
 
-describe('productsSearch', () => {
+describe('productsHref', () => {
   test('leaves the default page 1 out of the URL', () => {
-    expect(productsSearch({ page: 1 })).toEqual({});
+    expect(productsHref({ page: 1 })).toBe('/products');
   });
 
   test('writes any other page', () => {
-    expect(productsSearch({ page: 2 })).toEqual({ page: '2' });
+    expect(productsHref({ page: 2 })).toBe('/products?page=2');
   });
 });
 

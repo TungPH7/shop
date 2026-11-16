@@ -8,8 +8,12 @@ import { server } from '~/testing/msw/server';
 
 import { getStoreProducts } from './get-products';
 
-const { cacheLife } = vi.hoisted(() => ({ cacheLife: vi.fn() }));
+const { cacheLife, captureError } = vi.hoisted(() => ({
+  cacheLife: vi.fn(),
+  captureError: vi.fn(),
+}));
 vi.mock('next/cache', () => ({ cacheLife }));
+vi.mock('~/lib/monitoring/capture-error', () => ({ captureError }));
 
 const URL_ = 'https://api.example.test/api/products';
 
@@ -117,8 +121,64 @@ describe('getStoreProducts', () => {
   test('returns no product and a total of 0 for an empty catalog', async () => {
     const asked = serve([]);
 
-    await expect(getStoreProducts({ page: 1 })).resolves.toEqual({ items: [], totalItems: 0 });
+    await expect(getStoreProducts({ page: 1 })).resolves.toEqual({
+      items: [],
+      totalItems: 0,
+      complete: true,
+    });
     expect(asked).toHaveLength(1);
+  });
+
+  test('says a read is complete when it got every block it needed', async () => {
+    serve(catalog(30));
+
+    await expect(getStoreProducts({ page: 1 })).resolves.toMatchObject({ complete: true });
+    expect(captureError).not.toHaveBeenCalled();
+  });
+
+  test('keeps the products of the blocks it read when a later block fails, as whole loads of 24, and reports it', async () => {
+    const items = catalog(300);
+    server.use(
+      http.get(URL_, ({ request }) => {
+        const offset = Number(new URL(request.url).searchParams.get('offset'));
+        if (offset > 0) return new HttpResponse(null, { status: 503 });
+        return HttpResponse.json({ items: items.slice(0, 96), totalItems: 300, offset, limit: 96 });
+      }),
+    );
+
+    const result = await getStoreProducts({ page: 6 });
+
+    expect(ids(result.items)).toEqual(ids(catalog(96)));
+    expect(result).toMatchObject({ totalItems: 300, complete: false });
+    expect(captureError).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'http', status: 503 }),
+      { feature: 'product-list', offset: 96 },
+    );
+  });
+
+  test('cuts the products it kept to whole loads of 24 when a product was read twice', async () => {
+    const second = [product(96), ...catalog(200).slice(96, 191)];
+    let reads = 0;
+    server.use(
+      http.get(URL_, ({ request }) => {
+        const offset = Number(new URL(request.url).searchParams.get('offset'));
+        reads += 1;
+        if (offset === 0) {
+          return HttpResponse.json({ items: catalog(96), totalItems: 300, offset, limit: 96 });
+        }
+        if (offset === 96) {
+          return HttpResponse.json({ items: second, totalItems: 300, offset, limit: 96 });
+        }
+        return HttpResponse.error();
+      }),
+    );
+
+    const result = await getStoreProducts({ page: 9 });
+
+    // 96 + 95 new products read before the third block failed: 191, cut to 168, seven loads of 24.
+    expect(reads).toBe(3);
+    expect(ids(result.items)).toEqual(ids(catalog(168)));
+    expect(result.complete).toBe(false);
   });
 
   test('throws when the api answers 500, never an empty list (NFR26)', async () => {

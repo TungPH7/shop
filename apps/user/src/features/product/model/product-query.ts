@@ -34,7 +34,7 @@ export function parseProductQuery(
   return parseSearchParams(productQuerySchema, raw);
 }
 
-/** The search params of `query` for a link or `router.replace`, without the defaults. */
-export function productsSearch(query: ProductQuery): Record<string, string> {
-  return query.page === DEFAULT_PAGE ? {} : { page: String(query.page) };
+/** The path of S4 for `query`, without its locale and without the defaults: for a link or `router.replace`. */
+export function productsHref(query: ProductQuery): string {
+  return query.page === DEFAULT_PAGE ? '/products' : `/products?page=${query.page}`;
 }
