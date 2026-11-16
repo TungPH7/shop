@@ -1,3 +1,41 @@
 {
-  "title": "Sản phẩm"
+  "title": "Sản phẩm",
+  "actions": {
+    "add": "Thêm sản phẩm",
+    "edit": "Sửa",
+    "editLabel": "Sửa {{name}}"
+  },
+  "filters": {
+    "statusLabel": "Lọc theo trạng thái",
+    "all": "Tất cả",
+    "active": "Đang bán",
+    "hidden": "Ẩn",
+    "count_other": "{{count, number}} sản phẩm",
+    "searchLabel": "Tìm theo tên",
+    "searchPlaceholder": "Tìm theo tên sản phẩm…",
+    "clear": "Xóa bộ lọc"
+  },
+  "table": {
+    "label": "Danh sách sản phẩm",
+    "product": "Sản phẩm",
+    "price": "Giá bán",
+    "status": "Trạng thái",
+    "availability": "Tình trạng",
+    "actions": "Thao tác"
+  },
+  "status": {
+    "ACTIVE": "Đang bán",
+    "HIDDEN": "Ẩn"
+  },
+  "availability": {
+    "IN_STOCK": "Còn hàng",
+    "OUT_OF_STOCK": "Hết hàng"
+  },
+  "list": {
+    "loading": "Đang tải danh sách sản phẩm",
+    "noMatch": "Không có sản phẩm nào khớp",
+    "empty": "Chưa có sản phẩm nào.",
+    "error": "Không tải được danh sách sản phẩm.",
+    "retry": "Thử lại"
+  }
 }

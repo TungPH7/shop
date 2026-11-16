@@ -1,3 +1,42 @@
 {
-  "title": "Products"
+  "title": "Products",
+  "actions": {
+    "add": "Add product",
+    "edit": "Edit",
+    "editLabel": "Edit {{name}}"
+  },
+  "filters": {
+    "statusLabel": "Filter by status",
+    "all": "All",
+    "active": "Active",
+    "hidden": "Hidden",
+    "count_one": "{{count, number}} product",
+    "count_other": "{{count, number}} products",
+    "searchLabel": "Search by name",
+    "searchPlaceholder": "Search by product name…",
+    "clear": "Clear filters"
+  },
+  "table": {
+    "label": "Product list",
+    "product": "Product",
+    "price": "Price",
+    "status": "Status",
+    "availability": "Availability",
+    "actions": "Actions"
+  },
+  "status": {
+    "ACTIVE": "Active",
+    "HIDDEN": "Hidden"
+  },
+  "availability": {
+    "IN_STOCK": "In stock",
+    "OUT_OF_STOCK": "Out of stock"
+  },
+  "list": {
+    "loading": "Loading the products",
+    "noMatch": "No matching products",
+    "empty": "No products yet.",
+    "error": "Couldn't load the products.",
+    "retry": "Try again"
+  }
 }
