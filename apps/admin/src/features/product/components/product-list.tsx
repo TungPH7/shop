@@ -52,7 +52,11 @@ export function ProductList() {
         />
       );
     }
-    if (data === undefined) return <ProductRowsSkeleton />;
+    // An empty placeholder is the page of the last filters, not of these: the next
+    // filters may have products, so the empty states wait for their own answer.
+    if (data === undefined || (isPlaceholderData && data.items.length === 0)) {
+      return <ProductRowsSkeleton />;
+    }
     if (data.items.length > 0) return <ProductRows products={data.items} />;
     if (isFiltered) {
       return (

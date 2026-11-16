@@ -88,6 +88,22 @@ function fakeApi(products: AdminProductSummary[]) {
   return requests;
 }
 
+// Holds every next request in front of the fake until `release`, so a test can look
+// at the list while it loads. The handler returns nothing: MSW then hands the
+// request on to the fake.
+function holdRequests() {
+  let release: (() => void) | undefined;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  server.use(
+    http.get('*/admin/products', async () => {
+      await held;
+    }),
+  );
+  return { release: () => release?.() };
+}
+
 // The text of a cell, exactly: the price has a no-break space, which the text
 // matchers of Testing Library do not find.
 function cellText(row: HTMLElement, column: number) {
@@ -224,6 +240,74 @@ describe('ProductList', () => {
     const search = screen.getByRole('searchbox', { name: 'Search by name' });
     expect(search).toHaveValue('');
     expect(search).toHaveFocus();
+  });
+
+  it('shows "No matching products" and Clear filters when no product has the status (S1.10)', async () => {
+    fakeApi([shirt]);
+    const { user } = renderWithProviders(<ProductList />, { route: '/products?status=hidden' });
+
+    expect(await screen.findByText('No matching products')).toBeInTheDocument();
+    expect(screen.queryByText('No products yet.')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+    expect(await screen.findByText('Áo thun cổ tròn')).toBeInTheDocument();
+  });
+
+  it('shows the skeleton, not "No products yet.", while Clear filters loads after a keyword with no match', async () => {
+    fakeApi([shirt, jeans]);
+    const { user } = renderWithProviders(<ProductList />, { route: '/products?q=xyz' });
+    await screen.findByText('No matching products');
+    const { release } = holdRequests();
+
+    await user.click(screen.getByRole('button', { name: 'Clear filters' }));
+
+    expect(screen.getByRole('region', { name: 'Product list' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+    expect(screen.queryByText('No products yet.')).not.toBeInTheDocument();
+    expect(screen.queryByText('No matching products')).not.toBeInTheDocument();
+    expect(rows()).toHaveLength(6);
+
+    release();
+    expect(await screen.findByText('Quần jean nam')).toBeInTheDocument();
+  });
+
+  it('shows the skeleton, not "No products yet.", while All loads after a status with no product', async () => {
+    fakeApi([shirt]);
+    const { user } = renderWithProviders(<ProductList />, { route: '/products?status=hidden' });
+    await screen.findByText('No matching products');
+    const { release } = holdRequests();
+    const filter = screen.getByRole('group', { name: 'Filter by status' });
+
+    await user.click(within(filter).getByRole('button', { name: 'All' }));
+
+    expect(screen.queryByText('No products yet.')).not.toBeInTheDocument();
+    expect(rows()).toHaveLength(6);
+
+    release();
+    expect(await screen.findByText('Áo thun cổ tròn')).toBeInTheDocument();
+  });
+
+  it('keeps the rows of the last page on screen while the next filter loads (NFR6)', async () => {
+    fakeApi([shirt, jeans]);
+    const { user } = renderWithProviders(<ProductList />, { route: '/products' });
+    await screen.findByText('Áo thun cổ tròn');
+    const { release } = holdRequests();
+    const filter = screen.getByRole('group', { name: 'Filter by status' });
+
+    await user.click(within(filter).getByRole('button', { name: 'Hidden' }));
+
+    expect(screen.getByText('Áo thun cổ tròn')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Product list' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    );
+
+    release();
+    await waitFor(() => {
+      expect(screen.queryByText('Áo thun cổ tròn')).not.toBeInTheDocument();
+    });
   });
 
   it('starts the search box from the keyword of the URL', async () => {
