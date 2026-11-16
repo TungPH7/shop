@@ -16,8 +16,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * {@link ValidSlug}: the slug rule of {@code ProductSlugs.isValid}, as a constraint the request
- * bodies of the add and the edit share (SHOP-46).
+ * {@link ValidSlug}: the slug rule of {@code ProductSlugs.isValid}, as a constraint on the slug of
+ * the add only (SHOP-46). The edit keeps a stored slug out of the format (NFR16), so its request
+ * body has no such constraint; the service of the edit (US3, SHOP-34) checks a changed slug.
  */
 class ValidSlugTest {
 
