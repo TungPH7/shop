@@ -1,7 +1,7 @@
 # CI of a project (ai-orchestrator, quality-gates spec section 2.4): four jobs, one check each. jira-sync watches this
 # workflow by its name, CI. merge-gate, audit and the ruleset require the four jobs, which .ai-orchestrator/quality/gates.yaml
 # lists under `checks`. The project provides the scripts lint, typecheck, test:coverage (writing lcov) and build, run
-# with npm or pnpm by the lockfile at its root.
+# with npm or pnpm by the lockfile at its root. A fifth job, caddy-proxy, is this project's own (SHOP-57).
 name: CI
 
 on:
@@ -114,6 +114,33 @@ jobs:
         if: github.event_name == 'pull_request'
         run: node .ai-orchestrator/scripts/coverage-diff.mjs --base "$BASE_SHA"
       - run: $PM run build
+
+  # A check of this project, not of the kit (SHOP-57): the Caddyfile of the admin image, run as a proxy in Docker by
+  # apps/admin/scripts/check-caddy-proxy.mjs, keeps X-Forwarded-Proto, X-Forwarded-Host and X-Forwarded-For of Caddy of
+  # the VPS. When it lost them, the api read http and answered every POST of the browser with 403 "Invalid CORS request"
+  # (SHOP-56). Not a required check of gates.yaml, but merge-gate merges only when every check run passed.
+  caddy-proxy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: By hand only on develop, main or release/*
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/develop|refs/heads/main|refs/heads/release/*) ;;
+            *) echo "::error::CI runs by hand only on develop, main or release/*, not on $GITHUB_REF"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # pnpm, by packageManager of package.json, installed as in build-test. The script needs Docker and Node alone, so
+      # the packages of the project are not installed.
+      - name: pnpm
+        run: node .ai-orchestrator/scripts/ci-package-manager.mjs
+      - run: pnpm --filter ./apps/admin run check:caddy
 
   # gitleaks on the commits the PR or the push brings, pinned and checked against its published checksum.
   secrets:
