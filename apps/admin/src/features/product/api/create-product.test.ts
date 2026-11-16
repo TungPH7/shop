@@ -125,6 +125,25 @@ describe('createProductErrorOf', () => {
     });
   });
 
+  it('lists the fields of a 400 in their order on the form, not the order of the api', async () => {
+    const error = await errorOf(() =>
+      problem(400, 'VALIDATION_FAILED', {
+        errors: [
+          { field: 'compareAtPrice', rejectedValue: 1, message: '…' },
+          { field: 'price', rejectedValue: 0, message: '…' },
+          { field: 'slug', rejectedValue: 'A', message: '…' },
+          { field: 'price', rejectedValue: 0, message: '…' },
+          { field: 'name', rejectedValue: '', message: '…' },
+        ],
+      }),
+    );
+
+    expect(createProductErrorOf(error, input)).toEqual({
+      kind: 'fields',
+      fields: ['name', 'slug', 'price', 'compareAtPrice'],
+    });
+  });
+
   it('is a general error for a 400 that names no field of the form', async () => {
     const error = await errorOf(() =>
       problem(400, 'VALIDATION_FAILED', {

@@ -36,8 +36,9 @@ export async function createProduct(input: CreateProductInput): Promise<CreatedP
 }
 
 /**
- * The fields of the form that show an error of the api under them. Status and
- * availability are a choice of two values: the api rejecting one is a general error.
+ * The fields of the form that show an error of the api under them, in their order on
+ * the form. Status and availability are a choice of two values: the api rejecting one
+ * is a general error.
  */
 export const PRODUCT_FORM_FIELDS = [
   'name',
@@ -50,7 +51,10 @@ export type ProductFormField = (typeof PRODUCT_FORM_FIELDS)[number];
 
 /** How the form shows a failed save ("Cách admin hiện lỗi" of the API Contract). */
 export type CreateProductError =
-  /** 400: an error under each field the api names. */
+  /**
+   * 400: an error under each field the api names, in their order on the form, so the
+   * first is the one to focus (S2.6). The api lists them in no fixed order.
+   */
   | { kind: 'fields'; fields: ProductFormField[] }
   /** 409 of a typed slug: "Slug này đã được dùng" under the slug (S2.7, AC8). */
   | { kind: 'slugTaken' }
@@ -66,10 +70,6 @@ const validationProblemSchema = z.object({
   errors: z.array(z.object({ field: z.string() })),
 });
 
-function isFormField(field: string): field is ProductFormField {
-  return (PRODUCT_FORM_FIELDS as readonly string[]).includes(field);
-}
-
 /** Branches on the status and the code of the error, never on its message. */
 export function createProductErrorOf(
   error: unknown,
@@ -83,9 +83,8 @@ export function createProductErrorOf(
 
   if (error.status === 400) {
     const problem = validationProblemSchema.safeParse(error.details);
-    const fields = problem.success
-      ? [...new Set(problem.data.errors.map((item) => item.field))].filter(isFormField)
-      : [];
+    const named = new Set(problem.success ? problem.data.errors.map((item) => item.field) : []);
+    const fields = PRODUCT_FORM_FIELDS.filter((field) => named.has(field));
     if (fields.length > 0) return { kind: 'fields', fields };
   }
 

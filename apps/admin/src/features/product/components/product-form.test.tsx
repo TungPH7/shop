@@ -300,6 +300,44 @@ describe('ProductForm in add mode', () => {
     expect(field.price()).toHaveFocus();
   });
 
+  it('S2.6 focuses the first field of the form a 400 names, whatever order the api lists them in', async () => {
+    fakeApi(() =>
+      problem(400, 'VALIDATION_FAILED', {
+        errors: [
+          { field: 'compareAtPrice', rejectedValue: 500000, message: '…' },
+          { field: 'price', rejectedValue: 450000, message: '…' },
+          { field: 'name', rejectedValue: 'Áo', message: '…' },
+        ],
+      }),
+    );
+    const { user } = renderForm();
+    await user.type(field.name(), 'Áo');
+    await user.type(field.price(), '450000');
+    await user.type(field.compareAtPrice(), '500000');
+
+    await user.click(submit());
+
+    await waitFor(() => {
+      expect(field.compareAtPrice()).toHaveAttribute('aria-invalid', 'true');
+    });
+    expect(field.price()).toHaveAttribute('aria-invalid', 'true');
+    expect(field.name()).toHaveAttribute('aria-invalid', 'true');
+    expect(field.name()).toHaveFocus();
+  });
+
+  it('goes back to the list on a 201 whose body is not an AdminProduct, so no second save', async () => {
+    const bodies = fakeApi(() => HttpResponse.json({ id: 42 }, { status: 201 }));
+    const { user } = renderForm();
+    await user.type(field.name(), 'Áo');
+    await user.type(field.price(), '450000');
+
+    await user.click(submit());
+
+    expect(await screen.findByText('The product list')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(bodies).toHaveLength(1);
+  });
+
   it.each([
     ['a 5xx', () => problem(500, 'INTERNAL_ERROR')],
     ['a network error', () => HttpResponse.error()],
