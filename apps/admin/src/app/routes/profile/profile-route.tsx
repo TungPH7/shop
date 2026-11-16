@@ -1,4 +1,3 @@
-import { Can } from '@/features/auth/components/can';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
 export function ProfileRoute() {
@@ -12,11 +11,6 @@ export function ProfileRoute() {
       <p>Email: {user.email}</p>
       <p>Role: {user.role.name}</p>
       <p>Permissions: {user.role.permissions.length}</p>
-
-      {/* Element-level RBAC demo: rendered only if the user may DELETE a product. */}
-      <Can method="DELETE" path="/products/:productId">
-        <button type="button">Delete product (privileged action)</button>
-      </Can>
 
       <p>
         <button type="button" onClick={() => logout.mutate()} disabled={logout.isPending}>

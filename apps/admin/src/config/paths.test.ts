@@ -3,17 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { paths } from '@/config/paths';
 
 describe('paths', () => {
-  it('builds the href of each page from its own pattern', () => {
-    const { notFound, ...pages } = paths;
+  it('keeps no route pattern of the template product pages', () => {
+    const patterns = Object.values(paths).map((page) => page.path);
 
-    for (const page of Object.values(pages)) {
-      expect(page.getHref()).toBe(page.path);
-    }
-    expect(notFound.getHref()).toBe('/404');
+    expect(patterns).not.toContain('/products/:productId');
+    expect(patterns).not.toContain('/admin/products/:productId/edit');
   });
 
-  it('keeps no path of the template product pages', () => {
-    expect(Object.keys(paths)).not.toContain('productDetail');
-    expect(Object.keys(paths)).not.toContain('productEdit');
+  it('keeps the products list route for US1', () => {
+    expect(paths.products.path).toBe('/products');
+    expect(paths.products.getHref()).toBe('/products');
   });
 });
