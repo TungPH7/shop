@@ -21,6 +21,8 @@ export const PRICE_MAX = 999_999_999;
 /** The slug the api gives a name with no letter or digit (ProductSlugs.FALLBACK). */
 const SLUG_FALLBACK = 'san-pham';
 const SLUG_FORMAT = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** The accents NFD splits off a letter, as COMBINING_MARKS of ProductSlugs. */
+const COMBINING_MARKS = /[\u0300-\u036f]/g;
 
 /**
  * The slug the api generates from a name (ProductSlugs.fromName, Product Rules): no
@@ -32,7 +34,7 @@ export function slugFromName(name: string): string {
   if (name.trim() === '') return '';
   const slug = name
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .replace(COMBINING_MARKS, '')
     .replace(/[đĐ]/g, 'd')
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
