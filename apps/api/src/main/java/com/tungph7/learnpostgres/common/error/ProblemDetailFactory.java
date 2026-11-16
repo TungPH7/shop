@@ -2,6 +2,8 @@ package com.tungph7.learnpostgres.common.error;
 
 import java.net.URI;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.Optional;
 
@@ -13,6 +15,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.stereotype.Component;
 
+import com.tungph7.learnpostgres.common.dto.ApiInstant;
 import com.tungph7.learnpostgres.common.logging.LoggingProperties;
 
 /**
@@ -42,6 +45,10 @@ public class ProblemDetailFactory {
 
   /** Used when MDC has no value (out-of-request, e.g. async pool or scheduler). */
   private static final String NO_CORRELATION = "no-correlation-id";
+
+  /** The {@code timestamp} extension, in the pattern of {@link ApiInstant}. */
+  private static final DateTimeFormatter TIMESTAMP =
+      DateTimeFormatter.ofPattern(ApiInstant.PATTERN).withZone(ZoneId.of(ApiInstant.TIME_ZONE));
 
   // Base URL of error docs, injected from application.yml (`app.errors.base-url`).
   // Defaults to "about:blank" so tests / local development run without extra config.
@@ -101,9 +108,18 @@ public class ProblemDetailFactory {
     pd.setType(typeUriFor(code));
     pd.setTitle(title);
     pd.setInstance(URI.create(request.getRequestURI()));
-    pd.setProperty("timestamp", Instant.now().toString());
+    pd.setProperty("timestamp", timestamp(Instant.now()));
     pd.setProperty("correlationId", currentCorrelationId());
     return pd;
+  }
+
+  /**
+   * An instant as the API Contract writes one, the pattern of {@link ApiInstant}: UTC with exactly
+   * three digits of milliseconds, as {@code 2026-11-16T02:10:00.000Z}. {@link Instant#toString}
+   * leaves out a fraction of zero and writes micro or nanoseconds when there are some.
+   */
+  static String timestamp(Instant instant) {
+    return TIMESTAMP.format(instant);
   }
 
   // Builds the documentation URI for a given ErrorCode.
