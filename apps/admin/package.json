@@ -10,6 +10,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "build:analyze": "node scripts/build-analyze.mjs",
+    "check:caddy": "node scripts/check-caddy-proxy.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "lint": "eslint .",
