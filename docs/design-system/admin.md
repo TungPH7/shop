@@ -11,8 +11,9 @@ Design system của `admin` là CSS variables và CSS thường, không có Tail
 | `apps/admin/src/styles/tokens.css` | Mọi token: màu, chữ, khoảng cách, bo góc, bóng, kính, chuyển động; font dự phòng |
 | `apps/admin/src/styles/global.css` | Nền trang, chữ thân, h1–h3, liên kết, vòng focus |
 | `apps/admin/src/styles/components.css` | Class dùng chung: nút, huy hiệu, thẻ kính, ô nhập, bảng, banner, khung xương, khung trang |
+| `apps/admin/src/styles/list-page.css` | Class riêng của trang danh sách sản phẩm (S1): ô, dòng thông báo và khung xương của bảng sản phẩm, hàng tiêu đề, hàng bộ lọc, thẻ của bảng. Tách khỏi `components.css` ở SHOP-52 |
 | `apps/admin/public/theme-init.js` | Script thường, chặn render, trong `<head>` của `index.html`: đặt giao diện đã lưu lên `<html>` trước khung hình đầu tiên |
-| `apps/admin/src/main.tsx` | Nạp font, rồi `tokens.css`, `global.css`, `components.css` theo thứ tự đó; cho `<html>` theo mọi lần đổi giao diện của store |
+| `apps/admin/src/main.tsx` | Nạp font, rồi `tokens.css`, `global.css`, `components.css`, `list-page.css` theo thứ tự đó (`list-page.css` dựa trên `.table`, `.card`, `.skeleton` của `components.css`); cho `<html>` theo mọi lần đổi giao diện của store |
 | `apps/admin/src/stores/theme/apply-theme.ts` | `applyTheme`, `syncThemeToDocument`: đặt hay gỡ `data-theme` trên `<html>` theo store |
 | `apps/admin/src/components/theme/theme-switcher.tsx` | Ô chọn Sáng, Tối, Hệ thống ở khung trang |
 | `apps/admin/src/app/layouts/root-layout.tsx` | Khung trang S1.1 |
@@ -152,12 +153,12 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.field-hint`, `.field-error` | Gợi ý, dòng lỗi | 12,5/500; lỗi màu `--bad-text`, đặt biểu tượng trước chữ; gắn vào ô bằng `aria-describedby` |
 | `.search`, `.search__icon`, `.search__input` | Ô tìm (S1.5) | Viên thuốc cao 44, kính lúp 16 px bên trái (`aria-hidden`), chữ cách trái 40 |
 | `.table-wrap`, `.table`, `.table__num`, `.table__actions` | Bảng (S1.6) | Đặt trong `.card`. Tiêu đề cột 12/600 `--muted`, đệm 10 12; dòng cao 64, đệm 12, kẻ `--line`, hover `--surface-2`; cột giá và thao tác căn phải. `.table-wrap` cuộn ngang: cho nó `tabindex="0"` và nhãn |
-| `.table__product`, `.table__product-text`, `.table__name`, `.table__sub` | Ô Sản phẩm của bảng (S1.6) | Ô giữ chỗ 40, cách 12, rồi tên 14/600 `--text` và slug 12,5 `--hint` bên dưới (SHOP-19) |
-| `.table__message` | Dòng thông báo thay thân bảng (S1.9, S1.10, lỗi của S1.6) | Một ô trải hết các cột, căn giữa, đệm 28 12; chữ `--muted`, nút hay liên kết bên dưới (SHOP-19) |
-| `.table__skeleton-tile`, `.table__skeleton-text`, `.table__skeleton-cell` | Khung xương của bảng (S1.6) | Đi cùng `.skeleton`: ô 40 bo `--r-thumb`, dòng chữ, ô 60% (SHOP-19) |
-| `.page-header` | Hàng tiêu đề của trang danh sách (S1.2, S1.3) | h1 bên trái, nút chính bên phải, cách bảng lọc 24 (SHOP-19) |
-| `.toolbar`, `.toolbar__group`, `.toolbar__count` | Hàng bộ lọc (S1.4, S1.5) | Nút phân đoạn và nhãn đếm 12,5/600 `--muted` bên trái, ô tìm rộng `--search-width` bên phải; xuống dòng khi hẹp (SHOP-19) |
-| `.list-page__card` | Thẻ của bảng (S1.6, S1.11) | `.card` chứa bảng; phân trang bên dưới, cách một đường kẻ `--line` (SHOP-19) |
+| `.table__product`, `.table__product-text`, `.table__name`, `.table__sub` | Ô Sản phẩm của bảng (S1.6) | Ô giữ chỗ 40, cách 12, rồi tên 14/600 `--text` và slug 12,5 `--hint` bên dưới (SHOP-19); ở `list-page.css` |
+| `.table__message` | Dòng thông báo thay thân bảng (S1.9, S1.10, lỗi của S1.6) | Một ô trải hết các cột, căn giữa, đệm 28 12; chữ `--muted`, nút hay liên kết bên dưới (SHOP-19); ở `list-page.css` |
+| `.table__skeleton-tile`, `.table__skeleton-text`, `.table__skeleton-cell` | Khung xương của bảng (S1.6) | Đi cùng `.skeleton`: ô 40 bo `--r-thumb`, dòng chữ, ô 60% (SHOP-19); ở `list-page.css` |
+| `.page-header` | Hàng tiêu đề của trang danh sách (S1.2, S1.3) | h1 bên trái, nút chính bên phải, cách bảng lọc 24 (SHOP-19); ở `list-page.css` |
+| `.toolbar`, `.toolbar__group`, `.toolbar__count` | Hàng bộ lọc (S1.4, S1.5) | Nút phân đoạn và nhãn đếm 12,5/600 `--muted` bên trái, ô tìm rộng `--search-width` bên phải; xuống dòng khi hẹp (SHOP-19); ở `list-page.css` |
+| `.list-page__card` | Thẻ của bảng (S1.6, S1.11) | `.card` chứa bảng; phân trang bên dưới, cách một đường kẻ `--line` (SHOP-19); ở `list-page.css` |
 | `.banner .banner--error`, `.banner--warn`, `.banner__icon` | Banner (S2.5, S2.7) | Bo 14, nền tint 14% hay 16%, biểu tượng màu bad hay warn, chữ `--text` 14/500. Lỗi `role="alert"`, cảnh báo `role="status"`. Chữ là một `<p>`, không có lề |
 | `.form-page`, `.form-page__back` | Trang form (S2.2, S2.4) | Cột rộng tối đa 640 px, căn giữa; liên kết "← Sản phẩm" 13,5/600 `--accent-text` cách thẻ 16, mũi tên `aria-hidden` (SHOP-20) |
 | `.product-form`, `.product-form__header`, `.product-form__subtitle`, `.product-form__pair`, `.product-form__actions` | Khung form (S2.3, S2.4, S2.13, S2.14) | Đặt cùng `.card`. Các khối cách nhau `--gap` 16; tiêu đề h1 và dòng phụ `--muted` ở đầu thẻ, như ảnh 02; giá bán và giá gốc, rồi Trạng thái và Tình trạng, mỗi cặp hai cột bằng nhau, một cột dưới 640 px; nút Hủy và nút Lưu căn phải ở cuối thẻ (SHOP-20) |

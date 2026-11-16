@@ -105,10 +105,14 @@ export function ProductRows({ products }: { products: readonly AdminProductSumma
   ));
 }
 
+/** The six rows of a loading table, named once for a screen reader in the first cell. */
 export function ProductRowsSkeleton() {
+  const { t } = useTranslation('product');
+
   return Array.from({ length: SKELETON_ROWS }, (_, row) => (
     <tr key={row}>
       <td>
+        {row === 0 ? <span className="visually-hidden">{t('list.loading')}</span> : null}
         <div className="table__product">
           <span className="skeleton table__skeleton-tile" />
           <span className="skeleton table__skeleton-text" />

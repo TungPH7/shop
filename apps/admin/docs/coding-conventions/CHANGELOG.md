@@ -15,6 +15,13 @@ _(Chưa có thay đổi chờ phát hành.)_
 
 ## v1
 
+### [1.1.2] — 2026-11-17
+
+SHOP-52 tách CSS của trang danh sách sản phẩm khỏi `components.css` (finding Low của `reviewer` ở PR #38). Bản này chỉ thêm file đó vào bảng của mục 15.3, không thêm ràng buộc nào với code, nên là PATCH.
+
+**Fixed**
+- Bảng file của mục 15.3 ở `15-ui-and-accessibility.md`: thêm `src/styles/list-page.css`. Minh chứng: `src/main.tsx` nạp nó sau `components.css`.
+
 ### [1.1.1] — 2026-11-16
 
 SHOP-42 (PR #31) gỡ `<Can>`, `usePermission().hasPermission` và `invariant`, nhưng bộ quy ước còn tả chúng (finding Medium và Low của `reviewer` ở PR #31, Task SHOP-47). Bản này chỉ sửa luật cho khớp code đang có, không thêm ràng buộc nào với code, nên là PATCH.
