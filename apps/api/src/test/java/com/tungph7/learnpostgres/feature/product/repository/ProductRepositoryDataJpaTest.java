@@ -6,6 +6,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import javax.sql.DataSource;
 
@@ -13,6 +16,8 @@ import jakarta.persistence.EntityManager;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
@@ -35,6 +40,8 @@ import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 // @DataJpaTest does not auto-load auditing — import the config explicitly.
 @Import(JpaAuditingConfig.class)
 class ProductRepositoryDataJpaTest extends AbstractContainerBaseTest {
+
+  private static final Logger LOG = LoggerFactory.getLogger(ProductRepositoryDataJpaTest.class);
 
   @Autowired ProductRepository repository;
   @Autowired EntityManager em;
@@ -155,6 +162,13 @@ class ProductRepositoryDataJpaTest extends AbstractContainerBaseTest {
   // ============================================================
 
   @Test
+  void theSession_hasSearchPathAppOnly_asOnTheServers() {
+    // The operators of citext live in schema public: these tests see them only if they are
+    // called explicitly, as on the servers.
+    assertThat(jdbc.sql("SHOW search_path").query(String.class).single()).isEqualTo("app");
+  }
+
+  @Test
   void findBySlug_matchesCaseInsensitively_dueToCitext() {
     repository.save(product("Quần jean nam", "quan-jean-nam", 450_000L));
     em.flush();
@@ -162,6 +176,16 @@ class ProductRepositoryDataJpaTest extends AbstractContainerBaseTest {
     assertThat(repository.findBySlug("quan-jean-nam")).isPresent();
     assertThat(repository.findBySlug("QUAN-JEAN-NAM")).isPresent();
     assertThat(repository.findBySlug("not-exist")).isEmpty();
+  }
+
+  @Test
+  void existsBySlug_matchesCaseInsensitively_dueToCitext() {
+    repository.save(product("Quần jean nam", "quan-jean-nam", 450_000L));
+    em.flush();
+
+    assertThat(repository.existsBySlug("quan-jean-nam")).isTrue();
+    assertThat(repository.existsBySlug("Quan-Jean-NAM")).isTrue();
+    assertThat(repository.existsBySlug("quan-jean")).isFalse();
   }
 
   @Test
@@ -218,7 +242,34 @@ class ProductRepositoryDataJpaTest extends AbstractContainerBaseTest {
 
     String plan = String.join("\n", jdbc.sql("EXPLAIN " + sql).query(String.class).list());
 
-    assertThat(plan).contains("products_slug_unique").doesNotContain("Seq Scan");
+    // An Index Cond, not a Filter over the whole index: a text comparison would only filter.
+    assertThat(plan)
+        .contains("products_slug_unique")
+        .contains("Index Cond")
+        .doesNotContain("Seq Scan");
+  }
+
+  @Test
+  void findSlugsAmong_ofTheCandidatesOfAName_with10000Products_readsThemInTheIndex() {
+    insertProducts(10_000);
+    // The 1,000 slugs an add without slug tries (AdminProductService.MAX_SLUG_NUMBER).
+    String candidates =
+        Stream.concat(
+                Stream.of("ao-thun"), IntStream.rangeClosed(2, 1_000).mapToObj(n -> "ao-thun-" + n))
+            .collect(Collectors.joining(",", "'{", "}'::text"));
+    String sql = ProductRepository.SLUGS_AMONG_SQL.replace(":slugs", candidates);
+
+    String plan =
+        String.join(
+            "\n", jdbc.sql("EXPLAIN (ANALYZE, COSTS OFF) " + sql).query(String.class).list());
+    LOG.info("findSlugsAmong, 1,000 candidates, 10,000 products, seq scans on:\n{}", plan);
+
+    assertThat(plan)
+        .contains("products_slug_unique")
+        .contains("Index Cond")
+        .doesNotContain("Seq Scan");
+    assertThat(repository.findSlugsAmong(new String[] {"AO-THUN", "ao-thun-2"}))
+        .containsExactly("ao-thun");
   }
 
   // ============================================================
@@ -228,6 +279,27 @@ class ProductRepositoryDataJpaTest extends AbstractContainerBaseTest {
   private static Product product(String name, String slug, long priceVnd) {
     return new Product(
         name, slug, null, priceVnd, null, ProductStatus.ACTIVE, ProductAvailability.IN_STOCK);
+  }
+
+  /**
+   * {@code count} products like Production, as in {@code ProductQueryPerformanceIntegrationTest},
+   * plus {@code ao-thun}, then fresh statistics for the planner. In the transaction of the test,
+   * which rolls back.
+   */
+  private void insertProducts(int count) {
+    jdbc.sql(
+            """
+INSERT INTO app.products (id, name, slug, description, price_vnd, status, availability)
+SELECT app.gen_uuid_v7(), 'Áo thun cổ tròn ' || i, 'perf-' || i,
+       repeat('Mô tả sản phẩm, chất liệu cotton. ', 15), 1000 * (1 + i % 2000),
+       'ACTIVE', 'IN_STOCK'
+  FROM generate_series(1, :count) AS s(i)
+""")
+        .param("count", count)
+        .update();
+    repository.save(product("Áo thun", "ao-thun", 1L));
+    em.flush();
+    jdbc.sql("ANALYZE app.products").update();
   }
 
   private Map<String, Object> row(UUID id) {
