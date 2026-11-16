@@ -8,14 +8,12 @@ export const NAV_ITEMS = [
   { key: 'about', href: '/about' },
 ] as const;
 
-export type NavItem = (typeof NAV_ITEMS)[number];
-
 /**
  * Whether `pathname` (without the locale, as usePathname of next-intl gives it) is in the section of `href`: Home only
- * on itself, any other section on itself and the pages below it, so Products stays current on a product page.
+ * on itself, any other section on itself and the pages below it, so Products stays current on a product page. A
+ * trailing slash needs no stripping: '/about/' is below '/about'.
  */
 export function isCurrentPath(pathname: string, href: string): boolean {
-  const path = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
-  if (href === '/') return path === '/';
-  return path === href || path.startsWith(`${href}/`);
+  if (href === '/') return pathname === '/';
+  return pathname === href || pathname.startsWith(`${href}/`);
 }

@@ -68,6 +68,26 @@ test.describe('page frame: navigation bar S4.1 and footer S4.11', () => {
     );
   });
 
+  // The footer is pushed down, not the <main> stretched: a page may put more after its <main>, as the home page does
+  // with its links to the demos, and they stay with the content (SHOP-41, review of PR #24).
+  test('on a short page the content stays together and the footer sits at the bottom', async ({
+    page,
+  }) => {
+    const height = 2400;
+    await page.setViewportSize({ width: 1440, height });
+    await page.goto('/vi');
+
+    const main = await page.locator('.site-shell > main').boundingBox();
+    const after = await page.locator('.site-shell > main + nav').boundingBox();
+    const footer = await page.getByRole('contentinfo').boundingBox();
+    if (!main || !after || !footer) throw new Error('the frame of the home page is not visible');
+
+    expect(after.y - (main.y + main.height)).toBeLessThan(40);
+    expect(footer.y - (after.y + after.height)).toBeGreaterThan(height / 3);
+    expect(footer.y + footer.height).toBeGreaterThan(height - 80);
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(height);
+  });
+
   for (const width of [768, 1024, 1440]) {
     test(`from 768px the bar is one row (${width}px)`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
