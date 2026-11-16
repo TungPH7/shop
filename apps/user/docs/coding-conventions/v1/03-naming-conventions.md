@@ -28,7 +28,7 @@
 | `*-form`                | Client Component chứa form                              | `login-form.tsx`, `profile-edit-form.tsx`  |
 | `*-panel`               | Server Component bọc form: guard + i18n + prefill       | `profile-edit-panel.tsx`                   |
 | `*-button`              | Client island nhỏ, một hành động                        | `delete-product-button.tsx`                |
-| `*-provider`            | Wrapper context                                         | `theme-provider.tsx`, `query-provider.tsx` |
+| `*-provider`            | Wrapper context                                         | `theme-provider.tsx`, `store-provider.tsx` |
 | `*-shell` / `*-results` | Khung tĩnh / phần động trong PPR                        | `product-shell`, `product-results.tsx`     |
 
 ## 3.3 Hàm, biến, hằng — `[MUST]`

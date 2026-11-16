@@ -25,7 +25,7 @@ import { expect, test } from 'vitest'; // globals: false → import tường min
 ```
 
 - **[MUST]** Query theo **vai trò người dùng**: `getByRole`, `getByLabelText`, `getByText`. ❌ Không `querySelector` theo class/id, không test implementation detail.
-- **[MUST]** Component cần provider → dùng **`renderWithProviders`** (`~/testing/render.tsx`), không tự dựng provider ad-hoc. Đây là **một chỗ duy nhất** để thêm provider mới (Redux, i18n, Query…).
+- **[MUST]** Component cần provider → dùng **`renderWithProviders`** (`~/testing/render.tsx`), không tự dựng provider ad-hoc. Đây là **một chỗ duy nhất** để thêm provider mới; hiện nó bọc Redux (`StoreProvider`) và i18n (`NextIntlClientProvider`).
 - **[SHOULD]** Ưu tiên test ở `model/` (hàm thuần, schema) — rẻ nhất, ổn định nhất.
 - Test đặt tên theo **hành vi**, không theo tên hàm: `'trả về lỗi khi mật khẩu xác nhận không khớp'`.
 
@@ -63,12 +63,9 @@ Mock đúng **ranh giới** đã thiết kế:
 
 ## 17.7 Integration test — `[SHOULD]`
 
-Khẳng định điều unit không với tới: nhiều hệ state **cùng tồn tại mà không giao thoa** (vd đổi `view` của nuqs không đụng `density` của Redux).
+Khẳng định điều unit không với tới: nhiều seam chạy cùng nhau trong một cây component, render qua `renderWithProviders` (Redux + i18n) với MSW ở biên network. Minh chứng: `src/testing/harness.test.tsx`.
 
-Hai bẫy cô lập state phải nhớ:
-
-1. `getQueryClient` là **singleton trình duyệt** → cache TanStack rò **giữa các test trong cùng file** (Vitest cô lập theo **file**, không theo test).
-2. Redux density **persist localStorage** → `beforeEach(() => localStorage.clear())`.
+Bẫy cô lập state phải nhớ: Vitest cô lập theo **file**, không theo test, nên state sống lâu rò giữa các test trong cùng file. Redux density **persist localStorage** → `beforeEach(() => localStorage.clear())`.
 
 ## 17.8 E2E — `[MUST]`
 
