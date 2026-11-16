@@ -33,6 +33,8 @@ apps:
     # the .env files keep the rest.
     env:
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
+      # The Spring Boot api, as for admin; without it the E2E of user called the old NestJS api (review of PR #40, SHOP-55).
+      API_URL: http://localhost:3001
     # Test helpers, not code of the app: the changed-lines check skips them (SHOP-38; PR #19 and #20 went red on them).
     coverage_exclude:
       - src/testing/**
@@ -86,12 +88,13 @@ roles:
 claude:
   allow: []
 # Lanes (parallel-runs spec, approved at Phiên 32 · Lượt 35): the build and fix of each item run in a worktree of their
-# own next to this folder, shop-wt/<KEY>; three lanes at once, one agent each, while 3 GB of RAM stay free. The lanes get
-# the untracked env files the apps read on this machine.
+# own next to this folder, shop-wt/<KEY>; three lanes at once, one agent each, while 1.5 GB of RAM stay free (3 GB until
+# SHOP-55, Phiên 33 · Lượt 2: with Chrome and VS Code open the agents ran one at a time). The lanes get the untracked env
+# files the apps read on this machine.
 runs:
   worktrees: true
   lanes_max: 3
-  min_free_ram_gb: 3
+  min_free_ram_gb: 1.5
   copy:
     - apps/api/.env
     - apps/user/.env.development
