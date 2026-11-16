@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   adminProductPageSchema,
+  adminProductSchema,
   adminProductSummarySchema,
   formatPrice,
 } from '@/features/product/model/product';
@@ -84,5 +85,23 @@ describe('formatPrice', () => {
 
   it('formats the largest price', () => {
     expect(formatPrice(999999999)).toBe('999.999.999\u00a0₫');
+  });
+});
+
+describe('adminProductSchema', () => {
+  it('parses the AdminProduct example of the contract', () => {
+    expect(adminProductSchema.parse(adminProduct)).toEqual(adminProduct);
+  });
+
+  it('accepts a product with no description and no compare-at price', () => {
+    const plain = { ...adminProduct, description: null, compareAtPrice: null };
+
+    expect(adminProductSchema.parse(plain)).toEqual(plain);
+  });
+
+  it('rejects a product without its version, which the edit sends back (AC13)', () => {
+    const withoutVersion = { ...adminProduct, version: undefined };
+
+    expect(adminProductSchema.safeParse(withoutVersion).success).toBe(false);
   });
 });
