@@ -1,6 +1,6 @@
 # Design system: admin
 
-> **App:** `apps/admin` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-15, SHOP-8 và SHOP-9
+> **App:** `apps/admin` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-16, SHOP-8, SHOP-9 và SHOP-19
 
 Design system của `admin` là CSS variables và CSS thường, không có Tailwind hay thư viện UI (NFR13). Mỗi màn hình dùng token và class dưới đây, không tự đặt màu, cỡ chữ hay khoảng cách.
 
@@ -119,6 +119,7 @@ Tương phản: `ux` đã tính mọi cặp chữ và nền ở hai giao diện 
 | `--blur-thick` | 30 px | Màn che sau hộp thoại (`.dialog::backdrop`) |
 | `--tile-thumb` | 40 px | Ô giữ chỗ ở dòng bảng S1.6 (SHOP-9) |
 | `--icon-btn` | 40 px | Nút tròn chỉ có biểu tượng: nút Đóng của hộp thoại S3.2 (SHOP-9) |
+| `--search-width` | 320 px | Bề rộng ô tìm S1.5 ở bên phải hàng bộ lọc (SHOP-19). `design.md` không ghi số; ảnh S1 không có ô tìm, nên đây là đề xuất của `fe-dev` |
 
 Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card` và `.pill` dùng nền `--solid`. Không dùng bộ lọc SVG của trang mẫu.
 
@@ -151,6 +152,12 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.field-hint`, `.field-error` | Gợi ý, dòng lỗi | 12,5/500; lỗi màu `--bad-text`, đặt biểu tượng trước chữ; gắn vào ô bằng `aria-describedby` |
 | `.search`, `.search__icon`, `.search__input` | Ô tìm (S1.5) | Viên thuốc cao 44, kính lúp 16 px bên trái (`aria-hidden`), chữ cách trái 40 |
 | `.table-wrap`, `.table`, `.table__num`, `.table__actions` | Bảng (S1.6) | Đặt trong `.card`. Tiêu đề cột 12/600 `--muted`, đệm 10 12; dòng cao 64, đệm 12, kẻ `--line`, hover `--surface-2`; cột giá và thao tác căn phải. `.table-wrap` cuộn ngang: cho nó `tabindex="0"` và nhãn |
+| `.table__product`, `.table__product-text`, `.table__name`, `.table__sub` | Ô Sản phẩm của bảng (S1.6) | Ô giữ chỗ 40, cách 12, rồi tên 14/600 `--text` và slug 12,5 `--hint` bên dưới (SHOP-19) |
+| `.table__message` | Dòng thông báo thay thân bảng (S1.9, S1.10, lỗi của S1.6) | Một ô trải hết các cột, căn giữa, đệm 28 12; chữ `--muted`, nút hay liên kết bên dưới (SHOP-19) |
+| `.table__skeleton-tile`, `.table__skeleton-text`, `.table__skeleton-cell` | Khung xương của bảng (S1.6) | Đi cùng `.skeleton`: ô 40 bo `--r-thumb`, dòng chữ, ô 60% (SHOP-19) |
+| `.page-header` | Hàng tiêu đề của trang danh sách (S1.2, S1.3) | h1 bên trái, nút chính bên phải, cách bảng lọc 24 (SHOP-19) |
+| `.toolbar`, `.toolbar__group`, `.toolbar__count` | Hàng bộ lọc (S1.4, S1.5) | Nút phân đoạn và nhãn đếm 12,5/600 `--muted` bên trái, ô tìm rộng `--search-width` bên phải; xuống dòng khi hẹp (SHOP-19) |
+| `.list-page__card` | Thẻ của bảng (S1.6, S1.11) | `.card` chứa bảng; phân trang bên dưới, cách một đường kẻ `--line` (SHOP-19) |
 | `.banner .banner--error`, `.banner--warn`, `.banner__icon` | Banner (S2.5, S2.7) | Bo 14, nền tint 14% hay 16%, biểu tượng màu bad hay warn, chữ `--text` 14/500. Lỗi `role="alert"`, cảnh báo `role="status"` |
 | `.skeleton` | Khung xương | Nền `--surface-2`, nhấp nháy 1,2 s; đặt `border-radius` như phần tử thật; vùng chứa có `aria-busy="true"` |
 | `.visually-hidden` | | Chữ chỉ cho trình đọc màn hình, như nhãn ẩn "Tìm theo tên" |
