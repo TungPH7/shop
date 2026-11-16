@@ -7,6 +7,7 @@ import {
   deleteStaleE2eProducts,
   type E2eProduct,
   e2eName,
+  e2eNameOfLength,
   findProducts,
   newRunId,
 } from './support/products';
@@ -96,7 +97,7 @@ test.describe('US2 add a product', () => {
     ['an empty name', { name: '' }, 'name', 'Enter a product name'],
     [
       'a name of 151 characters',
-      { name: 'a'.repeat(151) },
+      { name: e2eNameOfLength(151, runId) },
       'name',
       'Name must be 150 characters or fewer',
     ],
@@ -172,7 +173,7 @@ test.describe('US2 add a product', () => {
     };
     const cases = [
       [{ name: '' }, 'name'],
-      [{ name: 'a'.repeat(151) }, 'name'],
+      [{ name: e2eNameOfLength(151, runId) }, 'name'],
       [{ slug: 'Dam-Maxi' }, 'slug'],
       [{ slug: 'đầm-maxi' }, 'slug'],
       [{ slug: 'dam maxi' }, 'slug'],

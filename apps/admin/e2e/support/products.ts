@@ -44,6 +44,15 @@ export function e2eName(name: string, runId: string): string {
   return `${name} E2E ${runId}`;
 }
 
+/**
+ * A name of exactly `length` characters that still ends with ` E2E <runId>`, for a
+ * test of a name too long: if the api took it, the clean-up would still find it (NFR23).
+ */
+export function e2eNameOfLength(length: number, runId: string): string {
+  const tail = e2eName('', runId);
+  return `${'a'.repeat(length - tail.length)}${tail}`;
+}
+
 export async function createProduct(
   request: APIRequestContext,
   runId: string,
