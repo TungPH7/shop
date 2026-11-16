@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.tungph7.learnpostgres.common.error.ConflictException;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
@@ -16,15 +17,20 @@ import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 import com.tungph7.learnpostgres.feature.product.domain.ProductSlugs;
+import com.tungph7.learnpostgres.feature.product.domain.ProductSort;
 import com.tungph7.learnpostgres.feature.product.dto.AdminProduct;
 import com.tungph7.learnpostgres.feature.product.dto.AdminProductSummary;
 import com.tungph7.learnpostgres.feature.product.dto.CreateProductRequest;
 import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
 import com.tungph7.learnpostgres.feature.product.dto.ProductStatusFilter;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Criteria;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Result;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
+import com.tungph7.learnpostgres.feature.product.repository.ProductSearchTerms;
 
 /**
- * The writes of the admin API of products (SHOP-7, API Contract of the plan).
+ * The admin API of products (SHOP-7, API Contract of the plan): the add, the list and the delete.
  *
  * <p>The slug of a new product, as the plan sets it:
  *
@@ -53,10 +59,15 @@ public class AdminProductService {
   private static final Logger log = LoggerFactory.getLogger(AdminProductService.class);
 
   private final ProductRepository repository;
+  private final ProductQueryRepository queryRepository;
   private final CorrelationContext correlation;
 
-  public AdminProductService(ProductRepository repository, CorrelationContext correlation) {
+  public AdminProductService(
+      ProductRepository repository,
+      ProductQueryRepository queryRepository,
+      CorrelationContext correlation) {
     this.repository = repository;
+    this.queryRepository = queryRepository;
     this.correlation = correlation;
   }
 
@@ -78,13 +89,57 @@ public class AdminProductService {
     return AdminProduct.from(saved);
   }
 
+  /**
+   * One page of products, newest first, with the search of the API Contract (section "Từ khóa q").
+   *
+   * @param q the keyword; {@code null} or blank is no search
+   * @param status every status, or only one
+   * @param offset the products to skip, 0 or more
+   * @param limit the products of the page, 1 to {@value ProductQueryRepository#MAX_LIMIT}
+   */
   public ProductPage<AdminProductSummary> list(
       String q, ProductStatusFilter status, int offset, int limit) {
-    throw new UnsupportedOperationException();
+    Result result =
+        queryRepository.findPage(
+            new Criteria(
+                ProductSearchTerms.of(q).orElse(null),
+                status.status(),
+                ProductSort.NEWEST,
+                offset,
+                limit));
+    return new ProductPage<>(
+        result.items().stream().map(AdminProductSummary::from).toList(),
+        result.totalItems(),
+        offset,
+        limit);
   }
 
+  /**
+   * Deletes a product, and does nothing when it is already gone, so the delete is idempotent
+   * (NFR19). Each call is logged at INFO with the operation, the id, the slug and the correlation
+   * id (NFR12).
+   *
+   * <p>The delete is one {@code DELETE} statement rather than a delete of the loaded entity: two
+   * deletes of the same product at once then both succeed, instead of the second failing on the
+   * version of a row already gone.
+   */
+  @Transactional
   public void delete(UUID id) {
-    throw new UnsupportedOperationException();
+    String slug = repository.findById(id).map(Product::getSlug).orElse(null);
+    int deleted = repository.deleteProductById(id);
+    String correlationId = correlation.currentId().orElse(NO_CORRELATION_ID);
+    if (deleted > 0) {
+      log.info(
+          "Product deleted: operation=delete id={} slug={} correlationId={}",
+          id,
+          slug,
+          correlationId);
+    } else {
+      log.info(
+          "Product already gone, nothing deleted: operation=delete id={} correlationId={}",
+          id,
+          correlationId);
+    }
   }
 
   private Product createWithTypedSlug(CreateProductRequest request) {
