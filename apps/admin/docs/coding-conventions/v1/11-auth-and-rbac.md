@@ -52,9 +52,11 @@ Token có thể hết hạn hoặc bị thu hồi. Đăng nhập trả token →
 ### AU-008 [MUST] UI chỉ dùng facade `useAuth()` và `usePermission()`
 
 `useAuth()` → `{ user, isAuthenticated, isLoading, login, logout }`
-`usePermission()` → `{ hasPermission(method, path), hasModule(module) }`
+`usePermission()` → `{ hasModule(module) }`
 
 Component không tự đọc token, không tự duyệt mảng permission.
+
+Facade chưa có hàm kiểm quyền theo thao tác (`method` + `path`): tầng element đang tạm ngưng (`AU-011`). Khi cần lại, thêm hàm thuần vào `permission.ts` (`AU-009`) rồi mở rộng facade, không kiểm tại chỗ trong component.
 
 ### AU-009 [MUST] Logic kiểm quyền là hàm thuần, tách khỏi hook
 
@@ -66,23 +68,26 @@ Component không tự đọc token, không tự duyệt mảng permission.
 
 Frontend nhận danh sách permission trong profile và **kiểm theo dữ liệu đó**. Cấm viết cứng kiểu `if (user.role === 'admin')` rải rác.
 
-### AU-011 [MUST] Chặn hai tầng: route và element
+### AU-011 [MUST] Chặn ở tầng route
+
+Route cần đăng nhập hay cần quyền thì chặn bằng guard của `features/auth`, khai trong bảng route (`src/app/routes.tsx`):
 
 | Tầng | Công cụ | Hành vi khi không đạt |
 |---|---|---|
 | Route — chưa đăng nhập | `<ProtectedRoute>` | Điều hướng tới trang đăng nhập |
 | Route — thiếu quyền module | `<RequireModule module="…">` | Điều hướng tới trang từ chối truy cập |
-| Element — thiếu quyền thao tác | `<Can method="…" path="…">` | **Ẩn** UI |
 
 Lồng nhau: `ProtectedRoute` › `RequireModule` › page.
 
-### AU-012 [MUST] Ẩn UI ở client không phải cơ chế bảo mật
+⏳ **[PLANNED] Tầng element — tạm ngưng tới Epic đăng nhập.** Component `<Can method path>` của template đã gỡ ở SHOP-42 (PR #31), vì không còn nơi nào dùng. Epic Danh mục sản phẩm (SHOP-7) để các trang sản phẩm của admin ở ngoài `ProtectedRoute` (`docs/specs/SHOP-7/plan.md`), và tới Epic đăng nhập chỉ mạng giữ các lệnh ghi (NFR8 của `docs/specs/SHOP-7/spec.md`). Vì vậy review không đòi ẩn nút hay chặn thao tác theo quyền ở tầng element. Epic đăng nhập đưa lại công cụ của tầng này và cập nhật luật này.
 
-`<Can>` chỉ để trải nghiệm sạch. Quyền thật do backend cưỡng chế ở mỗi request. Không bao giờ dựa vào việc ẩn nút để bảo vệ dữ liệu.
+### AU-012 [MUST] Chặn UI ở client không phải cơ chế bảo mật
 
-### AU-013 [MUST] Feature khác không được import `<Can>` của auth
+Guard route, và mọi lần ẩn hay disable UI theo quyền, chỉ để trải nghiệm sạch. Quyền thật do backend cưỡng chế ở mỗi request. Không bao giờ dựa vào việc chặn ở client để bảo vệ dữ liệu.
 
-Cần gate UI của feature X bằng quyền ⇒ X nhận slot `ReactNode`, tầng `app` bơm `<Can>` vào. → `PS-002`
+### AU-013 [MUST] Feature khác không được import component hay hook của auth
+
+Cần UI của feature X đổi theo quyền ⇒ X nhận slot `ReactNode`; tầng `app` đọc `usePermission()` rồi quyết định bơm gì vào slot. → `PS-002`
 
 ### AU-014 [SHOULD] Contract auth gói trong `features/auth/`
 
