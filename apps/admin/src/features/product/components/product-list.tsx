@@ -28,6 +28,10 @@ export function ProductList() {
   const { data, isPending, isError, isPlaceholderData, refetch } = useProducts(filters);
   const searchRef = useRef<HTMLInputElement>(null);
   const isFiltered = filters.q.trim() !== '' || filters.status !== 'all';
+  // An empty placeholder is the page of the last filters, not of these: the next
+  // filters may have products, so until their own answer the list shows the skeleton
+  // and no count, as on the first load, never an empty state.
+  const shown = isPlaceholderData && data?.items.length === 0 ? undefined : data;
 
   function handleClearFilters() {
     clearFilters();
@@ -52,12 +56,8 @@ export function ProductList() {
         />
       );
     }
-    // An empty placeholder is the page of the last filters, not of these: the next
-    // filters may have products, so the empty states wait for their own answer.
-    if (data === undefined || (isPlaceholderData && data.items.length === 0)) {
-      return <ProductRowsSkeleton />;
-    }
-    if (data.items.length > 0) return <ProductRows products={data.items} />;
+    if (shown === undefined) return <ProductRowsSkeleton />;
+    if (shown.items.length > 0) return <ProductRows products={shown.items} />;
     if (isFiltered) {
       return (
         <ProductTableMessage
@@ -109,7 +109,7 @@ export function ProductList() {
             onChange={setStatus}
           />
           <p className="toolbar__count" role="status">
-            {data === undefined ? '' : t('filters.count', { count: data.totalItems })}
+            {shown === undefined ? '' : t('filters.count', { count: shown.totalItems })}
           </p>
         </div>
         <ProductSearch ref={searchRef} value={filters.q} onSearch={setSearch} />
@@ -117,11 +117,11 @@ export function ProductList() {
 
       <div className="card list-page__card">
         <ProductTable isBusy={isPending || isPlaceholderData}>{body()}</ProductTable>
-        {data === undefined ? null : (
+        {shown === undefined ? null : (
           <Pagination
-            page={data.offset / PRODUCTS_PAGE_SIZE + 1}
+            page={shown.offset / PRODUCTS_PAGE_SIZE + 1}
             pageSize={PRODUCTS_PAGE_SIZE}
-            totalItems={data.totalItems}
+            totalItems={shown.totalItems}
             hrefFor={hrefForPage}
           />
         )}

@@ -273,6 +273,7 @@ describe('ProductList', () => {
       'true',
     );
     expect(screen.queryByText('No products yet.')).not.toBeInTheDocument();
+    expect(screen.queryByText('0 products')).not.toBeInTheDocument();
     expect(screen.queryByText('No matching products')).not.toBeInTheDocument();
     expect(rows()).toHaveLength(6);
 
@@ -290,6 +291,7 @@ describe('ProductList', () => {
     await user.click(within(filter).getByRole('button', { name: 'All' }));
 
     expect(screen.queryByText('No products yet.')).not.toBeInTheDocument();
+    expect(screen.queryByText('0 products')).not.toBeInTheDocument();
     expect(rows()).toHaveLength(6);
 
     release();
