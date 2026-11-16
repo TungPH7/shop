@@ -132,9 +132,19 @@ Kiểm (T6), bằng Testcontainers PostgreSQL 17:
 - Flyway chỉ với V1–V3, như bản `v0.2.0`, `validate()` được trên database đã có V4. `application*.yml` không đặt `ignore-migration-patterns`, nên mặc định `*:future` áp dụng;
 - sau T7, một integration test ghi bằng entity mới rồi đọc cột `price` bằng SQL, và thấy nó bằng `price_vnd`: sau rollback, `v0.2.0` đọc đúng giá.
 
+### `v0.3.0`: V5 và V6, `app.gen_uuid_v7()` với `search_path` chỉ có `app`
+
+Server kết nối với `currentSchema=app`, nên `search_path` chỉ có `app`, còn `pgcrypto` và `citext` nằm ở schema `public`.
+
+- `V5__gen_uuid_v7_qualify_pgcrypto.sql` (SHOP-44) thay `app.gen_uuid_v7()` bằng hàm cùng chữ ký gọi `public.gen_random_bytes()`. Không sửa file này: Flyway kiểm checksum của nó.
+- `V6__assert_pgcrypto_in_public.sql` (SHOP-50) không đổi schema. Nó kiểm `public.gen_random_bytes(integer)` có, rồi gọi `app.gen_uuid_v7()` một lần. Thân hàm `plpgsql` chỉ được phân giải khi gọi, nên trên một database có `pgcrypto` ở schema khác, V5 vẫn chạy xong; V6 dừng lần deploy đó, với thông báo nêu schema của `pgcrypto`.
+- Truy vấn trên `slug` gọi toán tử của `citext` tường minh, `OPERATOR(public.=)`: với `search_path` chỉ có `app`, `=` thường so sánh như `text`, phân biệt hoa thường và không dùng index `products_slug_unique`. Test Spring cũng kết nối với `currentSchema=app`, như server.
+
+Rollback: `v0.2.0` và các bản `v0.3.0` trước V5 không biết V5 và bỏ qua nó; các bản trước V6 cũng bỏ qua V6 (mặc định `*:future` của Flyway). V5 giữ chữ ký của hàm và chỉ làm hàm chạy được với nhiều `search_path` hơn, V6 không đổi gì, nên không bản nào cần gỡ V5 hay V6. Comment Rollback trong file V5 ghi "v0.2.0 and v0.3.0 do not know V5 and ignore it": sai, vì V5 nằm trong `v0.3.0`; câu đúng là câu ở trên.
+
 ### Bản sau, sớm nhất `v0.4.0`: bước contract
 
-Khi `v0.3.0` đã chạy ổn trên Production và không còn cần rollback về `v0.2.0` (NFR22), một migration (V5 hay số kế tiếp) bỏ:
+Khi `v0.3.0` đã chạy ổn trên Production và không còn cần rollback về `v0.2.0` (NFR22), một migration (số kế tiếp, từ V7) bỏ:
 
 - trigger `trg_products_sync_legacy_price` và hàm `app.products_sync_legacy_price()`;
 - CHECK `products_price_non_negative`;
