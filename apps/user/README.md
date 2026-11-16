@@ -43,7 +43,7 @@ NFR13): token, font Be Vietnam Pro và class dùng chung ở `src/styles/`, mô 
 | Nhóm                      | Công nghệ                                                                                              |
 | ------------------------- | ------------------------------------------------------------------------------------------------------ |
 | Runtime · package manager | Node **24.17.0** · pnpm **11.8.0** (pin chính xác, commit lockfile)                                    |
-| Framework                 | **Next.js 16.2.9** (App Router, Turbopack, Cache Components/PPR) · **React 19.2.7**                    |
+| Framework                 | **Next.js 16.4.6** (App Router, Turbopack, Cache Components/PPR) · **React 19.2.7**                    |
 | Ngôn ngữ                  | **TypeScript 6** `strict` + `noUncheckedIndexedAccess`                                                 |
 | Data                      | **BFF**: DAL `server-only` + native `fetch` → backend NestJS · **Zod 4** ở mọi biên                    |
 | State                     | RSC (mặc định) · URL qua `searchParams` · **Redux Toolkit** (UI state, sau facade)                     |
@@ -156,7 +156,7 @@ pnpm dev
 **Dấu hiệu thành công** — màn hình hiện:
 
 ```
-▲ Next.js 16.2.9 (Turbopack)
+▲ Next.js 16.4.6 (Turbopack)
 - Local:        http://localhost:3000
 - Environments: .env.development
 ✓ Ready in 9.0s
@@ -280,24 +280,24 @@ src/
 │   ├── [locale]/         #   mọi trang nằm dưới locale: /en, /vi
 │   └── api/              #   Route Handlers (endpoint BFF cho client)
 ├── features/             # mỗi domain nghiệp vụ = một "ốc đảo" độc lập
-│   └── product/          # ⭐ SLICE THAM CHIẾU — copy khuôn này khi thêm feature mới
-│       ├── model/        #     type + schema Zod + logic thuần (dễ test nhất)
-│       ├── server/       #     DAL `server-only` gọi backend
-│       ├── actions/      #     Server Actions ('use server') — mutation
-│       └── components/   #     UI của feature
-├── lib/                  # hạ tầng chung: http · auth · errors · logger · monitoring · seo · validation
+│   ├── auth/             #   đăng nhập, tài khoản: model/ · server/ · actions/ · components/
+│   ├── product/          #   catalog cho khách: components/ (chỉ đọc, không Server Action ghi — NFR8)
+│   ├── site/             #   khung trang và trang chủ: model/ · components/
+│   ├── caching-demo/     #   demo cache của template: model/ · components/
+│   └── error-demo/       #   demo error boundary của template: model/ · components/
+├── lib/                  # hạ tầng chung: analytics · http · auth · errors · logger · monitoring · seo · validation
 ├── components/           # UI dùng chung ≥ 2 feature (theme/language switcher, <JsonLd>…)
 ├── config/               # env (Zod, fail-fast) · i18n · security-headers
 ├── i18n/                 # next-intl: routing · navigation · request
 ├── stores/               # facade Redux (feature chỉ gọi hook hướng-domain, không chạm RTK)
-├── styles/               # design tokens (CSS variables) + globals
+├── styles/               # design system: tokens.css (CSS variables) · components.css
 ├── testing/              # harness test: renderWithProviders · MSW handlers · stubs
 ├── proxy.ts              # middleware của Next 16 (i18n routing)
 └── instrumentation.ts    # boot: pino sink · onRequestError · MSW-in-server cho E2E
 
 e2e/                      # Playwright specs
 messages/                 # en.json · vi.json (i18n)
-docs/conventions.md       # LUẬT của codebase
+docs/coding-conventions/  # LUẬT của codebase (SSOT); docs/conventions.md chỉ là nhật ký build
 study-guide-impl/          # tài liệu "vì sao" cho từng bước 00–25
 ```
 
@@ -339,7 +339,7 @@ Ba tầng **bổ sung nhau**, không thay thế nhau:
 | Tầng            | Lệnh                     | Phủ cái gì                                                            |
 | --------------- | ------------------------ | --------------------------------------------------------------------- |
 | **Unit**        | `pnpm test`              | Hàm thuần, schema, component đồng bộ, DAL (qua MSW)                   |
-| **Integration** | `pnpm test`              | Nhiều seam trong một cây component (Redux + i18n + theme)             |
+| **Integration** | `pnpm test`              | Nhiều seam trong một cây component (Redux + i18n)                     |
 | **E2E**         | `pnpm build && pnpm e2e` | Render ở **server**, PPR, đổi ngôn ngữ/theme runtime, a11y động (axe) |
 
 ```bash
