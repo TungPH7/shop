@@ -1,6 +1,6 @@
 # Design system: user
 
-> **App:** `apps/user` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-16, SHOP-23
+> **App:** `apps/user` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-17, SHOP-25
 
 Design system của `user` là CSS variables và CSS thường, không có Tailwind hay thư viện UI (NFR13). Mỗi màn hình chỉ dùng token semantic và class dưới đây, không tự đặt màu, cỡ chữ hay khoảng cách (quy ước `apps/user/docs/coding-conventions/v1/12-styling-theming-a11y.md`). Khung trang (thanh điều hướng S4.1, chân trang S4.11) làm ở SHOP-11, mục Page Frame.
 
@@ -29,7 +29,7 @@ Design system của `user` là CSS variables và CSS thường, không có Tailw
 
 ## Tokens
 
-Mọi dòng của bảng Design System là "mới". Mọi dòng `user` dùng đều có ở đây: token ở mục này, class ở mục Classes, và hai component chưa có class (viên thuốc điều hướng, thẻ sản phẩm) ở mục Components Built Later, với giá trị của `design.md` và item sẽ làm chúng. Dòng không có ở đây là dòng chỉ `admin` dùng (nút nguy hiểm, hộp thoại, toast, banner, bảng, phân trang, nút phân đoạn).
+Mọi dòng của bảng Design System là "mới". Mọi dòng `user` dùng đều có ở đây: token ở mục này, class ở mục Classes; viên thuốc điều hướng (SHOP-11) và thẻ sản phẩm (SHOP-25) đã có class ở đó. Dòng không có ở đây là dòng chỉ `admin` dùng (nút nguy hiểm, hộp thoại, toast, banner, bảng, phân trang, nút phân đoạn).
 
 ### Màu
 
@@ -88,7 +88,7 @@ Giá trị viết bằng OKLCH ở tầng primitive (`--slate-950`, `--blue-600`
 | Nút chính, nút hộp thoại | 13,5/19,6, 600 | `.btn` |
 | Nút phụ nhỏ | 12,5/18,1, 600 | `.btn--sm` |
 | Huy hiệu | 12/17,4, 600. **Đã đo** | `.badge` |
-| Giá | Thẻ 17/700; chi tiết 34/700 (26 ở điện thoại); giá gốc 13,5/500 `--hint` gạch ngang | Dùng token `--fs-xl`, `--fs-display`, `--fs-4xl`, `--fs-md`; chi tiết ở `.product-price` (SHOP-23), thẻ ở Story của S4 |
+| Giá | Thẻ 17/700; chi tiết 34/700 (26 ở điện thoại); giá gốc 13,5/500 `--hint` gạch ngang | Dùng token `--fs-xl`, `--fs-display`, `--fs-4xl`, `--fs-md`; chi tiết ở `.product-price` (SHOP-23), thẻ ở `.product-card__value`, `__was` (SHOP-25) |
 | Chữ cái đầu của ô giữ chỗ | 700, 40% chiều cao ô | `.tile__initial` |
 
 ### Font
@@ -138,7 +138,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 
 ### Điểm ngắt
 
-640, 768, 1024, 1440 px (`sm`, `md`, `lg`, `xl`). CSS variables không dùng được trong media query, nên viết số trực tiếp, như `@media (width < 768px)`. `user` hỗ trợ từ 320 px, không có thanh cuộn ngang: đã kiểm trang chủ và trang Giới thiệu ở 390 px (`scrollWidth` bằng bề rộng). Dưới 768 px: h1 28 px; ô nhập dùng chữ 16 px vì iOS phóng to trang khi ô nhập nhỏ hơn. Thanh điều hướng: một hàng từ 768 px, hai hàng dưới 768 px (SHOP-11, mục Page Frame); hai điểm ngắt theo nội dung, 1024 px (biểu tượng thay chữ) và 390 px (tên site xuống hai dòng). Đã kiểm 320, 390, 767, 768, 1024, 1440 px không cuộn ngang (`apps/user/e2e/site-frame.spec.ts`). Lưới sản phẩm 1, 2, 3, 4 cột thuộc Story của S4.
+640, 768, 1024, 1440 px (`sm`, `md`, `lg`, `xl`). CSS variables không dùng được trong media query, nên viết số trực tiếp, như `@media (width < 768px)`. `user` hỗ trợ từ 320 px, không có thanh cuộn ngang: đã kiểm trang chủ và trang Giới thiệu ở 390 px (`scrollWidth` bằng bề rộng). Dưới 768 px: h1 28 px; ô nhập dùng chữ 16 px vì iOS phóng to trang khi ô nhập nhỏ hơn. Thanh điều hướng: một hàng từ 768 px, hai hàng dưới 768 px (SHOP-11, mục Page Frame); hai điểm ngắt theo nội dung, 1024 px (biểu tượng thay chữ) và 390 px (tên site xuống hai dòng). Đã kiểm 320, 390, 767, 768, 1024, 1440 px không cuộn ngang (`apps/user/e2e/site-frame.spec.ts`). Lưới sản phẩm S4.5 (SHOP-25): 1 cột dưới 640 px, 2 từ 640, 3 từ 1024, 4 từ 1440, cách nhau `--gap`; đã kiểm số cột và khoảng cách 16 px ở 320, 640, 1024, 1440 px và không cuộn ngang ở 320 px (`apps/user/e2e/products.spec.ts`).
 
 ## Số đo
 
@@ -176,6 +176,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.visually-hidden` | | Chữ chỉ cho trình đọc màn hình: nhãn ẩn "Tìm theo tên", "Giảm", "Giá gốc:" |
 | `.tile`, `.tile--card`, `.tile--detail`, `.tile--row`, `.tile--<nhóm>`, `.tile__initial` | Ô giữ chỗ | Do `PlaceholderTile` đặt; không dùng tay |
 | `.product-page`, `.back-link`, `.product-detail`, `.product-detail__body`, `__name`, `__about`, `__description`, `.product-price`, `__label`, `__row`, `__value`, `__was` | Trang chi tiết S5 (SHOP-23) | Do `ProductDetail` (`src/features/product/components/product-detail.tsx`) đặt. `<main>` rộng tối đa 64rem; một thẻ kính hai cột 2fr 3fr (ô giữ chỗ 1:1 chiếm 40%), một cột dưới 768 px với ô 4:3. Tên h1 26/700 (22 dưới 768 px), `overflow-wrap: anywhere`. Giá trong `.well`: nhãn 12,5 `--muted-foreground`, giá 34/700 (26 dưới 768 px), giá gốc 13,5 `--hint` trong `<s>` kèm chữ ẩn, huy hiệu `.badge--bad .badge--plain`. Mô tả `white-space: pre-line`. Khung xương `ProductDetailSkeleton` cùng hình |
+| `.products-page`, `.product-grid`, `.product-card`, `__name`, `__price`, `__value`, `__was`, `__stock`, `__skeleton-tile`, `__skeleton-line`, `__skeleton-price`, `.product-empty`, `.load-more`, `__progress`, `__error` | Lưới (S4.5), thẻ sản phẩm (S4.6), thông báo không có sản phẩm (S4.7), dòng tiến độ (S4.9), nút Xem thêm (S4.10) | Do `ProductResults`, `ProductCard` và `LoadMoreButton` (`src/features/product/components/`) đặt. `<main class="products-page">` rộng bằng khung. Thẻ: `.card` là một liên kết, lưới ba hàng (ô 4:3, tên, giá) cách 12; tên 15/600 tối đa 2 dòng (`line-clamp`), `overflow-wrap: anywhere`; giá 17/700, giá gốc 13,5/500 `--hint` trong `<s>` kèm chữ ẩn "Giá gốc:", "-16%" `.badge--bad .badge--plain` kèm chữ ẩn "Giảm". Huy hiệu Hết hàng `.badge--warn` đứng cuối trong markup, để trình đọc màn hình đọc tên, giá, giá gốc, giảm rồi Hết hàng; CSS đặt nó đè góc trên trái ô (cách mép ô 10), với tint của warn chồng trên `--solid` để giữ tương phản trên màu nhóm ở giao diện sáng. Hover nâng 2 px và thêm viền trong 1 px `--border-strong`; `:focus-visible` vòng `--ring` chung. Dòng tiến độ 12,5 `--hint`, căn giữa trên nút `.btn--secondary .btn--sm`; dòng lỗi 12,5 `--danger-text`, `role=alert`. Khung xương: 8 thẻ cùng hình, danh sách `aria-busy="true"`. axe không báo vi phạm ở S4, hai ngôn ngữ, sáng và tối (`apps/user/e2e/accessibility.spec.ts`) |
 | `.site-shell`, `.site-nav`, `.pill`, `.pill--brand`, `.pill__link`, `.nav-group`, `.nav-btn`, `.nav-btn--text`, `.nav-btn__icon`, `.nav-btn__label`, `.nav-account`, `.site-footer` | Viên thuốc điều hướng (S4.1), chân trang (S4.11) | Do `SiteNav`, các nút chuyển và `SiteFooter` đặt; xem mục Page Frame |
 
 Tên class giống `admin` (`apps/admin/src/styles/components.css` của SHOP-8), để một màn hình đọc như nhau ở hai app.
@@ -205,11 +206,7 @@ Khi đã đăng nhập (bản demo cũ, Epic đăng nhập sẽ thay), viên ti�
 
 ## Components Built Later
 
-Một dòng Component của bảng Design System là của `user` nhưng chưa có class: chúng là bố cục của một màn hình, nên item làm màn hình đó dựng chúng từ token và class ở trên, rồi chuyển dòng của chúng lên mục Classes. Giá trị dưới đây là của `design.md`, chưa đo lại.
-
-| Component của `design.md` | Giá trị | Làm ở |
-|---|---|---|
-| Thẻ sản phẩm (S4.6) | Thẻ kính `.card`, đệm 18. Ô giữ chỗ 4:3 (`PlaceholderTile`). Tên 15/600 (`--fs-lg`), tối đa 2 dòng. Giá bán 17/700 (`--fs-xl`, `--fw-bold`); giá gốc 13,5/500 `--hint` gạch ngang; huy hiệu "-xx%" `.badge--bad .badge--plain`. Huy hiệu Hết hàng đè góc trên trái ô. Hover nâng 2 px và sáng viền; `:focus-visible` vòng `--ring`. Cả thẻ là một liên kết | SHOP-25 (US5a) |
+Không còn: thẻ sản phẩm S4.6 đã có class ở mục Classes (SHOP-25).
 
 ## PlaceholderTile
 
@@ -239,5 +236,4 @@ Một dòng Component của bảng Design System là của `user` nhưng chưa c
 
 ## Not Yet Built
 
-- Thẻ sản phẩm S4.6 (giá trị ở Components Built Later) và lưới S4.5: SHOP-25 (US5a).
-- Giá: `formatPrice` và `discountPercent` ở `src/features/product/model/product.ts` (SHOP-23), dùng cho mọi chỗ hiện giá; thẻ S4.6 dùng lại chúng.
+Không còn component nào của S4–S6 chưa dựng. Giá luôn qua `formatPrice` và `discountPercent` ở `src/features/product/model/product.ts` (SHOP-23), ở trang chi tiết S5 lẫn thẻ S4.6.

@@ -2,16 +2,21 @@ package com.tungph7.learnpostgres.feature.product.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.tungph7.learnpostgres.common.error.BusinessException;
@@ -20,24 +25,35 @@ import com.tungph7.learnpostgres.common.error.NotFoundException;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
+import com.tungph7.learnpostgres.feature.product.domain.ProductSort;
+import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProduct;
+import com.tungph7.learnpostgres.feature.product.dto.StoreProductSummary;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Criteria;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Result;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Row;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
 
 /**
  * {@link StoreProductService}: a shopper sees a product only while it is {@code ACTIVE}, and a
- * hidden product is the same 404 as a slug that never existed (NFR9).
+ * hidden product is the same 404 as a slug that never existed (NFR9). The list asks the query
+ * repository for {@code ACTIVE} products only, newest first (SHOP-26).
  */
 class StoreProductServiceTest {
 
   private static final UUID ID = UUID.fromString("019a8f2e-5b7c-7d10-9e3f-1a2b3c4d5e6f");
+  private static final UUID OTHER_ID = UUID.fromString("019a8f2e-5b7c-7d10-9e3f-1a2b3c4d5e70");
 
   private ProductRepository repository;
+  private ProductQueryRepository queryRepository;
   private StoreProductService service;
 
   @BeforeEach
   void setUp() {
     repository = mock(ProductRepository.class);
-    service = new StoreProductService(repository);
+    queryRepository = mock(ProductQueryRepository.class);
+    service = new StoreProductService(repository, queryRepository);
   }
 
   @Test
@@ -114,6 +130,73 @@ class StoreProductServiceTest {
     when(repository.findBySlugIgnoringCase("khong-co")).thenReturn(Optional.empty());
 
     assertThat(service.isVisible("khong-co")).isFalse();
+  }
+
+  // ============================================================
+  // list (SHOP-26)
+  // ============================================================
+
+  @Test
+  void list_asksForActiveProductsOnly_newestFirst_withNoSearch() {
+    when(queryRepository.findPage(any())).thenReturn(new Result(List.of(), 0));
+
+    service.list(48, 24);
+
+    ArgumentCaptor<Criteria> criteria = ArgumentCaptor.forClass(Criteria.class);
+    verify(queryRepository).findPage(criteria.capture());
+    assertThat(criteria.getValue())
+        .isEqualTo(new Criteria(null, Set.of(ProductStatus.ACTIVE), ProductSort.NEWEST, 48, 24));
+  }
+
+  @Test
+  void list_returnsTheStoreFieldsOfEachRow_inTheOrderOfTheRepository() {
+    Row first = row(ID, "Áo thun cổ tròn", "ao-thun-co-tron", 1_250_000L, 1_500_000L);
+    Row second = row(OTHER_ID, "Bao tay len", "bao-tay-len", 90_000L, null);
+    when(queryRepository.findPage(any())).thenReturn(new Result(List.of(first, second), 30));
+
+    ProductPage<StoreProductSummary> page = service.list(0, 24);
+
+    assertThat(page.items())
+        .containsExactly(
+            new StoreProductSummary(
+                ID,
+                "Áo thun cổ tròn",
+                "ao-thun-co-tron",
+                1_250_000L,
+                1_500_000L,
+                ProductAvailability.OUT_OF_STOCK),
+            new StoreProductSummary(
+                OTHER_ID,
+                "Bao tay len",
+                "bao-tay-len",
+                90_000L,
+                null,
+                ProductAvailability.OUT_OF_STOCK));
+  }
+
+  @Test
+  void list_returnsTheTotalOfTheRepository_andTheOffsetAndLimitOfTheRequest() {
+    when(queryRepository.findPage(any())).thenReturn(new Result(List.of(), 30));
+
+    ProductPage<StoreProductSummary> page = service.list(24, 24);
+
+    assertThat(page.totalItems()).isEqualTo(30);
+    assertThat(page.offset()).isEqualTo(24);
+    assertThat(page.limit()).isEqualTo(24);
+  }
+
+  private static Row row(UUID id, String name, String slug, long price, Long compareAtPrice) {
+    Instant at = Instant.parse("2026-11-16T02:15:30Z");
+    return new Row(
+        id,
+        name,
+        slug,
+        price,
+        compareAtPrice,
+        ProductStatus.ACTIVE,
+        ProductAvailability.OUT_OF_STOCK,
+        at,
+        at);
   }
 
   private static Product product(ProductStatus status, Instant updatedAt) {

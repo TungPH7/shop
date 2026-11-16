@@ -1,6 +1,7 @@
 package com.tungph7.learnpostgres.feature.product.service;
 
 import java.util.Optional;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,7 +10,13 @@ import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.error.NotFoundException;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
+import com.tungph7.learnpostgres.feature.product.domain.ProductSort;
+import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProduct;
+import com.tungph7.learnpostgres.feature.product.dto.StoreProductSummary;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Criteria;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Result;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
 
 /**
@@ -26,9 +33,29 @@ public class StoreProductService {
   static final String NOT_FOUND = "Product not found.";
 
   private final ProductRepository repository;
+  private final ProductQueryRepository queryRepository;
 
-  public StoreProductService(ProductRepository repository) {
+  public StoreProductService(ProductRepository repository, ProductQueryRepository queryRepository) {
     this.repository = repository;
+    this.queryRepository = queryRepository;
+  }
+
+  /**
+   * One page of the {@code ACTIVE} products, newest first with {@code id DESC} as the last key
+   * (NFR18), and their total. It runs the two statements of {@link ProductQueryRepository} (NFR2).
+   *
+   * @param offset the products to skip, 0 or more
+   * @param limit the products of the page, 1 to {@value ProductQueryRepository#MAX_LIMIT}
+   */
+  public ProductPage<StoreProductSummary> list(int offset, int limit) {
+    Result result =
+        queryRepository.findPage(
+            new Criteria(null, Set.of(ProductStatus.ACTIVE), ProductSort.NEWEST, offset, limit));
+    return new ProductPage<>(
+        result.items().stream().map(StoreProductSummary::from).toList(),
+        result.totalItems(),
+        offset,
+        limit);
   }
 
   /**

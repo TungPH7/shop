@@ -1,14 +1,21 @@
 package com.tungph7.learnpostgres.feature.product.controller;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProduct;
+import com.tungph7.learnpostgres.feature.product.dto.StoreProductSummary;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
 import com.tungph7.learnpostgres.feature.product.service.StoreProductService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -19,9 +26,10 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
- * The store API of one product, {@code /api/products/{slug}} (ADR-0003): called only by the server
- * of {@code user}, with {@code GET} and {@code HEAD} (NFR8). It shows only {@code ACTIVE} products
- * and takes no status parameter (NFR9). The API Contract is in the plan of SHOP-7.
+ * The store API of products, {@code /api/products} and {@code /api/products/{slug}} (ADR-0003):
+ * called only by the server of {@code user}, with {@code GET} and {@code HEAD} (NFR8). It shows
+ * only {@code ACTIVE} products and takes no status parameter (NFR9). The API Contract is in the
+ * plan of SHOP-7.
  */
 @RestController
 @RequestMapping(StoreProductController.BASE_PATH)
@@ -39,6 +47,38 @@ public class StoreProductController {
 
   public StoreProductController(StoreProductService service) {
     this.service = service;
+  }
+
+  /**
+   * One page of the {@code ACTIVE} products, newest first. An invalid parameter is a 400 {@code
+   * INVALID_PARAMETER} that names it (NFR3); an unknown one, such as {@code status}, is ignored.
+   */
+  @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+  @Operation(
+      summary = "List the products of the store",
+      description =
+          "Only ACTIVE products, newest first, with id as the last key so a page never repeats or"
+              + " skips a product. A status parameter is ignored. An invalid offset or limit is a"
+              + " 400 INVALID_PARAMETER naming it.")
+  @ApiResponse(responseCode = "200", description = "OK")
+  @ApiResponse(
+      responseCode = "400",
+      description = "INVALID_PARAMETER: a parameter of the wrong type or out of range",
+      content =
+          @Content(
+              mediaType = "application/problem+json",
+              schema = @Schema(ref = "#/components/schemas/ProblemDetail")))
+  public ProductPage<StoreProductSummary> list(
+      @Parameter(description = "Products to skip, 0 or more")
+          @RequestParam(name = "offset", defaultValue = "0")
+          @Min(0)
+          int offset,
+      @Parameter(description = "Products of the page, 1 to 100")
+          @RequestParam(name = "limit", defaultValue = "24")
+          @Min(1)
+          @Max(ProductQueryRepository.MAX_LIMIT)
+          int limit) {
+    return service.list(offset, limit);
   }
 
   /** The {@code ACTIVE} product with this slug; any other is a 404 {@code PRODUCT_NOT_FOUND}. */

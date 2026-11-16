@@ -127,7 +127,16 @@
   "Products": {
     "metaTitle": "Sản phẩm",
     "metaDescription": "Duyệt sản phẩm được lấy phía server qua Data Access Layer, validate ở biên và cache để tối ưu hiệu năng.",
-    "title": "Sản phẩm"
+    "title": "Sản phẩm",
+    "list": "Danh sách sản phẩm",
+    "originalPrice": "Giá gốc:",
+    "discount": "Giảm",
+    "outOfStock": "Hết hàng",
+    "progress": "Đã xem {shown, number} trên {total, number} sản phẩm",
+    "loadMore": "Xem thêm",
+    "loading": "Đang tải…",
+    "loadMoreError": "Không tải thêm được. Vui lòng thử lại.",
+    "empty": "Chưa có sản phẩm nào."
   },
   "ProductDetail": {
     "back": "Sản phẩm",
