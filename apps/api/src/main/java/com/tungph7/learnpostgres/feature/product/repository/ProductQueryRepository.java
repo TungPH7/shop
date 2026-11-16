@@ -57,8 +57,8 @@ public class ProductQueryRepository {
    * @param search the keyword, or {@code null} for no search
    * @param statuses the statuses to list, at least one and never {@code null}: the store always
    *     asks for {@link ProductStatus#ACTIVE} only (NFR9), and only the admin lists ask for every
-   *     status, by naming every status. No value means "every status", so a caller that forgets the
-   *     statuses fails instead of listing hidden products.
+   *     status, by naming every status. {@code null} or an empty set never means every status: a
+   *     caller that forgets the statuses fails instead of listing hidden products.
    * @param sort the order; {@link ProductSort#RELEVANCE} needs a keyword
    * @param offset the products to skip, 0 or more
    * @param limit the products of the page, 1 to {@value ProductQueryRepository#MAX_LIMIT}

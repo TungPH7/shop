@@ -372,7 +372,7 @@ class V4ExpandProductsCatalogMigrationTest extends AbstractContainerBaseTest {
     String updatedAtBefore = updatedAtDigest();
 
     long started = System.nanoTime();
-    MigrateResult result = db.flyway().migrate();
+    MigrateResult result = db.flyway(MigrationDatabase.V4).migrate();
     Duration took = Duration.ofNanos(System.nanoTime() - started);
 
     assertThat(result.migrationsExecuted).isEqualTo(1);

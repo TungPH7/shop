@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+import javax.sql.DataSource;
+
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.springframework.core.io.ClassPathResource;
@@ -36,6 +38,9 @@ final class MigrationDatabase implements AutoCloseable {
 
   /** The Flyway target of the schema {@code v0.2.0} ships. */
   static final String V3 = "3";
+
+  /** The Flyway target of the expand step of {@code v0.3.0}, the last before V5 (SHOP-44). */
+  static final String V4 = "4";
 
   /** The migrations of {@code v0.2.0}: the only ones its Flyway resolves. */
   private static final List<String> V0_2_0_MIGRATIONS =
@@ -80,6 +85,11 @@ final class MigrationDatabase implements AutoCloseable {
 
   JdbcClient jdbc() {
     return jdbc;
+  }
+
+  /** The pool behind {@link #jdbc()}, for a test that needs a connection of its own. */
+  DataSource dataSource() {
+    return dataSource;
   }
 
   /** Flyway as {@code application.yml} sets it, over every migration of this build. */
