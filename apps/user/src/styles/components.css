@@ -721,6 +721,151 @@ select.input option {
   }
 }
 
+/* --- Products page S4 (SHOP-25) --------------------------------------------- */
+
+/* Wider than the 48rem of other pages: the frame's width, for up to 4 columns. */
+.products-page {
+  max-width: none;
+}
+
+/* S4.5: 1 column under 640px, 2 from 640, 3 from 1024, 4 from 1440; 16 apart. 24 cards a load fill every row. */
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--product-columns, 1), minmax(0, 1fr));
+  gap: var(--gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+@media (width >= 640px) {
+  .product-grid {
+    --product-columns: 2;
+  }
+}
+
+@media (width >= 1024px) {
+  .product-grid {
+    --product-columns: 3;
+  }
+}
+
+@media (width >= 1440px) {
+  .product-grid {
+    --product-columns: 4;
+  }
+}
+
+.product-grid > li {
+  display: grid;
+}
+
+/* S4.6: a glass card that is one link. The stock badge comes last in the markup, for the order a screen reader reads,
+   and sits over the top left of the tile. Hover lifts the card 2px and lights its edge. */
+.product-card {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  gap: var(--space-3);
+  color: var(--surface-foreground);
+  text-decoration: none;
+  transition:
+    transform var(--dur-fast) var(--ease),
+    box-shadow var(--dur-fast) var(--ease);
+}
+
+.product-card:hover {
+  box-shadow:
+    var(--card-shadow),
+    inset 0 0 0 1px var(--border-strong);
+  transform: translateY(-2px);
+}
+
+/* Name 15/600, at most two lines. */
+.product-card__name {
+  display: -webkit-box;
+  overflow: hidden;
+  font: var(--fw-semibold) var(--fs-lg) / var(--lh-base) var(--font);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+.product-card__price {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  align-self: end;
+}
+
+/* Price 17/700; original price 13.5/500 in --hint, struck through. */
+.product-card__value {
+  font: var(--fw-bold) var(--fs-xl) / 1.2 var(--font);
+}
+
+.product-card__was {
+  display: inline-flex;
+  color: var(--hint);
+  font: var(--fw-regular) var(--fs-md) / var(--lh-base) var(--font);
+}
+
+/* Over the tile, the tint of warn lies on --solid rather than on the group colour, so its words keep the contrast
+   tokens.test.ts computes for them on the page. */
+.product-card__stock {
+  position: absolute;
+  top: calc(var(--space-4-5) + var(--space-2-5));
+  left: calc(var(--space-4-5) + var(--space-2-5));
+  background: linear-gradient(var(--warning-tint), var(--warning-tint)), var(--solid);
+}
+
+.product-card__skeleton-tile {
+  aspect-ratio: 4 / 3;
+  border-radius: var(--r-tile);
+}
+
+.product-card__skeleton-line {
+  width: 70%;
+  height: 22px;
+}
+
+.product-card__skeleton-price {
+  width: 40%;
+  height: 24px;
+}
+
+/* S4.7 without a search: no product yet. */
+.product-empty {
+  margin: var(--space-6) 0;
+  color: var(--muted-foreground);
+  text-align: center;
+}
+
+/* S4.9 and S4.10: the progress line in --hint, centred above Load more; the error line above the button. */
+.load-more {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: center;
+  margin-top: var(--space-6);
+  text-align: center;
+}
+
+.load-more__progress,
+.load-more__error {
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.load-more__progress {
+  color: var(--hint);
+}
+
+.load-more__error {
+  color: var(--danger-text);
+}
+
 /* --- Fallbacks -------------------------------------------------------------- */
 
 /* No backdrop-filter, or the person asks for less transparency: solid surfaces. */

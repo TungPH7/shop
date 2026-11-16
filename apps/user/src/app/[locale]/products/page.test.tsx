@@ -5,7 +5,10 @@ import { createTranslator } from 'next-intl';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, test, vi } from 'vitest';
 
-import { ProductResults } from '~/features/product/components/product-results';
+import {
+  ProductResults,
+  ProductResultsSkeleton,
+} from '~/features/product/components/product-results';
 
 import en from '../../../../messages/en.json';
 import vi_ from '../../../../messages/vi.json';
@@ -37,6 +40,7 @@ vi.mock('~/i18n/navigation', () => ({
 }));
 vi.mock('~/features/product/components/product-results', () => ({
   ProductResults: () => <p>results stub</p>,
+  ProductResultsSkeleton: () => <p>skeleton stub</p>,
 }));
 
 let currentLocale = 'en';
@@ -81,7 +85,13 @@ test('renders the results after the title', async () => {
   expect(html).toMatch(/<h1>Products<\/h1><p>results stub<\/p><\/main>$/);
 });
 
-test('puts the results, and only them, inside a <Suspense>, with the searchParams of the page', async () => {
+test('gives the page the width of the frame, for a grid of up to 4 columns', async () => {
+  const html = await renderPage('vi');
+
+  expect(html).toMatch(/^<main class="products-page">/);
+});
+
+test('puts the results, and only them, inside a <Suspense> with the skeleton of S4.5, with the searchParams of the page', async () => {
   const searchParams = Promise.resolve({ q: 'tea' });
   const page = (await ProductsPage({
     params: Promise.resolve({ locale: 'en' }),
@@ -94,6 +104,8 @@ test('puts the results, and only them, inside a <Suspense>, with the searchParam
   );
 
   expect(boundaries).toHaveLength(1);
+  const fallback = (boundaries[0]?.props as { fallback?: unknown }).fallback;
+  expect(isValidElement(fallback) && fallback.type).toBe(ProductResultsSkeleton);
   const [results] = Children.toArray(boundaries[0]?.props.children);
   expect(isValidElement(results) && results.type).toBe(ProductResults);
   expect(isValidElement<{ searchParams: unknown }>(results) && results.props.searchParams).toBe(
