@@ -9,7 +9,7 @@ Mọi component là Server Component trừ khi có `"use client"` ở đầu fil
 - Event handler (`onClick`, `onChange`, `onSubmit`)
 - React state / effect (`useState`, `useReducer`, `useSyncExternalStore`)
 - Browser API (`localStorage`, `window`, `IntersectionObserver`)
-- Hook của thư viện client (`useForm`, `useQuery`, `useQueryState`, `useTheme`)
+- Hook của thư viện client (`useForm`, `useTheme`, `useRouter` của `~/i18n/navigation`)
 
 ❌ Không thêm `"use client"` chỉ vì "component này có UI" hay "cho chắc".
 
@@ -59,12 +59,12 @@ Lỡ import từ Client Component → **build fail**, thay vì âm thầm rò se
 
 Đây là app **BFF**. Trình duyệt chỉ được nói chuyện với chính origin của mình.
 
-| Luồng                                                  | Hợp lệ?                                 |
-| ------------------------------------------------------ | --------------------------------------- |
-| RSC → DAL (`features/*/server`) → `lib/http` → backend | ✅ mặc định                             |
-| Client → Server Action → DAL → backend                 | ✅ cho mutation                         |
-| Client → Route Handler `/api/*` → DAL → backend        | ✅ khi cần fetch phía client (TanStack) |
-| Client → `fetch('https://backend...')`                 | ❌ cấm                                  |
+| Luồng                                                  | Hợp lệ?                                                                                  |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| RSC → DAL (`features/*/server`) → `lib/http` → backend | ✅ mặc định                                                                              |
+| Client → Server Action → DAL → backend                 | ✅ cho mutation                                                                          |
+| Client → Route Handler `/api/*` → DAL → backend        | ✅ khi client cần gọi `fetch` (vd `/api/revalidate`); đọc dữ liệu hiển thị thì xem §10.4 |
+| Client → `fetch('https://backend...')`                 | ❌ cấm                                                                                   |
 
 Lợi ích kèm theo: CSP giữ được `connect-src 'self'` (→ §14).
 
@@ -100,6 +100,6 @@ Quy tắc rút ra:
 ## 5.8 Checklist trước khi thêm `"use client"` — `[SHOULD]`
 
 1. Có thể giữ ở server không? (đa số là có)
-2. Nếu cần state → có thể đẩy state lên **URL** (nuqs) để giữ server không? (→ §10)
+2. Nếu cần state → có thể đẩy state lên **URL** (`searchParams` đọc ở server) để giữ server không? (→ §10.5)
 3. Nếu buộc phải client → đã tách nhỏ nhất có thể chưa?
 4. Component này có nằm trong static shell không? Nếu nó đọc request-time hoặc random → phải nằm trong `<Suspense>` (→ §07).

@@ -15,29 +15,27 @@
 
 ## 0.2 Dependency chính — `[MUST]`
 
-| Nhóm                  | Package                                   | Version            |
-| --------------------- | ----------------------------------------- | ------------------ |
-| Framework             | `next`                                    | `16.2.9`           |
-| UI runtime            | `react` · `react-dom`                     | `19.2.7`           |
-| Ngôn ngữ              | `typescript`                              | `6.0.3`            |
-| Validation            | `zod`                                     | `4.4.3`            |
-| Env                   | `@t3-oss/env-nextjs`                      | `0.13.11`          |
-| i18n                  | `next-intl`                               | `4.13.0`           |
-| Theme                 | `next-themes`                             | `0.4.6`            |
-| Global state          | `@reduxjs/toolkit` · `react-redux`        | `2.12.0` · `9.3.0` |
-| Server cache (client) | `@tanstack/react-query`                   | `5.101.1`          |
-| URL state             | `nuqs`                                    | `2.8.9`            |
-| Form                  | `react-hook-form` · `@hookform/resolvers` | `7.80.0` · `5.4.0` |
-| Auth (JWE/JWT)        | `jose`                                    | `6.2.3`            |
-| Logging               | `pino`                                    | `10.3.1`           |
+| Nhóm           | Package                                   | Version            |
+| -------------- | ----------------------------------------- | ------------------ |
+| Framework      | `next`                                    | `16.4.6`           |
+| UI runtime     | `react` · `react-dom`                     | `19.2.7`           |
+| Ngôn ngữ       | `typescript`                              | `6.0.3`            |
+| Validation     | `zod`                                     | `4.6.7`            |
+| Env            | `@t3-oss/env-nextjs`                      | `0.13.11`          |
+| i18n           | `next-intl`                               | `4.13.0`           |
+| Theme          | `next-themes`                             | `0.4.6`            |
+| Global state   | `@reduxjs/toolkit` · `react-redux`        | `2.12.0` · `9.3.0` |
+| Form           | `react-hook-form` · `@hookform/resolvers` | `7.80.0` · `5.4.0` |
+| Auth (JWE/JWT) | `jose`                                    | `6.2.3`            |
+| Logging        | `pino`                                    | `10.3.1`           |
 
-Tooling chính (devDependency): `eslint 9.39.4` + `eslint-config-next 16.2.9` + `typescript-eslint 8.62.0` · `prettier 3.8.4` · `vitest 4.1.9` + `@testing-library/react 16.3.2` + `msw 2.14.6` · `@playwright/test 1.61.1` + `@axe-core/playwright 4.12.1` · `husky 9.1.7` + `lint-staged 17.0.8` + `@commitlint/cli 21.1.0`.
+Tooling chính (devDependency): `eslint 9.39.4` + `eslint-config-next 16.4.6` + `typescript-eslint 8.62.0` · `prettier 3.8.4` · `vitest 4.1.9` + `@testing-library/react 16.3.2` + `msw 2.14.6` · `@playwright/test 1.61.1` + `@axe-core/playwright 4.12.1` · `husky 9.1.7` + `lint-staged 17.0.8` + `@commitlint/cli 21.1.0`.
 
 > ⚠️ **ESLint giữ ở 9.x**, không nâng 10 — `eslint-config-next@16` chưa tương thích ESLint 10.
 
 ## 0.3 Luật pin version — `[MUST]`
 
-- Pin **CHÍNH XÁC** (`"next": "16.2.9"`), **không** `^` / `~`. Lý do: build phải tái lập được (reproducible) giữa máy dev và CI.
+- Pin **CHÍNH XÁC** (`"next": "16.4.6"`), **không** `^` / `~`. Lý do: build phải tái lập được (reproducible) giữa máy dev và CI.
 - Commit `pnpm-lock.yaml`. CI luôn `pnpm install --frozen-lockfile` (lệch lock = fail).
 - Nâng version = PR riêng, đọc changelog, chạy đủ gate (§18), cập nhật bảng ở §0.2.
 

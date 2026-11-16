@@ -1,6 +1,6 @@
 # Coding Conventions — v1
 
-> **Version:** 1.1.0 · **Cập nhật:** 2026-11-15 · **Trạng thái:** Active
+> **Version:** 1.1.1 · **Cập nhật:** 2026-11-16 · **Trạng thái:** Active
 > SSOT quy ước code cho **codebase1 UI** (Next.js 16 App Router + React 19 + TypeScript 6). Xem chính sách version tại [../README.md](../README.md).
 
 ## Nhãn mức độ

@@ -17,7 +17,7 @@
 1. **Chống request waterfall** — `Promise.all`, preload, streaming.
 2. **Giảm `"use client"`** — server-first đã giúp sẵn; mỗi island bớt đi là JS bớt đi.
 3. **Cache đúng chỗ** — `'use cache'` + `cacheLife` + `cacheTag` (→ §07).
-4. **Dedupe request phía client** — TanStack Query (→ §10).
+4. **Dedupe request** — `cache()` của React cho DAL trong một request (vd `getProfile`); client không fetch dữ liệu hiển thị (→ §10.4).
 5. **Bớt re-render** — React Compiler lo tự động.
 6. **Virtualize** danh sách rất dài.
 

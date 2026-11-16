@@ -69,9 +69,9 @@ Mọi thứ đọc request-time **phải** nằm trong `<Suspense>`, nếu khôn
 
 - `cookies()` / `headers()` / `connection()`
 - `searchParams`
-- Component đọc session: guard, `getProfile`, `<Can>`, `AuthStatus`
+- Component đọc session: guard, `getProfile`, `AuthStatus`, `AccountDetails`
 - **Server Action gắn vào `<form action>`** (⚠️ chỉ `next dev` bắt lỗi này; `build` bỏ qua → **bắt buộc verify bằng `pnpm dev`**, không chỉ build)
-- Provider client-state đọc random/request-time (Redux, nuqs, TanStack)
+- Provider client-state đọc random/request-time (Redux `StoreProvider`)
 
 ```tsx
 // ✅ shell tĩnh + hole động

@@ -94,11 +94,11 @@ import { Link } from '~/i18n/navigation';
 
 ## 6.8 Route Handler vs Server Action — `[MUST]`
 
-| Nhu cầu                                   | Dùng                                     |
-| ----------------------------------------- | ---------------------------------------- |
-| Mutation phát sinh từ UI của ta           | **Server Action** (→ §09)                |
-| Client cần fetch dữ liệu (TanStack Query) | **Route Handler** `app/api/*` → DAL      |
-| Webhook / caller ngoài / cron             | **Route Handler**                        |
-| Revalidate theo tag từ hệ thống ngoài     | **Route Handler** (nhớ bảo vệ bằng auth) |
+| Nhu cầu                                     | Dùng                                     |
+| ------------------------------------------- | ---------------------------------------- |
+| Mutation phát sinh từ UI của ta             | **Server Action** (→ §09)                |
+| Client cần gọi endpoint của ta bằng `fetch` | **Route Handler** `app/api/*` → DAL      |
+| Webhook / caller ngoài / cron               | **Route Handler**                        |
+| Revalidate theo tag từ hệ thống ngoài       | **Route Handler** (nhớ bảo vệ bằng auth) |
 
 Route Handler cũng chỉ **mỏng**: parse → gọi DAL → trả JSON.
