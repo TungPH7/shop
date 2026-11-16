@@ -14,15 +14,16 @@ export function createProduct(input: CreateProductInput): Promise<AdminProduct> 
   return api.post('/admin/products', input, { schema: adminProductSchema });
 }
 
-/** The fields of the form an error of the api can name. */
+/**
+ * The fields of the form that show an error of the api under them. Status and
+ * availability are a choice of two values: the api rejecting one is a general error.
+ */
 export const PRODUCT_FORM_FIELDS = [
   'name',
   'slug',
   'description',
   'price',
   'compareAtPrice',
-  'status',
-  'availability',
 ] as const;
 export type ProductFormField = (typeof PRODUCT_FORM_FIELDS)[number];
 

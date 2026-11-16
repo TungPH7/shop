@@ -99,7 +99,7 @@ describe('createProductErrorOf', () => {
   it('is a general error for a 400 that names no field of the form', async () => {
     const error = await errorOf(() =>
       problem(400, 'VALIDATION_FAILED', {
-        errors: [{ field: 'version', rejectedValue: 1, message: '…' }],
+        errors: [{ field: 'status', rejectedValue: 'GONE', message: '…' }],
       }),
     );
 
