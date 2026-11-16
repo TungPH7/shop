@@ -6,10 +6,14 @@
 //
 // The script runs, on a Docker network of its own, the Caddy image of apps/admin/Dockerfile with apps/admin/Caddyfile,
 // a stub api behind it that answers with the forwarded headers it got, and a client in place of Caddy of the VPS. It
-// needs Docker only, and removes what it made. Run it with: pnpm --filter ./apps/admin run check:caddy
+// checks the three headers the api reads: X-Forwarded-Proto and X-Forwarded-Host reach it as Caddy of the VPS sent
+// them, and X-Forwarded-For keeps the address of the browser first, with the address of Caddy of the VPS appended, as
+// a proxy appends the one that called it. It needs Docker only, and removes what it made. The job caddy-proxy of
+// .github/workflows/ci.yml runs it on every PR and push (SHOP-57). Run it with: pnpm --filter ./apps/admin run check:caddy
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 const appDir = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -33,16 +37,29 @@ const docker = (args, options = {}) =>
     ...options,
   }).trim();
 
-// The stub api: it shows the headers the api would read, as Tomcat's RemoteIpValve reads them.
+// The stub api: it shows the headers the api would read, as Tomcat's RemoteIpValve reads them, as field=value pairs
+// split by |.
 const STUB = [
   '{',
   '\tadmin off',
   '\tauto_https off',
   '}',
   ':3001 {',
-  '\trespond "proto={header.X-Forwarded-Proto} host={host}"',
+  '\trespond "proto={header.X-Forwarded-Proto}|fhost={header.X-Forwarded-Host}|for={header.X-Forwarded-For}|host={host}"',
   '}',
 ].join('\n');
+
+// An IPv4 address, such as the one Docker gives the client container, which Caddy appends to X-Forwarded-For.
+const IP = String.raw`\d{1,3}(?:\.\d{1,3}){3}`;
+
+// The fields of the answer of the stub api: { proto, fhost, for, host }.
+const fieldsOf = (body) =>
+  Object.fromEntries(
+    body.split('|').map((pair) => {
+      const at = pair.indexOf('=');
+      return [pair.slice(0, at), pair.slice(at + 1)];
+    }),
+  );
 
 function cleanup() {
   for (const name of [admin, api]) {
@@ -59,8 +76,9 @@ function cleanup() {
   }
 }
 
-// GET /api/... through the admin Caddy from a container on the network, as Caddy of the VPS calls it.
-function through(headers) {
+// GET /api/... through the admin Caddy from a container on the network, as Caddy of the VPS calls it. The admin Caddy
+// may not listen yet at the first call: try again every half second, up to 20 times.
+async function through(headers) {
   const args = ['run', '--rm', '--network', net, image, 'wget', '-qO-'];
   for (const [name, value] of Object.entries(headers)) args.push('--header', `${name}: ${value}`);
   args.push(`http://${admin}:5173/api/admin/products`);
@@ -70,24 +88,51 @@ function through(headers) {
       return docker(args);
     } catch (error) {
       last = error;
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+      await sleep(500);
     }
   }
   throw new Error(`no answer through the admin Caddy: ${last?.stderr || last?.message}`);
 }
 
+// Each expected field is a string the field must equal, or a pattern it must match. In the first case Host differs
+// from X-Forwarded-Host, so the check sees which of the two Caddy passed on as X-Forwarded-Host.
 const cases = [
   {
-    name: 'keeps X-Forwarded-Proto: https of Caddy of the VPS',
-    headers: { Host: 'shop-admin.example', 'X-Forwarded-Proto': 'https' },
-    expect: 'proto=https host=shop-admin.example',
+    name: 'keeps X-Forwarded-Proto, X-Forwarded-Host and X-Forwarded-For of Caddy of the VPS',
+    headers: {
+      Host: 'admin.internal',
+      'X-Forwarded-Proto': 'https',
+      'X-Forwarded-Host': 'shop-admin.example',
+      'X-Forwarded-For': '203.0.113.7',
+    },
+    expect: {
+      proto: 'https',
+      fhost: 'shop-admin.example',
+      for: new RegExp(`^203\\.0\\.113\\.7, ${IP}$`),
+      host: 'admin.internal',
+    },
   },
   {
-    name: 'sets X-Forwarded-Proto: http when no proxy sent one',
+    name: 'sets the forwarded headers itself when no proxy sent them',
     headers: { Host: 'shop-admin.example' },
-    expect: 'proto=http host=shop-admin.example',
+    expect: {
+      proto: 'http',
+      fhost: 'shop-admin.example',
+      for: new RegExp(`^${IP}$`),
+      host: 'shop-admin.example',
+    },
   },
 ];
+
+// The fields of the answer that differ from what the case expects, one line each.
+function mismatches(body, expect) {
+  const got = fieldsOf(body);
+  return Object.entries(expect)
+    .filter(([field, want]) =>
+      want instanceof RegExp ? !want.test(got[field] ?? '') : got[field] !== want,
+    )
+    .map(([field, want]) => `     ${field}: expected ${want}, got ${got[field] ?? '(none)'}`);
+}
 
 let failed = 0;
 try {
@@ -127,12 +172,13 @@ try {
   docker(['start', admin]);
 
   for (const { name, headers, expect } of cases) {
-    const body = through(headers);
-    if (body === expect) {
+    const body = await through(headers);
+    const wrong = mismatches(body, expect);
+    if (wrong.length === 0) {
       console.log(`ok   ${name}`);
     } else {
       failed += 1;
-      console.log(`FAIL ${name}\n     expected: ${expect}\n     got:      ${body}`);
+      console.log(`FAIL ${name}\n${wrong.join('\n')}\n     answer: ${body}`);
     }
   }
 } catch (error) {
