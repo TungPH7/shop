@@ -17,4 +17,7 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
   /** The product with this slug, compared case-insensitively ({@code citext}). */
   Optional<Product> findBySlug(String slug);
+
+  /** Whether a product has this slug, compared case-insensitively ({@code citext}). */
+  boolean existsBySlug(String slug);
 }
