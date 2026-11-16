@@ -24,6 +24,10 @@ spring:
         socketTimeout: 60
         loginTimeout: 10
         tcpKeepAlive: true
+        # NFR12 (SHOP-53): no statement, bound value or "Failing row contains (…)" in the exceptions
+        # of the driver, which reach the log. Here rather than in the URL, so it holds for every
+        # profile, for a URL set by the environment and for the tests (Testcontainers sets the URL).
+        logServerErrorDetail: false
   jpa:
     open-in-view: false
     hibernate:

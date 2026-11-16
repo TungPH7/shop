@@ -9,6 +9,7 @@ import java.util.Objects;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSourceResolvable;
@@ -282,6 +283,10 @@ public class GlobalExceptionHandler {
    *
    * <p>Do NOT echo {@code ex.getMessage()} — Postgres error messages contain SQL fragments and
    * internal constraint names.
+   *
+   * <p>The log line names the constraint only (NFR12, SHOP-53): the message of a NOT NULL or CHECK
+   * violation carries {@code Failing row contains (…)}, the values of the row, such as the name and
+   * the description of a product.
    */
   @ExceptionHandler(DataIntegrityViolationException.class)
   public ResponseEntity<ProblemDetail> handleDataIntegrity(
@@ -301,7 +306,10 @@ public class GlobalExceptionHandler {
     }
 
     log.warn(
-        "Data integrity violation at {}: code={} root={}", request.getRequestURI(), code, rootMsg);
+        "Data integrity violation at {}: code={} constraint={}",
+        request.getRequestURI(),
+        code,
+        constraintName(ex));
 
     ProblemDetail body = problemFactory.from(code, HttpStatus.CONFLICT, detail, request);
     return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
@@ -425,6 +433,21 @@ public class GlobalExceptionHandler {
     }
     return Objects.requireNonNullElse(
         parameter.getParameterName(), "arg" + parameter.getParameterIndex());
+  }
+
+  /**
+   * The name of the constraint the statement broke, as Hibernate read it from the error of the
+   * server, or {@code unknown}: never the message, which may carry values of the row. Every write
+   * of the app goes through JPA, so Hibernate wraps each violation.
+   */
+  private static String constraintName(Throwable t) {
+    for (Throwable cur = t; cur != null && cur.getCause() != cur; cur = cur.getCause()) {
+      if (cur instanceof ConstraintViolationException violation
+          && violation.getConstraintName() != null) {
+        return violation.getConstraintName();
+      }
+    }
+    return "unknown";
   }
 
   /** Finds the root-cause message — used for logging only, never echoed to the client. */
