@@ -4,12 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.context.support.DefaultMessageSourceResolvable;
+import org.springframework.core.MethodParameter;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpMethod;
@@ -18,7 +21,11 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.validation.method.MethodValidationResult;
+import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
@@ -195,5 +202,88 @@ class GlobalExceptionHandlerTest {
 
     assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
     assertThat(resp.getBody().getProperties()).containsEntry("code", "INTERNAL_ERROR");
+  }
+
+  // ---- HandlerMethodValidationException (SHOP-16, NFR3) ----
+
+  /** Handler methods whose parameters the tests below break. */
+  @SuppressWarnings("unused")
+  static class Handlers {
+    int pathVariable(@PathVariable(name = "id") int id) {
+      return id;
+    }
+
+    int plain(int count) {
+      return count;
+    }
+  }
+
+  @Test
+  void handleMethodValidation_namesAPathVariableByItsAnnotation() throws Exception {
+    MethodParameter parameter = parameterOf("pathVariable");
+
+    ResponseEntity<ProblemDetail> resp =
+        handler.handleMethodValidation(invalid(parameter, -1, "must be positive"), request());
+
+    assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(resp.getBody().getProperties())
+        .containsEntry("code", "INVALID_PARAMETER")
+        .containsEntry("parameter", "id")
+        .containsEntry("rejectedValue", -1);
+    assertThat(resp.getBody().getDetail()).contains("must be positive");
+  }
+
+  @Test
+  void handleMethodValidation_namesAParameterWithNoAnnotationByItsJavaName() throws Exception {
+    MethodParameter parameter = parameterOf("plain");
+
+    ResponseEntity<ProblemDetail> resp =
+        handler.handleMethodValidation(invalid(parameter, 0, "too small"), request());
+
+    assertThat(resp.getBody().getProperties()).containsEntry("parameter", "count");
+  }
+
+  @Test
+  void handleMethodValidation_withNoMessage_saysTheValueIsInvalid() throws Exception {
+    MethodParameter parameter = parameterOf("pathVariable");
+
+    ResponseEntity<ProblemDetail> resp =
+        handler.handleMethodValidation(invalid(parameter, 7, " "), request());
+
+    assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(resp.getBody().getDetail()).contains("is invalid");
+  }
+
+  @Test
+  void handleMethodValidation_ofAReturnValue_isAServerError() throws Exception {
+    MethodParameter returnValue =
+        new MethodParameter(Handlers.class.getDeclaredMethod("plain", int.class), -1);
+
+    ResponseEntity<ProblemDetail> resp =
+        handler.handleMethodValidation(invalid(returnValue, 5, "too big"), request());
+
+    assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+    assertThat(resp.getBody().getProperties())
+        .containsEntry("code", "INTERNAL_ERROR")
+        .doesNotContainKey("parameter");
+  }
+
+  private static MethodParameter parameterOf(String methodName) throws NoSuchMethodException {
+    return new MethodParameter(Handlers.class.getDeclaredMethod(methodName, int.class), 0);
+  }
+
+  private static HandlerMethodValidationException invalid(
+      MethodParameter parameter, Object value, String message) {
+    ParameterValidationResult result =
+        new ParameterValidationResult(
+            parameter,
+            value,
+            List.of(new DefaultMessageSourceResolvable(new String[] {"Min"}, message)),
+            null,
+            null,
+            null,
+            (error, type) -> null);
+    return new HandlerMethodValidationException(
+        MethodValidationResult.create(new Handlers(), parameter.getMethod(), List.of(result)));
   }
 }

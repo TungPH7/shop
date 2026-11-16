@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -345,8 +346,8 @@ public class GlobalExceptionHandler {
     if (pathVariable != null && !pathVariable.name().isEmpty()) {
       return pathVariable.name();
     }
-    String name = parameter.getParameterName();
-    return name != null ? name : "arg" + parameter.getParameterIndex();
+    return Objects.requireNonNullElse(
+        parameter.getParameterName(), "arg" + parameter.getParameterIndex());
   }
 
   /** Finds the root-cause message — used for logging only, never echoed to the client. */
