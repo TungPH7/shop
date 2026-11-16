@@ -291,12 +291,12 @@ git commit --no-verify -m "wip: ..."
 │   │   └── security/            # SecurityConfig, headers, CORS, CSP, HSTS
 │   ├── feature/                 # feature module (vertical slice)
 │   │   ├── health/              # /api/health
-│   │   └── product/             # CRUD demo: controller / service / repo / mapper / dto / domain
+│   │   └── product/             # catalog: domain (Product, ProductSlugs) / repository (JPA + SQL list)
 │   └── infrastructure/          # gateway/adapter ra ngoài (sau này)
 ├── src/main/resources/
 │   ├── application.yml          # config chung
 │   ├── application-{dev,staging,prod,test}.yml
-│   ├── db/migration/            # V1__init.sql, V2__app_helpers.sql, V3__create_products_table.sql
+│   ├── db/migration/            # V1__init.sql … V4__expand_products_catalog.sql
 │   └── logback-spring.xml
 ├── src/test/java/.../
 │   └── AbstractContainerBaseTest.java   # Testcontainers Postgres parent
@@ -314,13 +314,12 @@ git commit --no-verify -m "wip: ..."
 
 ## 10. Endpoint chính
 
-|        Endpoint        |               Mô tả                |
-|------------------------|------------------------------------|
-| `GET /actuator/health` | Liveness + readiness               |
-| `GET /actuator/info`   | Build info                         |
-| `GET /v3/api-docs`     | OpenAPI JSON                       |
-| `GET /swagger-ui.html` | Swagger UI                         |
-| `/api/products/**`     | CRUD demo (xem `feature/product/`) |
+|        Endpoint        |        Mô tả         |
+|------------------------|----------------------|
+| `GET /actuator/health` | Liveness + readiness |
+| `GET /actuator/info`   | Build info           |
+| `GET /v3/api-docs`     | OpenAPI JSON         |
+| `GET /swagger-ui.html` | Swagger UI           |
 
 ---
 

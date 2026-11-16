@@ -42,4 +42,10 @@ class ActuatorProbesIntegrationTest extends AbstractContainerBaseTest {
   void other_actuator_endpoints_stay_closed() throws Exception {
     mockMvc.perform(get("/actuator/flyway")).andExpect(status().isUnauthorized());
   }
+
+  @Test
+  void health_components_other_than_the_probes_stay_closed() throws Exception {
+    // TW5 of SHOP-7 (review of shop PR #10): the db component would tell the database is there.
+    mockMvc.perform(get("/actuator/health/db")).andExpect(status().isUnauthorized());
+  }
 }

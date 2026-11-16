@@ -35,10 +35,11 @@ class ProblemDetailIntegrationTest extends AbstractContainerBaseTest {
 
   @Test
   void wrong_method_returns_405_with_problem_body() throws Exception {
+    // /api/v1/health only answers GET.
     mockMvc
         .perform(
             org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch(
-                "/api/products"))
+                "/api/v1/health"))
         .andExpect(status().isMethodNotAllowed())
         .andExpect(jsonPath("$.code").value("METHOD_NOT_SUPPORTED"));
   }
