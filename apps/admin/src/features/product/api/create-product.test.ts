@@ -75,6 +75,60 @@ describe('createProduct', () => {
     await expect(createProduct(input)).resolves.toEqual({ id: created.id });
   });
 
+  it('reads the id from an absolute Location', async () => {
+    server.use(
+      http.post('*/admin/products', () =>
+        HttpResponse.json(
+          { ...created, id: 'not-this-one' },
+          {
+            status: 201,
+            headers: { Location: `https://admin.example.com/api/admin/products/${created.id}` },
+          },
+        ),
+      ),
+    );
+
+    await expect(createProduct(input)).resolves.toEqual({ id: created.id });
+  });
+
+  it('is saved, with the id of the body, when the id of the Location is badly encoded', async () => {
+    server.use(
+      http.post('*/admin/products', () =>
+        HttpResponse.json(created, {
+          status: 201,
+          headers: { Location: '/api/admin/products/%E0%A4%A' },
+        }),
+      ),
+    );
+
+    await expect(createProduct(input)).resolves.toEqual({ id: created.id });
+  });
+
+  it('takes no id from a Location that ends at the collection', async () => {
+    server.use(
+      http.post('*/admin/products', () =>
+        HttpResponse.json(created, {
+          status: 201,
+          headers: { Location: '/api/admin/products' },
+        }),
+      ),
+    );
+
+    await expect(createProduct(input)).resolves.toEqual({ id: created.id });
+  });
+
+  it('is saved, with no id, when the Location holds no id and the body none either', async () => {
+    server.use(
+      http.post(
+        '*/admin/products',
+        () =>
+          new HttpResponse(null, { status: 201, headers: { Location: '/api/admin/products/' } }),
+      ),
+    );
+
+    await expect(createProduct(input)).resolves.toEqual({ id: null });
+  });
+
   it('is saved when the body of the 201 does not match AdminProduct, so a retry adds no -2', async () => {
     server.use(
       http.post('*/admin/products', () =>
