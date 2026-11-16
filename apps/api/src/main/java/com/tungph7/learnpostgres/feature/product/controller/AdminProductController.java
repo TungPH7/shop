@@ -1,21 +1,33 @@
 package com.tungph7.learnpostgres.feature.product.controller;
 
 import java.net.URI;
+import java.util.UUID;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.tungph7.learnpostgres.feature.product.dto.AdminProduct;
+import com.tungph7.learnpostgres.feature.product.dto.AdminProductSummary;
 import com.tungph7.learnpostgres.feature.product.dto.CreateProductRequest;
+import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
+import com.tungph7.learnpostgres.feature.product.dto.ProductStatusFilter;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
 import com.tungph7.learnpostgres.feature.product.service.AdminProductService;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.headers.Header;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -70,5 +82,58 @@ public class AdminProductController {
   public ResponseEntity<AdminProduct> create(@Valid @RequestBody CreateProductRequest request) {
     AdminProduct product = service.create(request);
     return ResponseEntity.created(URI.create(BASE_PATH + "/" + product.id())).body(product);
+  }
+
+  /**
+   * One page of products, newest first, of every status unless {@code status} names one. An invalid
+   * parameter is a 400 {@code INVALID_PARAMETER} that names it (NFR3); an unknown one is ignored.
+   */
+  @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+  @Operation(
+      summary = "List products",
+      description =
+          "Newest first. q matches products whose name has a word starting with each word of q,"
+              + " ignoring accents and case; a q with no letter or digit matches no product."
+              + " An invalid parameter is a 400 INVALID_PARAMETER naming it.")
+  @ApiResponse(responseCode = "200", description = "OK")
+  @ApiResponse(
+      responseCode = "400",
+      description = "INVALID_PARAMETER: a parameter of the wrong type or out of range",
+      content =
+          @Content(
+              mediaType = "application/problem+json",
+              schema = @Schema(ref = "#/components/schemas/ProblemDetail")))
+  public ProductPage<AdminProductSummary> list(
+      @Parameter(description = "Keyword; blank is no search")
+          @RequestParam(name = "q", required = false)
+          String q,
+      @RequestParam(name = "status", defaultValue = "ALL") ProductStatusFilter status,
+      @RequestParam(name = "offset", defaultValue = "0") @Min(0) int offset,
+      @RequestParam(name = "limit", defaultValue = "20")
+          @Min(1)
+          @Max(ProductQueryRepository.MAX_LIMIT)
+          int limit) {
+    return service.list(q, status, offset, limit);
+  }
+
+  /**
+   * Deletes a product: 204, also when the product is already gone, so a delete whose response was
+   * lost can be sent again (NFR19).
+   */
+  @DeleteMapping("/{id}")
+  @Operation(
+      summary = "Delete a product",
+      description = "Idempotent: 204 also when no product has this id.")
+  @ApiResponse(responseCode = "204", description = "Deleted, or already gone")
+  @ApiResponse(
+      responseCode = "400",
+      description = "INVALID_PARAMETER: the id is not a UUID",
+      content =
+          @Content(
+              mediaType = "application/problem+json",
+              schema = @Schema(ref = "#/components/schemas/ProblemDetail")))
+  public ResponseEntity<Void> delete(@PathVariable("id") UUID id) {
+    service.delete(id);
+    return ResponseEntity.noContent().build();
   }
 }

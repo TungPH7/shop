@@ -23,6 +23,7 @@ import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.logging.CorrelationContext;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.dto.CreateProductRequest;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
 
 /**
@@ -40,7 +41,7 @@ class AdminProductServiceTest {
     repository = mock(ProductRepository.class);
     CorrelationContext correlation = mock(CorrelationContext.class);
     when(correlation.currentId()).thenReturn(Optional.empty());
-    service = new AdminProductService(repository, correlation);
+    service = new AdminProductService(repository, mock(ProductQueryRepository.class), correlation);
   }
 
   @Test
