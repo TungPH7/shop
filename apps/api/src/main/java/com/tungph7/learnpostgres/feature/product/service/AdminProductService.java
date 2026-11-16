@@ -143,9 +143,6 @@ public class AdminProductService {
       if (cause instanceof ConstraintViolationException violation) {
         return SLUG_UNIQUE_CONSTRAINT.equalsIgnoreCase(violation.getConstraintName());
       }
-      if (cause.getCause() == cause) {
-        break;
-      }
     }
     return false;
   }
