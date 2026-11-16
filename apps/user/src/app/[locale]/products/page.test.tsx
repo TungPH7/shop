@@ -1,7 +1,11 @@
 // @vitest-environment node
+import { Children, isValidElement, Suspense, type ReactElement, type ReactNode } from 'react';
+
 import { createTranslator } from 'next-intl';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, test, vi } from 'vitest';
+
+import { ProductResults } from '~/features/product/components/product-results';
 
 import en from '../../../../messages/en.json';
 import vi_ from '../../../../messages/vi.json';
@@ -71,10 +75,30 @@ test('puts the BreadcrumbList Trang chủ › Sản phẩm in the shell, with th
   });
 });
 
-test('renders the results inside the <Suspense> after the title', async () => {
+test('renders the results after the title', async () => {
   const html = await renderPage('en');
 
   expect(html).toMatch(/<h1>Products<\/h1><p>results stub<\/p><\/main>$/);
+});
+
+test('puts the results, and only them, inside a <Suspense>, with the searchParams of the page', async () => {
+  const searchParams = Promise.resolve({ q: 'tea' });
+  const page = (await ProductsPage({
+    params: Promise.resolve({ locale: 'en' }),
+    searchParams,
+  })) as ReactElement<{ children: ReactNode }>;
+
+  const boundaries = Children.toArray(page.props.children).filter(
+    (child): child is ReactElement<{ children: ReactNode }> =>
+      isValidElement(child) && child.type === Suspense,
+  );
+
+  expect(boundaries).toHaveLength(1);
+  const [results] = Children.toArray(boundaries[0]?.props.children);
+  expect(isValidElement(results) && results.type).toBe(ProductResults);
+  expect(isValidElement<{ searchParams: unknown }>(results) && results.props.searchParams).toBe(
+    searchParams,
+  );
 });
 
 test('generateMetadata gives the translated title and the canonical of /products', async () => {
