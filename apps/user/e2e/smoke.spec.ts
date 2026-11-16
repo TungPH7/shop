@@ -32,7 +32,7 @@ test.describe('smoke: server render, điều hướng, i18n', () => {
 
   test('đổi ngôn ngữ runtime en → vi (full-reload, folder 22)', async ({ page }) => {
     await page.goto('/en');
-    // LanguageSwitcher = <nav aria-label="Language"> gồm nút EN (đang active, disabled) + VI. Đổi locale
+    // LanguageSwitcher = role=group tên "Language" gồm nút EN (đang active, disabled) + VI. Đổi locale
     // = FULL RELOAD cố ý (window.location.replace) chống chớp trắng theme (folder 22) → Playwright thấy
     // như một navigation bình thường.
     await page.getByRole('button', { name: 'VI' }).click();
