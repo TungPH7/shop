@@ -27,6 +27,7 @@ import com.tungph7.learnpostgres.common.error.ConflictException;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.logging.CorrelationContext;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
+import com.tungph7.learnpostgres.feature.product.domain.ProductSlugs;
 import com.tungph7.learnpostgres.feature.product.dto.CreateProductRequest;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
@@ -86,16 +87,51 @@ class AdminProductServiceTest {
 
   @Test
   void create_withoutSlug_readsTheTakenSlugsOnceAndTakesTheFirstFreeNumber() {
-    when(repository.findSlugsOfFamily("ao-thun", "ao-thun-%"))
-        .thenReturn(List.of("ao-thun", "Ao-Thun-2", "ao-thun-3", "ao-thun-co-tron", "ao-thun-5"));
+    when(repository.findSlugsAmong(any(String[].class)))
+        .thenReturn(List.of("ao-thun", "Ao-Thun-2", "ao-thun-3", "ao-thun-5"));
     Product saved = savedProduct();
     when(repository.saveAndFlush(any(Product.class))).thenReturn(saved);
 
     service.create(request(null));
 
     assertThat(savedSlug()).isEqualTo("ao-thun-4");
-    verify(repository, times(1)).findSlugsOfFamily(anyString(), anyString());
+    verify(repository, times(1)).findSlugsAmong(any(String[].class));
     verify(repository, never()).existsBySlug(anyString());
+  }
+
+  @Test
+  void create_withoutSlug_asksForExactlyTheBaseAndItsNumberedSlugs() {
+    when(repository.findSlugsAmong(any(String[].class))).thenReturn(List.of());
+    Product saved = savedProduct();
+    when(repository.saveAndFlush(any(Product.class))).thenReturn(saved);
+
+    service.create(request(null));
+
+    ArgumentCaptor<String[]> slugs = ArgumentCaptor.forClass(String[].class);
+    verify(repository).findSlugsAmong(slugs.capture());
+    assertThat(slugs.getValue())
+        .hasSize(AdminProductService.MAX_SLUG_NUMBER)
+        .startsWith("ao-thun", "ao-thun-2", "ao-thun-3")
+        .endsWith("ao-thun-999", "ao-thun-1000")
+        .doesNotHaveDuplicates();
+  }
+
+  @Test
+  void slugCandidates_ofABaseCutForItsSuffix_areTheSlugsWithSuffixBuildsAndKeep100Characters() {
+    String base = "ao-thun-" + "a".repeat(87) + "-bcde";
+
+    List<String> candidates = AdminProductService.slugCandidates(base);
+
+    assertThat(candidates.get(0)).isEqualTo(base);
+    for (int number = 2; number <= AdminProductService.MAX_SLUG_NUMBER; number++) {
+      assertThat(candidates.get(number - 1))
+          .isEqualTo(ProductSlugs.withSuffix(base, number))
+          .endsWith("-" + number);
+    }
+    assertThat(candidates)
+        .hasSize(AdminProductService.MAX_SLUG_NUMBER)
+        .doesNotHaveDuplicates()
+        .allSatisfy(slug -> assertThat(ProductSlugs.isValid(slug)).as(slug).isTrue());
   }
 
   @Test
@@ -104,7 +140,7 @@ class AdminProductServiceTest {
     for (int number = 2; number <= AdminProductService.MAX_SLUG_NUMBER; number++) {
       taken.add("ao-thun-" + number);
     }
-    when(repository.findSlugsOfFamily(anyString(), anyString())).thenReturn(taken);
+    when(repository.findSlugsAmong(any(String[].class))).thenReturn(taken);
 
     assertThatThrownBy(() -> service.create(request(null)))
         .isInstanceOf(ConflictException.class)
@@ -115,10 +151,9 @@ class AdminProductServiceTest {
   }
 
   @Test
-  void create_withALongName_readsTheSlugsOfTheBaseCutForTheLongestSuffix() {
+  void create_withALongName_takesTheFirstFreeSlugOfTheBaseCutForItsSuffix() {
     String base = "a".repeat(100);
-    String stem = "a".repeat(100 - ("-" + AdminProductService.MAX_SLUG_NUMBER).length());
-    when(repository.findSlugsOfFamily(base, stem + "%"))
+    when(repository.findSlugsAmong(any(String[].class)))
         .thenReturn(List.of(base, "a".repeat(98) + "-2"));
     Product saved = savedProduct();
     when(repository.saveAndFlush(any(Product.class))).thenReturn(saved);

@@ -1,6 +1,8 @@
 package com.tungph7.learnpostgres.feature.product.service;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -185,33 +187,38 @@ public class AdminProductService {
 
   /**
    * {@code base} when free, else the first of {@code base-2}, {@code base-3}… up to {@code
-   * base-}{@value #MAX_SLUG_NUMBER} that is free. The slugs taken are read in one query, then
-   * compared here, ignoring case as {@code citext} does.
+   * base-}{@value #MAX_SLUG_NUMBER} that is free. The slugs taken among these candidates are read
+   * in one query, then compared here, ignoring case as {@code citext} does.
    *
-   * <p>The base has only {@code a-z}, {@code 0-9} and hyphens ({@link ProductSlugs#fromName}), so
-   * it holds no wildcard of {@code LIKE}. A long base is cut before its suffix ({@link
-   * ProductSlugs#withSuffix}), so its slugs are read by the shortest cut, its stem.
+   * <p>The query asks for exactly the candidates, each built by {@link ProductSlugs#withSuffix}, so
+   * it reads no other slug that only starts like the base, and it needs no property of how a long
+   * base is cut: each candidate is the slug that would be saved.
    *
    * @throws ConflictException {@code PRODUCT_SLUG_DUPLICATED} when every number is taken
    */
   private String firstFreeSlug(String base) {
-    String stem = ProductSlugs.withSuffix(base, MAX_SLUG_NUMBER);
-    stem = stem.substring(0, stem.lastIndexOf('-'));
-    String pattern = stem.equals(base) ? base + "-%" : stem + "%";
+    List<String> candidates = slugCandidates(base);
     Set<String> taken =
-        repository.findSlugsOfFamily(base, pattern).stream()
+        repository.findSlugsAmong(candidates.toArray(String[]::new)).stream()
             .map(slug -> slug.toLowerCase(Locale.ROOT))
             .collect(Collectors.toSet());
-    if (!taken.contains(base)) {
-      return base;
-    }
+    return candidates.stream()
+        .filter(slug -> !taken.contains(slug))
+        .findFirst()
+        .orElseThrow(() -> slugTaken(null));
+  }
+
+  /**
+   * The slugs an add without slug may take, in the order it tries them: {@code base}, then {@code
+   * base-2} to {@code base-}{@value #MAX_SLUG_NUMBER}.
+   */
+  static List<String> slugCandidates(String base) {
+    List<String> candidates = new ArrayList<>(MAX_SLUG_NUMBER);
+    candidates.add(base);
     for (int number = 2; number <= MAX_SLUG_NUMBER; number++) {
-      String slug = ProductSlugs.withSuffix(base, number);
-      if (!taken.contains(slug)) {
-        return slug;
-      }
+      candidates.add(ProductSlugs.withSuffix(base, number));
     }
-    throw slugTaken(null);
+    return candidates;
   }
 
   private static Product newProduct(CreateProductRequest request, String slug) {
