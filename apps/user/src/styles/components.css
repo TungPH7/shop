@@ -594,6 +594,133 @@ select.input option {
   font-size: inherit;
 }
 
+/* --- Product detail S5 (src/features/product/components/product-detail.tsx, SHOP-23) ----- */
+
+/* Wider than the 48rem of other pages: the tile takes 40% of the card on the left. */
+.product-page {
+  max-width: 64rem;
+}
+
+/* S5.2: back to S4. */
+.back-link {
+  display: inline-block;
+  margin-bottom: var(--space-4);
+  font: var(--fw-semibold) var(--fs-md) / var(--lh-base) var(--font);
+  text-decoration: none;
+}
+
+.back-link:hover {
+  text-decoration: underline;
+}
+
+/* One glass card: the tile at 40% on the left, the words on the right; one column under 768px. */
+.product-detail {
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.product-detail__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.product-detail__body p {
+  margin: 0;
+}
+
+/* S5.4: 26/700, 22 on phones; a long word wraps instead of overflowing. */
+.product-detail__name {
+  margin: 0;
+  font: var(--fw-bold) var(--fs-4xl) / 1.2 var(--font);
+  overflow-wrap: anywhere;
+}
+
+/* S5.5–S5.7: the price in a well, then the original price and the discount. */
+.product-price {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.product-price__label {
+  color: var(--muted-foreground);
+  font-size: var(--fs-sm);
+}
+
+.product-price__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+}
+
+.product-price__value {
+  font: var(--fw-bold) var(--fs-display) / 1.2 var(--font);
+}
+
+.product-price__was {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  color: var(--hint);
+  font-size: var(--fs-md);
+}
+
+/* S5.10: the words as typed, with their line breaks. */
+.product-detail__about h2 {
+  margin-bottom: var(--space-2);
+}
+
+.product-detail__description {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.product-detail__skeleton-tile {
+  aspect-ratio: 1;
+  border-radius: var(--r-tile);
+}
+
+.product-detail__skeleton-line {
+  width: 60%;
+  height: 26px;
+}
+
+.product-detail__skeleton-well {
+  height: 88px;
+  border-radius: 18px;
+}
+
+@media (width < 768px) {
+  .product-detail {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+
+  /* On a phone the tile spans the row at 4:3, as on the cards of S4. */
+  .product-detail .tile--detail,
+  .product-detail__skeleton-tile {
+    aspect-ratio: 4 / 3;
+  }
+
+  .product-detail .tile--detail .tile__initial {
+    font-size: 30cqi;
+  }
+
+  .product-detail__name {
+    font-size: var(--fs-3xl);
+  }
+
+  .product-price__value {
+    font-size: var(--fs-4xl);
+  }
+}
+
 /* --- Fallbacks -------------------------------------------------------------- */
 
 /* No backdrop-filter, or the person asks for less transparency: solid surfaces. */

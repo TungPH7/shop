@@ -23,6 +23,22 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
   /** The product with this slug, compared case-insensitively ({@code citext}). */
   Optional<Product> findBySlug(String slug);
 
+  /**
+   * The product with this slug, compared ignoring case whatever the {@code search_path}.
+   *
+   * <p>The deployed app connects with {@code currentSchema=app}, so its {@code search_path} leaves
+   * out {@code public}, where the {@code citext} operators are. A plain {@code slug = ?}, as {@link
+   * #findBySlug} writes it, then falls back to the {@code =} of {@code text} and compares with
+   * case. Naming the operator, {@code OPERATOR(public.=)}, keeps the comparison and the index of
+   * {@code citext}.
+   */
+  @Query(
+      value =
+          "SELECT p.* FROM app.products p"
+              + " WHERE p.slug OPERATOR(public.=) CAST(:slug AS public.citext)",
+      nativeQuery = true)
+  Optional<Product> findBySlugIgnoringCase(@Param("slug") String slug);
+
   /** Whether a product has this slug, compared case-insensitively ({@code citext}). */
   boolean existsBySlug(String slug);
 
