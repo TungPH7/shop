@@ -2,7 +2,7 @@
 // client.ts đọc `env.API_URL` (biến SERVER). jsdom có `window` → t3-env tưởng CLIENT → đọc
 // server-var sẽ THROW → chạy test ở `node` (không window) như env.test.ts (bài học folder 07).
 import { http, HttpResponse } from 'msw';
-import { expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 
 import { ApiError } from '~/lib/http/api-error';
@@ -15,6 +15,10 @@ import { server } from '~/testing/msw/server';
 const BASE = 'https://api.example.test';
 const schema = z.object({ ok: z.boolean() });
 const msgSchema = z.object({ message: z.string() });
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 test('GET hợp lệ → trả data đã validate', async () => {
   server.use(http.get(`${BASE}/ping`, () => HttpResponse.json({ ok: true })));
@@ -56,4 +60,44 @@ test('forward init.headers (auth seam folder 15) xuống fetch', async () => {
   );
   await httpDelete('/items/1', msgSchema, { headers: { Authorization: 'Bearer t' } });
   expect(authHeader).toBe('Bearer t');
+});
+
+// --- Base URL and time limit (plan of SHOP-7, Architecture Decisions 12; NFR26) ----------------
+test('builds the URL with new URL, so an API_URL ending in /api does not double it', async () => {
+  vi.resetModules();
+  vi.stubEnv('API_URL', 'https://api.example.test/api');
+  let hits = 0;
+  server.use(
+    http.get(`${BASE}/api/products`, () => {
+      hits += 1;
+      return HttpResponse.json({ ok: true });
+    }),
+  );
+  const client = await import('~/lib/http/client');
+
+  await expect(client.httpGet('/api/products', schema)).resolves.toEqual({ ok: true });
+  expect(hits).toBe(1);
+});
+
+test('reaches the same URL when API_URL has no /api', async () => {
+  server.use(http.get(`${BASE}/api/products`, () => HttpResponse.json({ ok: true })));
+  await expect(httpGet('/api/products', schema)).resolves.toEqual({ ok: true });
+});
+
+test('gives every request a time limit of 5 seconds', async () => {
+  const timeout = vi.spyOn(AbortSignal, 'timeout');
+  server.use(http.get(`${BASE}/ping`, () => HttpResponse.json({ ok: true })));
+
+  await httpGet('/ping', schema);
+
+  expect(timeout).toHaveBeenCalledWith(5000);
+});
+
+test('a request past its time limit → ApiError kind=timeout', async () => {
+  vi.spyOn(AbortSignal, 'timeout').mockReturnValue(
+    AbortSignal.abort(new DOMException('The operation timed out.', 'TimeoutError')),
+  );
+  server.use(http.get(`${BASE}/slow`, () => HttpResponse.json({ ok: true })));
+
+  await expect(httpGet('/slow', schema)).rejects.toMatchObject({ kind: 'timeout' });
 });

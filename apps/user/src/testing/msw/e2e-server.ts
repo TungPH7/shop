@@ -7,7 +7,7 @@ import { e2eHandlers } from '~/testing/msw/e2e-handlers';
  * (folder 24). Tách khỏi `server.ts` (dùng cho Vitest) để không đụng handlers/onUnhandledRequest của test.
  *
  * ⭐ `onUnhandledRequest: 'bypass'` (KHÁC Vitest dùng `'error'`): trong process Next có những outbound
- * KHÔNG phải backend — ví dụ optimizer `next/image` fetch `picsum.photos` (ảnh card sản phẩm). Bypass =
+ * KHÔNG phải backend, như optimizer `next/image` fetch ảnh. Bypass =
  * cho chúng đi thẳng mạng thật thay vì làm SẬP server. (Vitest cần `'error'` để bắt test thiếu mock; ở
  * đây ta chỉ muốn chặn ĐÚNG backend, phần còn lại để nguyên.)
  *

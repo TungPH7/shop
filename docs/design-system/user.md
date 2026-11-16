@@ -41,7 +41,7 @@ Mọi dòng của bảng Design System là "mới". Mọi dòng `user` dùng đ�
 | `--background-from`, `--background-to` | bg (gradient) | #eef1f6 → #f6f8fb | #0c0c0e → #131316 | Gradient 135° của `<body>` |
 | `--foreground`, `--surface-foreground`, `--secondary-foreground` | text | #0f1724 | #f6f8fc | Chữ chính, nhãn trường, chữ trên thẻ và nút phụ |
 | `--surface` | surface | #ffffffb8 | #1e1e226b | Thẻ kính; đi cùng `--blur`, `--sat` |
-| `--solid` | solid | #ffffff | #1d1d21 | Thay `--surface` khi không có `backdrop-filter` hay khi bật giảm độ trong suốt; nền `<option>`; nền hộp phóng to ảnh `.zoom-content` (`globals.css`), vì hộp không có `backdrop-filter` |
+| `--solid` | solid | #ffffff | #1d1d21 | Thay `--surface` khi không có `backdrop-filter` hay khi bật giảm độ trong suốt; nền `<option>` |
 | `--dialog` | dialog | #fffffff0 | #1c1c20db | Nền hộp thoại và toast, nếu `user` cần |
 | `--muted`, `--secondary` | surface-2 | #0f17240d | #ffffff14 | Nền ô nhập, nút phụ, khung xương, huy hiệu Ẩn |
 | `--muted-foreground` | muted | #3b475a | #c9d1de | Chữ phụ, chữ huy hiệu Ẩn |

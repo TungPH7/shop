@@ -60,9 +60,10 @@ export default defineConfig({
         // a route handler is a plain function a unit test calls, and the CI of ai-orchestrator needs every file a PR
         // changes in coverage/lcov.info (SHOP-1). The root layout stays in for the same reason: its generateMetadata and
         // generateStaticParams are plain functions, tested in layout.test.tsx (SHOP-10). global-error.tsx stays in too:
-        // a client component, rendered in global-error.test.tsx (SHOP-10).
-        'src/app/*locale*/*/**',
-        'src/app/*locale*/!(layout).{ts,tsx}',
+        // a client component, rendered in global-error.test.tsx (SHOP-10). So do the error boundary of [locale], rendered
+        // in error.test.tsx, and the pages of the catalog under products/, from page.test.tsx (SHOP-18).
+        'src/app/*locale*/!(products)/**/*',
+        'src/app/*locale*/!(layout|error).{ts,tsx}',
         'src/app/!(global-error).{ts,tsx}',
         'src/instrumentation.ts', // boot glue (nhánh E2E cover) — không unit-worthy
         'src/proxy.ts', // middleware next-intl — E2E cover (curl/Playwright)

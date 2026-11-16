@@ -8,9 +8,8 @@ import { captureError } from '~/lib/monitoring/capture-error';
 /**
  * Error Boundary cho segment `[locale]` (fix folder 12: render-error làm SẬP app).
  *
- * VÌ SAO cần file này: route `/products` fetch data qua DAL (`getProducts`). Khi backend trả lỗi
- * (vd **429** do rate-limit khi bấm "Refresh products" liên tục) → `request()` ném `ApiError` LÚC
- * RENDER. Không có Error Boundary nào trong `app/` ⇒ lỗi render leo tới root ⇒ **sập cả trang**
+ * VÌ SAO cần file này: một trang đọc data qua DAL lúc render, như danh sách sản phẩm của S4 từ US5a
+ * (SHOP-25). Khi backend lỗi, không tới được hay quá 5 s → `request()` ném `ApiError` LÚC RENDER. Không có Error Boundary nào trong `app/` ⇒ lỗi render leo tới root ⇒ **sập cả trang**
  * (overlay dev / trang lỗi prod). Next bọc CHILDREN của segment trong React Error Boundary này nên
  * lỗi được BẮT tại đây → hiện UI dự phòng thay vì sập.
  *

@@ -8,6 +8,7 @@ import './src/config/env/server';
 // Security headers + CSP (folder 19). Import TƯƠNG ĐỐI (không `~`) — bộ biên dịch config của Next
 // KHÔNG áp tsconfig `paths` (bài học folder 15). File thuần 0-dep.
 import { buildSecurityHeaders } from './src/config/security-headers';
+import { CACHE_LIFE_PROFILES } from './src/config/cache-life';
 
 // Build static-gen mặc định chạy ~ (số core − 1) worker SONG SONG → máy/CI RAM thấp dễ OOM HỆ THỐNG
 // khi trang có nhiều client island (folder 12). Escape hatch opt-in: `NEXT_BUILD_LOW_MEM=1` → ép 1
@@ -41,13 +42,8 @@ const nextConfig: NextConfig = {
   // `require` khi cờ E2E bật. devDependency → prod thật (không set cờ) không bao giờ nạp.
   serverExternalPackages: ['pino', 'msw'],
 
-  // ⭐ Folder 20 — next/image: allowlist host ảnh REMOTE được tối ưu (bảo mật phía SERVER). Trình duyệt
-  // CHỈ thấy `/_next/image?...` (same-origin) — optimizer FETCH host remote ở SERVER rồi proxy về → nên
-  // CSP `img-src 'self'` (folder 19) VẪN ĐỦ, KHÔNG phải nới host (song song "thắng lợi BFF" connect-src).
-  // picsum.photos = ảnh placeholder demo (backend trả URL ảnh giả example.com). Ảnh CDN THẬT → thêm host vào đây.
-  images: {
-    remotePatterns: [{ protocol: 'https', hostname: 'picsum.photos' }],
-  },
+  // The cache profiles of `cacheLife`: `catalog` keeps a catalog change within 60 s of the customer (NFR7 of SHOP-7).
+  cacheLife: CACHE_LIFE_PROFILES,
 
   // Hạ số worker build khi RAM thấp (chỉ khi NEXT_BUILD_LOW_MEM=1) — xem ghi chú trên.
   ...(lowMemBuild ? { experimental: { cpus: 1 } } : {}),
@@ -63,7 +59,6 @@ const nextConfig: NextConfig = {
 
   // Các tuỳ chọn còn lại bật dần theo đúng folder dạy nó:
   //   • reactCompiler         → folder 20 (performance — cần babel-plugin-react-compiler)
-  //   • images.remotePatterns → folder 20 (next/image)
   //   • typedRoutes           → folder 08 (routing, nếu muốn <Link> type-safe)
   // Turbopack là bundler MẶC ĐỊNH của Next 16 (dev + build) → không cần khai báo gì;
   // muốn quay lại webpack thì chạy `next build --webpack`.
