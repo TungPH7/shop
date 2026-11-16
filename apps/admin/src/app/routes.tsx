@@ -31,6 +31,13 @@ export const routes: RouteObject[] = [
         },
       },
       {
+        path: paths.productNew.path,
+        lazy: async () => {
+          const { ProductNewRoute } = await import('@/app/routes/products/product-new-route');
+          return { Component: ProductNewRoute };
+        },
+      },
+      {
         path: paths.about.path,
         lazy: async () => {
           const { AboutRoute } = await import('@/app/routes/about/about-route');
