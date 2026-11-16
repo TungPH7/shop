@@ -66,6 +66,7 @@ Design system của `admin` là CSS variables và CSS thường, không có Tail
 | `src/styles/tokens.css` | Mọi token: màu, chữ, khoảng cách, bo góc, bóng, kính, chuyển động |
 | `src/styles/global.css` | Nền trang, chữ thân, h1–h3, liên kết, vòng focus |
 | `src/styles/components.css` | Class dùng chung: nút, huy hiệu, thẻ kính, ô nhập, bảng, banner, khung xương, khung trang |
+| `src/styles/list-page.css` | Class riêng của trang danh sách sản phẩm (S1), nạp sau `components.css` |
 
 ### UI-011 [MUST] Chỉ dùng token của `tokens.css`, không tự đặt giá trị
 
