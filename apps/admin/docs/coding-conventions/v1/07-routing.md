@@ -50,12 +50,13 @@ Vỏ app (nav, footer, provider cần router context) vẽ **một lần** ở l
 
 ### RT-007 [MUST] Thu hẹp kiểu param trước khi dùng
 
-`useParams()` trả `string | undefined`. Phải khẳng định trước khi dùng, không `!`.
+`useParams()` trả `string | undefined`. Thu hẹp bằng một lệnh kiểm tra rồi `throw` trước khi dùng, không `!`, không cần thư viện hay helper riêng.
 
 ✅
 ```ts
 const { productId } = useParams();
-invariant(productId, 'productId is required');
+if (!productId) throw new Error('productId is required'); // ErrorBoundary của route cha hiện lỗi (RT-009)
+// từ đây productId là string
 ```
 ❌ `const { productId } = useParams(); fetch(productId!)`
 

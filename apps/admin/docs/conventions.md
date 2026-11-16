@@ -101,7 +101,7 @@ pnpm format:check # Prettier kiểm tra (dùng trong CI)
 - **Typed paths:** mọi URL khai ở `@/config/paths.ts` (`as const`, kèm `getHref()` typed params). Tạo link **luôn** qua `paths.*.getHref(...)`; **không** magic string. (`config/` là shared → import được mọi nơi.)
 - **Lazy & code-split:** route phụ/nặng dùng `lazy: async () => ({ Component })` với **dynamic import chuỗi literal** → mỗi route một chunk. **Eager** cho critical path (Home) và component nhỏ luôn cần (404).
 - **App route mỏng:** route ở `app/` chỉ compose component của feature; UI + logic ở `features/<x>/components`.
-- **Params:** `useParams()` trả `string | undefined` → `invariant(param, …)` thu hẹp trước khi dùng.
+- **Params:** `useParams()` trả `string | undefined` → thu hẹp bằng `if (!param) throw new Error(…)` trước khi dùng (không `!`, không cần helper riêng; RT-007).
 - **404:** route `path: '*'` đặt **cuối**, nằm trong layout (vẫn có nav).
 - **Error cấp route:** `ErrorBoundary` (`useRouteError` + `isRouteErrorResponse`) ở route bố → không trắng trang. Error **toàn cục** là folder 12 (không làm trùng).
 - **UX điều hướng:** `useNavigation().state === 'loading'` → hiện indicator (`role="status"`) khi tải chunk lazy.
@@ -233,7 +233,7 @@ pnpm format:check # Prettier kiểm tra (dùng trong CI)
 
 - **Một resource = một bộ**: model Zod (single source) + `api/<operation>.ts` (1 file/thao tác: get-products/get-product/create/update/delete) + query hooks co-located (queryOptions + useMutation) + form (RHF + zodResolver) + route. Feature mới (Cart/Order) = copy bộ này.
 - **Mutation cache strategy**: create → `invalidateQueries(lists())`; update → `invalidateQueries(lists())` + `setQueryData(detail(id), updated)` (detail tươi ngay); delete → `invalidateQueries(lists())` + `removeQueries(detail(id))`. PUT = full replace → reuse `createProductSchema` (không update-schema riêng để lệch).
-- **⭐ Cross-feature composition**: feature KHÔNG import feature khác (`import-x/no-restricted-paths`). UI gated bằng feature khác (vd `<Can>` của auth trên trang product) → **compose ở APP layer** qua slot `actions?: ReactNode` (DI mức UI); feature nhận slot, vô can với feature kia. Đổi quyền = sửa app, không đụng feature.
+- **⭐ Cross-feature composition**: feature KHÔNG import feature khác (`import-x/no-restricted-paths`). UI gated bằng feature khác (vd `usePermission()` của auth quyết định nút trên trang product) → **compose ở APP layer** qua slot `actions?: ReactNode` (DI mức UI); feature nhận slot, vô can với feature kia. Đổi quyền = sửa app, không đụng feature.
 - **Destructive UI headless**: delete = inline two-step confirm (KHÔNG `window.confirm`) → testable + E2E-able + no UI lib.
 - **Feature E2E** (Playwright): mock API bằng `page.route` stateful, **anchor vào ORIGIN backend** (không `**/path` — sẽ nuốt SPA document navigation `page.goto`); seed auth bằng `addInitScript({ content })` (string, tránh DOM types ở spec node); test lỗi dùng status không-retry (400) để khỏi chờ backoff.
 

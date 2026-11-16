@@ -15,6 +15,17 @@ _(Chưa có thay đổi chờ phát hành.)_
 
 ## v1
 
+### [1.1.1] — 2026-11-16
+
+SHOP-42 (PR #31) gỡ `<Can>`, `usePermission().hasPermission` và `invariant`, nhưng bộ quy ước còn tả chúng (finding Medium và Low của `reviewer` ở PR #31, Task SHOP-47). Bản này chỉ sửa luật cho khớp code đang có, không thêm ràng buộc nào với code, nên là PATCH.
+
+**Fixed**
+- `AU-008`: `usePermission()` chỉ trả `{ hasModule(module) }`. Minh chứng: `src/features/auth/hooks/use-permission.ts`.
+- `AU-011`: đổi tên thành "Chặn ở tầng route", chỉ còn `ProtectedRoute` và `RequireModule`. Tầng element (`<Can method path>`) thành `[PLANNED]`, tạm ngưng tới Epic đăng nhập, vì các trang sản phẩm của admin ở ngoài `ProtectedRoute` trong Epic SHOP-7 (NFR8).
+- `AU-012`, `AU-013`: không còn dựa trên `<Can>`; tầng `app` đọc `usePermission()` rồi bơm vào slot.
+- Ví dụ ✅ của `PS-002` ở `03-project-structure.md`: dùng `usePermission().hasModule` thay cho `<Can>`.
+- Ví dụ ✅ của `RT-007` ở `07-routing.md` và mục Params của `docs/conventions.md`: thu hẹp `useParams()` bằng `if (!productId) throw …`, không dùng `invariant`.
+
 ### [1.1.0] — 2026-11-15
 
 Design system của `admin` (SHOP-8, mục 14 của plan `docs/specs/SHOP-7/plan.md`): CSS variables và CSS thường, không Tailwind hay thư viện UI (NFR13). Mục 15.3 cũ chỉ là hướng `[PLANNED]`, chưa áp dụng khi review, nên thay nó bằng rule mới là thay đổi MINOR, không phải `v2/`.
