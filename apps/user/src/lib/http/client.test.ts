@@ -101,3 +101,33 @@ test('a request past its time limit → ApiError kind=timeout', async () => {
 
   await expect(httpGet('/slow', schema)).rejects.toMatchObject({ kind: 'timeout' });
 });
+
+test('a request that reaches no server → ApiError kind=network', async () => {
+  server.use(http.get(`${BASE}/down`, () => HttpResponse.error()));
+
+  await expect(httpGet('/down', schema)).rejects.toMatchObject({ kind: 'network' });
+});
+
+test('a body that is not JSON → ApiError kind=validation', async () => {
+  server.use(
+    http.get(
+      `${BASE}/broken`,
+      () => new HttpResponse('{"ok": tru', { headers: { 'Content-Type': 'application/json' } }),
+    ),
+  );
+
+  await expect(httpGet('/broken', schema)).rejects.toMatchObject({
+    kind: 'validation',
+    message: 'Response was not valid JSON',
+  });
+});
+
+test('a time limit reached while the body is read → ApiError kind=timeout', async () => {
+  const response = new Response('{"ok": true}', { status: 200 });
+  vi.spyOn(response, 'json').mockRejectedValue(
+    new DOMException('The operation timed out.', 'TimeoutError'),
+  );
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(response);
+
+  await expect(httpGet('/slow-body', schema)).rejects.toMatchObject({ kind: 'timeout' });
+});
