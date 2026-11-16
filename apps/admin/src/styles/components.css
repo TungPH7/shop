@@ -411,6 +411,66 @@ textarea.input {
   border-top: 1px solid var(--line);
 }
 
+/* --- Form page, S2 -------------------------------------------------------------- */
+
+/* The back link (S2.2) over the card of the form (S2.4): at most 640 px, centred. In
+   the card, the title (S2.3), the banner (S2.5), the name, slug and description on
+   full rows, the prices and the two choices side by side, then the buttons on the
+   right (S2.13, S2.14). One column under 640 px. */
+.form-page {
+  max-width: 640px;
+  margin-inline: auto;
+}
+
+.form-page__back {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-4);
+  font: var(--fw-semibold) var(--fs-md) / 19.6px var(--font);
+  text-decoration: none;
+}
+
+.form-page__back:hover {
+  text-decoration: underline;
+}
+
+.product-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.product-form__header > h1 {
+  margin-bottom: var(--space-1);
+}
+
+.product-form__subtitle {
+  margin: 0;
+  color: var(--muted);
+}
+
+.product-form__pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+
+.product-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
+
+@media (width < 640px) {
+  .product-form__pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* --- Banner ------------------------------------------------------------------- */
 
 /* Error: role=alert; warning: role=status (S2.5, S2.7). */
@@ -422,6 +482,11 @@ textarea.input {
   color: var(--text);
   font: var(--fw-regular) var(--fs-base) / var(--lh-base) var(--font);
   border-radius: var(--r-field);
+}
+
+/* The message of a banner is a <p>, whose margin would push the banner open. */
+.banner > p {
+  margin: 0;
 }
 
 .banner--error {

@@ -38,5 +38,57 @@
     "empty": "No products yet.",
     "error": "Couldn't load the products.",
     "retry": "Try again"
+  },
+  "form": {
+    "back": "Products",
+    "addTitle": "Add product",
+    "subtitle": "Customers only see products that are Active.",
+    "name": {
+      "label": "Product name",
+      "placeholder": "e.g. Basic round-neck tee"
+    },
+    "slug": {
+      "label": "URL slug",
+      "hint": "Generated from the name. If taken, -2, -3… is added."
+    },
+    "description": {
+      "label": "Description (optional)",
+      "hint": "Line breaks are kept. HTML tags show as plain text."
+    },
+    "price": {
+      "label": "Price (₫)"
+    },
+    "compareAtPrice": {
+      "label": "Compare-at price (₫) (optional)",
+      "hint": "Leave empty if there's no discount. With a compare-at price, customers see it struck through with the percentage off."
+    },
+    "status": {
+      "legend": "Status",
+      "hint": "Hidden: customers can't see the product and its page returns 404."
+    },
+    "availability": {
+      "legend": "Availability",
+      "hint": "Out-of-stock products still show in the customer list."
+    },
+    "cancel": "Cancel",
+    "submitAdd": "Add product",
+    "saving": "Saving…",
+    "added": "Product added",
+    "saveFailed": "Couldn't save. Please try again.",
+    "errors": {
+      "nameRequired": "Enter a product name",
+      "nameTooLong": "Name must be 150 characters or fewer",
+      "slugFormat": "Use lowercase a–z, digits and hyphens only, with no hyphen at the start or end.",
+      "slugTooLong": "Slug must be 100 characters or fewer",
+      "slugTaken": "This slug is already in use",
+      "slugNotGenerated": "Every slug made from this name is taken. Type a slug yourself.",
+      "descriptionTooLong": "Description must be 5,000 characters or fewer",
+      "priceMin": "Price must be greater than 0",
+      "priceWhole": "Price must be a whole number of đồng",
+      "priceMax": "Price can't exceed 999.999.999 ₫",
+      "priceInvalid": "Enter the price as a number, like 250.000",
+      "compareAtPriceGreater": "Compare-at price must be greater than the price",
+      "invalid": "This value isn't valid."
+    }
   }
 }

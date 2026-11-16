@@ -24,6 +24,15 @@ export const adminProductSummarySchema = z.object({
 });
 export type AdminProductSummary = z.infer<typeof adminProductSummarySchema>;
 
+// One product with every field, as POST, GET and PUT of /api/admin/products/{id} answer.
+// `version` goes back with an edit (AC13).
+export const adminProductSchema = adminProductSummarySchema.extend({
+  description: z.string().nullable(),
+  compareAtPrice: z.number().int().positive().nullable(),
+  version: z.number().int().nonnegative(),
+});
+export type AdminProduct = z.infer<typeof adminProductSchema>;
+
 // Page<AdminProductSummary>: totalItems counts every product that matches the
 // filters, not only those of the page.
 export const adminProductPageSchema = z.object({

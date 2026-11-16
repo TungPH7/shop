@@ -26,6 +26,35 @@ describe('routes', () => {
     expect(router.state.location.pathname).toBe('/products');
   });
 
+  it('opens the add form S2 on /products/new without signing in (US2)', async () => {
+    const router = createMemoryRouter(routes, { initialEntries: ['/products/new'] });
+    renderWithRouter(router);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Add product' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /Product name/ })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/products/new');
+  });
+
+  it('goes from Add product of the list (S1.3) to the add form (S2)', async () => {
+    server.use(
+      http.get('*/admin/products', () =>
+        HttpResponse.json({ items: [], totalItems: 0, offset: 0, limit: 20 }),
+      ),
+    );
+    const router = createMemoryRouter(routes, { initialEntries: ['/products'] });
+    const { user } = renderWithRouter(router);
+    await screen.findByText('No products yet.');
+
+    await user.click(screen.getAllByRole('link', { name: 'Add product' })[0]!);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Add product' }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/products/new');
+  });
+
   it('has no product detail page of the template', async () => {
     renderAt('/products/p-001');
 
