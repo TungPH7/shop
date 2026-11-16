@@ -45,8 +45,7 @@ export function ProductTable({ isBusy, children }: ProductTableProps) {
       role="region"
       aria-label={t('table.label')}
       aria-busy={isBusy}
-      // The table scrolls sideways under 1024 px: a keyboard user must reach it (S1.6).
-      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
+      // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- reason: the table scrolls sideways under 1024 px, so a keyboard user must reach it (S1.6)
       tabIndex={0}
     >
       <table className="table">
