@@ -191,10 +191,7 @@ Không cần tài khoản, làm được ngay:
 | Đổi ô **Theme** sang `Dark`, rồi `Light`, rồi `System` | Màu cả trang đổi **ngay**: tối, sáng, rồi theo cài đặt sáng/tối của máy |
 | Chọn `Dark`, rồi tải lại trang (F5) | Trang vẫn tối, và **không nháy** màu sáng lúc tải — app nhớ lựa chọn |
 | Gõ bừa một địa chỉ sai, ví dụ `localhost:5173/abcxyz` | Hiện trang **404**, menu vẫn còn, app **không chết** |
-| Vào **Products** | Xem ghi chú ngay bên dưới 👇 |
-
-> **Trang Products báo `Failed to load products: Response did not match the expected schema` — đây là kết quả ĐÚNG, không phải hỏng.**
-> Máy chủ demo đang trả dữ liệu theo định dạng **khác** với định dạng mà app yêu cầu. App phát hiện sai lệch **ngay tại cửa vào** và báo lỗi rõ ràng, thay vì hiển thị dữ liệu sai lệch rồi vỡ ở chỗ khác. Đây chính là cơ chế an toàn dữ liệu của dự án đang hoạt động. Phần Product ở đây là **feature mẫu** để lập trình viên nhân bản, chưa phải tích hợp thật với máy chủ đó.
+| Vào **Products** | Chỉ có tiêu đề **Products**; danh sách sản phẩm sẽ có từ US1 (SHOP-19) |
 
 **Muốn đăng nhập thử?** Cần một tài khoản do người quản trị **máy chủ dữ liệu** cấp (repo này không tự tạo tài khoản). Có tài khoản rồi thì vào **Login**, nhập email + mật khẩu; đăng nhập xong menu sẽ hiện email của bạn, và các trang quản trị chỉ mở ra nếu tài khoản **đủ quyền**.
 
