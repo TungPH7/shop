@@ -1,20 +1,25 @@
 package com.tungph7.learnpostgres.feature.product.service;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import com.tungph7.learnpostgres.common.error.BusinessException;
@@ -77,6 +82,66 @@ class AdminProductServiceTest {
     when(repository.saveAndFlush(any(Product.class))).thenThrow(other);
 
     assertThatThrownBy(() -> service.create(request("ao-thun"))).isSameAs(other);
+  }
+
+  @Test
+  void create_withoutSlug_readsTheTakenSlugsOnceAndTakesTheFirstFreeNumber() {
+    when(repository.findSlugsOfFamily("ao-thun", "ao-thun-%"))
+        .thenReturn(List.of("ao-thun", "Ao-Thun-2", "ao-thun-3", "ao-thun-co-tron", "ao-thun-5"));
+    Product saved = savedProduct();
+    when(repository.saveAndFlush(any(Product.class))).thenReturn(saved);
+
+    service.create(request(null));
+
+    assertThat(savedSlug()).isEqualTo("ao-thun-4");
+    verify(repository, times(1)).findSlugsOfFamily(anyString(), anyString());
+    verify(repository, never()).existsBySlug(anyString());
+  }
+
+  @Test
+  void create_withoutSlug_whenEveryNumberUpToTheLimitIsTaken_returns409AndSavesNothing() {
+    List<String> taken = new ArrayList<>(List.of("ao-thun"));
+    for (int number = 2; number <= AdminProductService.MAX_SLUG_NUMBER; number++) {
+      taken.add("ao-thun-" + number);
+    }
+    when(repository.findSlugsOfFamily(anyString(), anyString())).thenReturn(taken);
+
+    assertThatThrownBy(() -> service.create(request(null)))
+        .isInstanceOf(ConflictException.class)
+        .extracting(e -> ((BusinessException) e).getCode())
+        .isEqualTo(ErrorCode.PRODUCT_SLUG_DUPLICATED);
+
+    verify(repository, never()).saveAndFlush(any(Product.class));
+  }
+
+  @Test
+  void create_withALongName_readsTheSlugsOfTheBaseCutForTheLongestSuffix() {
+    String base = "a".repeat(100);
+    String stem = "a".repeat(100 - ("-" + AdminProductService.MAX_SLUG_NUMBER).length());
+    when(repository.findSlugsOfFamily(base, stem + "%"))
+        .thenReturn(List.of(base, "a".repeat(98) + "-2"));
+    Product saved = savedProduct();
+    when(repository.saveAndFlush(any(Product.class))).thenReturn(saved);
+
+    service.create(
+        new CreateProductRequest(
+            "a".repeat(150), null, null, new BigDecimal("1"), null, null, null));
+
+    assertThat(savedSlug()).isEqualTo("a".repeat(98) + "-3");
+  }
+
+  /** The product the repository returns once saved: only its version is read back. */
+  private static Product savedProduct() {
+    Product saved = mock(Product.class);
+    when(saved.getVersion()).thenReturn(0L);
+    return saved;
+  }
+
+  /** The slug of the product the service handed to the repository. */
+  private String savedSlug() {
+    ArgumentCaptor<Product> product = ArgumentCaptor.forClass(Product.class);
+    verify(repository).saveAndFlush(product.capture());
+    return product.getValue().getSlug();
   }
 
   private static CreateProductRequest request(String slug) {

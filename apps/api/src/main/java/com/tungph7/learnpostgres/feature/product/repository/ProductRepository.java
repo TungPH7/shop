@@ -1,5 +1,6 @@
 package com.tungph7.learnpostgres.feature.product.repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,6 +25,25 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
 
   /** Whether a product has this slug, compared case-insensitively ({@code citext}). */
   boolean existsBySlug(String slug);
+
+  /**
+   * The slugs equal to {@code base} or matching the {@code LIKE} pattern, both compared
+   * case-insensitively ({@code citext}): every slug a generated slug and its suffixes could take,
+   * read in one query.
+   *
+   * <p>Native SQL, since JPQL refuses {@code LIKE} on the {@code citext} type of the slug. Both
+   * parameters are cast to {@code citext}: a {@code text} parameter would make PostgreSQL compare
+   * as {@code text}, case-sensitively.
+   *
+   * @param base the generated slug
+   * @param pattern a {@code LIKE} pattern, such as {@code ao-thun-%}
+   */
+  @Query(
+      value =
+          "SELECT slug::text FROM app.products WHERE slug = CAST(:base AS public.citext)"
+              + " OR slug LIKE CAST(:pattern AS public.citext)",
+      nativeQuery = true)
+  List<String> findSlugsOfFamily(@Param("base") String base, @Param("pattern") String pattern);
 
   /**
    * Deletes the product with this id in one statement, without loading it or checking its version.

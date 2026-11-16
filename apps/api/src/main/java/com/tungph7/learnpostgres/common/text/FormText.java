@@ -41,8 +41,8 @@ public final class FormText {
 
   /**
    * Whether a character is white space or a line terminator for ECMAScript: one of the control
-   * characters TAB, LF, VT, FF and CR, U+FEFF, or a character of Unicode {@code Zs} (SP, U+00A0
-   * and the other spaces), {@code Zl} (U+2028) or {@code Zp} (U+2029).
+   * characters TAB, LF, VT, FF and CR, U+FEFF, or a character of Unicode {@code Zs} (SP, U+00A0 and
+   * the other spaces), {@code Zl} (U+2028) or {@code Zp} (U+2029).
    */
   static boolean isWhiteSpace(char c) {
     return switch (c) {

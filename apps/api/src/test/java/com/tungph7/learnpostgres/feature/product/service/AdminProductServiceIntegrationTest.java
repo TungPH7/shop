@@ -2,12 +2,20 @@ package com.tungph7.learnpostgres.feature.product.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
+import java.sql.Timestamp;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -37,7 +45,11 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.jayway.jsonpath.JsonPath;
 import com.tungph7.learnpostgres.AbstractContainerBaseTest;
+import com.tungph7.learnpostgres.feature.product.domain.Product;
+import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
+import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 import com.tungph7.learnpostgres.feature.product.dto.AdminProduct;
 import com.tungph7.learnpostgres.feature.product.dto.CreateProductRequest;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
@@ -55,9 +67,9 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
 
   private static final String URL = "/api/admin/products";
 
-  /** An ISO-8601 instant in UTC with at most milliseconds, as the API Contract writes it. */
-  private static final String MILLIS_INSTANT =
-      "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z";
+  /** An ISO-8601 instant in UTC with exactly three digits of milliseconds, as the API Contract. */
+  private static final String CONTRACT_INSTANT =
+      "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z";
 
   @Autowired MockMvc mockMvc;
   @Autowired AdminProductService service;
@@ -103,8 +115,8 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
             .andExpect(jsonPath("$.compareAtPrice").value(250000))
             .andExpect(jsonPath("$.status").value("ACTIVE"))
             .andExpect(jsonPath("$.availability").value("IN_STOCK"))
-            .andExpect(jsonPath("$.createdAt").value(matchesPattern(MILLIS_INSTANT)))
-            .andExpect(jsonPath("$.updatedAt").value(matchesPattern(MILLIS_INSTANT)))
+            .andExpect(jsonPath("$.createdAt").value(matchesPattern(CONTRACT_INSTANT)))
+            .andExpect(jsonPath("$.updatedAt").value(matchesPattern(CONTRACT_INSTANT)))
             .andExpect(jsonPath("$.version").value(0))
             .andReturn()
             .getResponse()
@@ -128,6 +140,57 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
         .containsEntry("availability", "IN_STOCK");
     // The legacy column follows price_vnd (trigger of V4), so v0.2.0 reads it after a rollback.
     assertThat((BigDecimal) row.get("price")).isEqualByComparingTo("200000");
+  }
+
+  @Test
+  void save_holdsTheInstantsTheDatabaseKeeps() {
+    for (int round = 0; round < 20; round++) {
+      Product product =
+          repository.saveAndFlush(
+              new Product(
+                  "Instant " + round,
+                  "instant-" + round,
+                  null,
+                  1L,
+                  null,
+                  ProductStatus.ACTIVE,
+                  ProductAvailability.IN_STOCK));
+
+      Map<String, Object> row =
+          transaction.execute(
+              status ->
+                  jdbc.sql("SELECT created_at, updated_at FROM app.products WHERE id = :id")
+                      .param("id", product.getId())
+                      .query()
+                      .singleRow());
+      assertThat(product.getCreatedAt()).isEqualTo(instantOf(row.get("created_at")));
+      assertThat(product.getUpdatedAt()).isEqualTo(instantOf(row.get("updated_at")));
+    }
+  }
+
+  @Test
+  void create_returnsTheMillisecondsALaterReadShows() throws Exception {
+    String body =
+        postJson("{\"name\":\"Áo thun\",\"price\":1}")
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.createdAt").value(matchesPattern(CONTRACT_INSTANT)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    String listed =
+        mockMvc
+            .perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get(URL))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.items[0].createdAt").value(matchesPattern(CONTRACT_INSTANT)))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    assertThat(JsonPath.<String>read(listed, "$.items[0].createdAt"))
+        .isEqualTo(JsonPath.<String>read(body, "$.createdAt"));
+    assertThat(JsonPath.<String>read(listed, "$.items[0].updatedAt"))
+        .isEqualTo(JsonPath.<String>read(body, "$.updatedAt"));
   }
 
   @Test
@@ -199,6 +262,29 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
     assertThat(second).isEqualTo("a".repeat(98) + "-2").hasSize(100);
   }
 
+  @Test
+  void create_withALongName_seesTheTakenSuffixesOfTheCutBase() {
+    String name = "b".repeat(150);
+    create(name, null);
+    create(name, null);
+    create(name, null);
+
+    assertThat(create(name, null).slug()).isEqualTo("b".repeat(98) + "-4");
+  }
+
+  @Test
+  void create_withoutSlug_readsTheTakenSlugsInOneQuery() {
+    create("Áo thun", null);
+    create("Áo thun", null);
+    create("Áo thun cổ tròn", null);
+    clearInvocations(repository);
+
+    assertThat(create("Áo thun", null).slug()).isEqualTo("ao-thun-3");
+
+    verify(repository, times(1)).findSlugsOfFamily(anyString(), anyString());
+    verify(repository, never()).existsBySlug(anyString());
+  }
+
   // ============================================================
   // Typed slug
   // ============================================================
@@ -252,8 +338,11 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
   @Test
   void create_whenTheGeneratedSlugIsTakenAfterTheCheck_retriesWithTheNextNumber() {
     create("Áo thun cổ tròn", null);
-    // The check runs before the other add commits, so it still sees the slug free.
-    missTheSlugOnce("ao-thun-co-tron");
+    // The read runs before the other add commits, so it still sees every slug free.
+    doReturn(List.of())
+        .doAnswer(invocation -> slugsOfFamily(invocation.getArgument(0), invocation.getArgument(1)))
+        .when(repository)
+        .findSlugsOfFamily("ao-thun-co-tron", "ao-thun-co-tron-%");
 
     AdminProduct product = create("Áo thun cổ tròn", null);
 
@@ -371,6 +460,16 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
         .existsBySlug(slug);
   }
 
+  private List<String> slugsOfFamily(String base, String pattern) {
+    return transaction.execute(
+        status ->
+            jdbc.sql("SELECT slug::text FROM app.products WHERE slug = :base OR slug LIKE :pattern")
+                .param("base", base)
+                .param("pattern", pattern)
+                .query(String.class)
+                .list());
+  }
+
   private boolean slugExists(String slug) {
     return transaction.execute(
         status ->
@@ -383,6 +482,15 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
 
   private void deleteAll() {
     transaction.executeWithoutResult(status -> jdbc.sql("DELETE FROM app.products").update());
+  }
+
+  /** A {@code timestamptz} as PgJDBC returns it, with its microseconds. */
+  private static Instant instantOf(Object value) {
+    return switch (value) {
+      case Timestamp timestamp -> timestamp.toInstant();
+      case OffsetDateTime offsetDateTime -> offsetDateTime.toInstant();
+      default -> throw new IllegalArgumentException("Not a timestamptz: " + value);
+    };
   }
 
   private long count() {
