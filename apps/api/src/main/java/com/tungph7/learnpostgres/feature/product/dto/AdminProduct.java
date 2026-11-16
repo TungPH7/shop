@@ -1,6 +1,7 @@
 package com.tungph7.learnpostgres.feature.product.dto;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 import com.tungph7.learnpostgres.feature.product.domain.Product;
@@ -24,7 +25,11 @@ public record AdminProduct(
     Instant updatedAt,
     long version) {
 
-  /** The product as it was saved. */
+  /**
+   * The product as it was saved. The instants are cut to milliseconds, as the API Contract writes
+   * them: the clock of the JVM may give nanoseconds, the database keeps microseconds, and a later
+   * read must not show another value.
+   */
   public static AdminProduct from(Product product) {
     return new AdminProduct(
         product.getId(),
@@ -35,8 +40,12 @@ public record AdminProduct(
         product.getCompareAtPriceVnd(),
         product.getStatus(),
         product.getAvailability(),
-        product.getCreatedAt(),
-        product.getUpdatedAt(),
+        toMillis(product.getCreatedAt()),
+        toMillis(product.getUpdatedAt()),
         product.getVersion());
+  }
+
+  private static Instant toMillis(Instant instant) {
+    return instant == null ? null : instant.truncatedTo(ChronoUnit.MILLIS);
   }
 }

@@ -1,6 +1,7 @@
 package com.tungph7.learnpostgres.feature.product.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.mockito.Mockito.doReturn;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -54,6 +55,10 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
 
   private static final String URL = "/api/admin/products";
 
+  /** An ISO-8601 instant in UTC with at most milliseconds, as the API Contract writes it. */
+  private static final String MILLIS_INSTANT =
+      "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,3})?Z";
+
   @Autowired MockMvc mockMvc;
   @Autowired AdminProductService service;
   @Autowired DataSource dataSource;
@@ -98,8 +103,8 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
             .andExpect(jsonPath("$.compareAtPrice").value(250000))
             .andExpect(jsonPath("$.status").value("ACTIVE"))
             .andExpect(jsonPath("$.availability").value("IN_STOCK"))
-            .andExpect(jsonPath("$.createdAt").isNotEmpty())
-            .andExpect(jsonPath("$.updatedAt").isNotEmpty())
+            .andExpect(jsonPath("$.createdAt").value(matchesPattern(MILLIS_INSTANT)))
+            .andExpect(jsonPath("$.updatedAt").value(matchesPattern(MILLIS_INSTANT)))
             .andExpect(jsonPath("$.version").value(0))
             .andReturn()
             .getResponse()
