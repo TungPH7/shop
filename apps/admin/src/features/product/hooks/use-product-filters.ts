@@ -6,6 +6,7 @@ import {
   useQueryStates,
 } from 'nuqs';
 
+import { PRODUCTS_MAX_PAGE } from '@/features/product/api/get-products';
 import {
   PRODUCT_STATUS_FILTERS,
   type ProductListFilters,
@@ -18,10 +19,16 @@ import {
 // A wrong value falls back to its default, with no error (S1.11); a default value
 // leaves the URL.
 
-// A page is a whole number from 1, written as digits only: "2.5", "0" or "-2" are
-// not pages.
+// A page is a whole number from 1 to PRODUCTS_MAX_PAGE, written as digits only: "2.5",
+// "0", "-2" or a page whose offset the API cannot take are not pages.
+function pageOf(value: string): number | null {
+  if (!/^[1-9]\d*$/.test(value)) return null;
+  const page = Number(value);
+  return page <= PRODUCTS_MAX_PAGE ? page : null;
+}
+
 const parseAsPage = createParser({
-  parse: (value: string) => (/^[1-9]\d*$/.test(value) ? Number(value) : null),
+  parse: pageOf,
   serialize: (page: number) => String(page),
 });
 
