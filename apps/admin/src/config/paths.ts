@@ -17,14 +17,6 @@ export const paths = {
     path: '/products',
     getHref: () => '/products',
   },
-  productDetail: {
-    path: '/products/:productId',
-    getHref: (productId: string) => `/products/${productId}`,
-  },
-  productEdit: {
-    path: '/admin/products/:productId/edit',
-    getHref: (productId: string) => `/admin/products/${productId}/edit`,
-  },
   about: {
     path: '/about',
     getHref: () => '/about',

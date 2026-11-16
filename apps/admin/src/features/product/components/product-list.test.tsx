@@ -1,27 +1,29 @@
 import { describe, expect, it } from 'vitest';
 
 import { ProductList } from '@/features/product/components/product-list';
-import { renderWithProviders, screen, waitFor } from '@/testing/render';
+import { renderWithProviders, screen } from '@/testing/render';
+import { testI18n } from '@/testing/test-i18n';
 
 describe('ProductList', () => {
-  it('renders products from the API (MSW) with i18n title + plural count', async () => {
+  it('shows the page title S1.2 as the single h1', () => {
     renderWithProviders(<ProductList />);
 
-    expect(await screen.findByText('Test Widget')).toBeInTheDocument();
-    expect(screen.getByText('Test Gadget')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Products' })).toBeInTheDocument(); // product:title
-    expect(screen.getByText('2 products')).toBeInTheDocument(); // product:count plural
+    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole('heading', { level: 1, name: 'Products' })).toBeInTheDocument();
   });
 
-  it('filters the list by the search term (nuqs)', async () => {
-    const { user } = renderWithProviders(<ProductList />);
-    await screen.findByText('Test Widget');
+  it('names the page in Vietnamese', async () => {
+    await testI18n.changeLanguage('vi');
+    renderWithProviders(<ProductList />);
 
-    await user.type(screen.getByRole('searchbox'), 'gadget');
+    expect(screen.getByRole('heading', { level: 1, name: 'Sản phẩm' })).toBeInTheDocument();
+  });
 
-    await waitFor(() => {
-      expect(screen.queryByText('Test Widget')).not.toBeInTheDocument();
-    });
-    expect(screen.getByText('Test Gadget')).toBeInTheDocument();
+  it('shows nothing of the template list: no search box, no list, no status', () => {
+    renderWithProviders(<ProductList />);
+
+    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('list')).not.toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });
