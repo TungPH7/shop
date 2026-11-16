@@ -24,6 +24,10 @@ export default defineConfig({
     // env.ts validates VITE_API_URL at import → provide one for the test run so
     // the api singleton can be imported without the fail-fast throwing.
     env: { VITE_API_URL: 'http://localhost:3000' },
+    // Node would load nuqs on its own, and its react-router adapter would then import a
+    // second copy of react-router, outside the router of the test ("useNavigate() may be
+    // used only in the context of a <Router>"). Inlined, it shares the copy of the app.
+    server: { deps: { inline: ['nuqs'] } },
     coverage: {
       provider: 'v8',
       // The default reporters plus lcov: the CI of ai-orchestrator reads coverage/lcov.info to measure the lines a PR
