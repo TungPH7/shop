@@ -6,9 +6,16 @@ import { renderWithProviders, screen } from '~/testing/render';
 // (điều hướng thật cover ở E2E folder 24). Switcher đổi locale = FULL RELOAD CỐ Ý
 // (`window.location.replace`) chống chớp trắng theme (docs 22 §4.2) → mock `getPathname`
 // (ghép tiền tố locale) + spy `window.location.replace`.
+//
+// The switcher reads the path only when a button is pressed, from the address bar, never with usePathname: on a route
+// with a dynamic param unknown at build time that hook suspends the prerender, and the switcher sits in the bar of every
+// page, outside any Suspense boundary (SHOP-41, review of PR #24). The mock fails a test that calls it.
 vi.mock('~/i18n/navigation', () => ({
-  usePathname: () => '/about',
-  getPathname: ({ href, locale }: { href: string; locale: string }) => `/${locale}${href}`,
+  usePathname: () => {
+    throw new Error('LanguageSwitcher must not read the path while it renders');
+  },
+  getPathname: ({ href, locale }: { href: string; locale: string }) =>
+    `/${locale}${href === '/' ? '' : href}`,
 }));
 
 import { LanguageSwitcher } from './language-switcher';
@@ -24,7 +31,7 @@ beforeEach(() => {
   vi.stubGlobal('location', {
     href: realLocation.href,
     origin: realLocation.origin,
-    pathname: realLocation.pathname,
+    pathname: '/en/about',
     replace: locationReplace,
   });
 });
@@ -44,6 +51,27 @@ describe('LanguageSwitcher', () => {
     const { user } = renderWithProviders(<LanguageSwitcher />, { locale: 'en' });
     await user.click(screen.getByRole('button', { name: 'VI' }));
     expect(locationReplace).toHaveBeenCalledWith('/vi/about');
+  });
+
+  test('keeps the page below the locale, a page with a dynamic param too', async () => {
+    vi.stubGlobal('location', {
+      pathname: '/en/products/ao-thun-co-tron',
+      replace: locationReplace,
+    });
+    const { user } = renderWithProviders(<LanguageSwitcher />, { locale: 'en' });
+
+    await user.click(screen.getByRole('button', { name: 'VI' }));
+
+    expect(locationReplace).toHaveBeenCalledWith('/vi/products/ao-thun-co-tron');
+  });
+
+  test('goes to the home page of the other locale from the home page', async () => {
+    vi.stubGlobal('location', { pathname: '/en', replace: locationReplace });
+    const { user } = renderWithProviders(<LanguageSwitcher />, { locale: 'en' });
+
+    await user.click(screen.getByRole('button', { name: 'VI' }));
+
+    expect(locationReplace).toHaveBeenCalledWith('/vi');
   });
 
   test('aria-label dịch theo locale (vi)', () => {

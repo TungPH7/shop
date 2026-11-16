@@ -1,13 +1,14 @@
 'use client';
 
-import { type ReactNode } from 'react';
+import { Suspense, type ReactNode } from 'react';
 
 import { useTranslations } from 'next-intl';
 
 import { LanguageSwitcher } from '~/components/language-switcher';
 import { ThemeSwitcher } from '~/components/theme-switcher';
 import { NAV_ITEMS, isCurrentPath } from '~/features/site/model/nav';
-import { Link, usePathname } from '~/i18n/navigation';
+import { usePathname } from '~/i18n/navigation';
+import { StaticLink } from '~/i18n/static-link';
 import { siteConfig } from '~/lib/site-config';
 
 interface SiteNavProps {
@@ -25,29 +26,25 @@ interface SiteNavProps {
  * (components.css, Page frame). The current section is the link with aria-current="page", which the CSS styles, so the
  * look and the accessibility tree cannot drift apart.
  *
- * A client component: usePathname of next-intl reads the path on the client to mark the current section.
+ * A client component: usePathname of next-intl reads the path to mark the current section. On a route with a dynamic
+ * param that generateStaticParams does not list, the path is not known during the prerender and the hook suspends;
+ * under cacheComponents that fails the build outside a Suspense boundary (SHOP-41). So only the links read it, in a
+ * boundary whose fallback is the same links with no section marked: the bar stays in the static shell, and nothing
+ * moves when the mark streams in. The links are StaticLink, not the Link of next-intl, which reads the path as well.
  */
 export function SiteNav({ account }: SiteNavProps) {
   const t = useTranslations('Nav');
-  const pathname = usePathname();
 
   return (
     <header className="site-nav">
-      <Link className="pill pill--brand" href="/">
+      <StaticLink className="pill pill--brand" href="/">
         {siteConfig.name}
-      </Link>
+      </StaticLink>
 
       <nav className="pill site-nav__links" aria-label={t('label')}>
-        {NAV_ITEMS.map((item) => (
-          <Link
-            key={item.href}
-            className="pill__link"
-            href={item.href}
-            aria-current={isCurrentPath(pathname, item.href) ? 'page' : undefined}
-          >
-            {t(item.key)}
-          </Link>
-        ))}
+        <Suspense fallback={<NavLinks pathname={null} />}>
+          <CurrentNavLinks />
+        </Suspense>
       </nav>
 
       <div className="pill site-nav__tools">
@@ -57,4 +54,25 @@ export function SiteNav({ account }: SiteNavProps) {
       </div>
     </header>
   );
+}
+
+/** The links of the main navigation, with the section of the current path marked. */
+function CurrentNavLinks() {
+  return <NavLinks pathname={usePathname()} />;
+}
+
+/** The links of the main navigation; `pathname` null marks none. */
+function NavLinks({ pathname }: { pathname: string | null }) {
+  const t = useTranslations('Nav');
+
+  return NAV_ITEMS.map((item) => (
+    <StaticLink
+      key={item.href}
+      className="pill__link"
+      href={item.href}
+      aria-current={pathname !== null && isCurrentPath(pathname, item.href) ? 'page' : undefined}
+    >
+      {t(item.key)}
+    </StaticLink>
+  ));
 }
