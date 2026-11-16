@@ -1,5 +1,9 @@
 package com.tungph7.learnpostgres.feature.product.dto;
 
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.Set;
+
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 
 /**
@@ -7,18 +11,18 @@ import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
  * status. Only the admin list has it; the store always lists {@code ACTIVE} products (NFR9).
  */
 public enum ProductStatusFilter {
-  ALL(null),
-  ACTIVE(ProductStatus.ACTIVE),
-  HIDDEN(ProductStatus.HIDDEN);
+  ALL(EnumSet.allOf(ProductStatus.class)),
+  ACTIVE(EnumSet.of(ProductStatus.ACTIVE)),
+  HIDDEN(EnumSet.of(ProductStatus.HIDDEN));
 
-  private final ProductStatus status;
+  private final Set<ProductStatus> statuses;
 
-  ProductStatusFilter(ProductStatus status) {
-    this.status = status;
+  ProductStatusFilter(Set<ProductStatus> statuses) {
+    this.statuses = Collections.unmodifiableSet(statuses);
   }
 
-  /** The one status to list, or {@code null} for every status. */
-  public ProductStatus status() {
-    return status;
+  /** The statuses to list: every status for {@link #ALL}, else the one status. */
+  public Set<ProductStatus> statuses() {
+    return statuses;
   }
 }

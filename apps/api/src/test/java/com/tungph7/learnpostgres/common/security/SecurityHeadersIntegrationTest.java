@@ -37,7 +37,7 @@ class SecurityHeadersIntegrationTest extends AbstractContainerBaseTest {
   void cors_preflight_from_allowed_origin_succeeds() throws Exception {
     mockMvc
         .perform(
-            options("/api/products")
+            options("/api/admin/products")
                 .header("Origin", "http://localhost:5173")
                 .header("Access-Control-Request-Method", "POST")
                 .header("Access-Control-Request-Headers", "Content-Type"))
@@ -49,7 +49,7 @@ class SecurityHeadersIntegrationTest extends AbstractContainerBaseTest {
   void cors_preflight_from_disallowed_origin_returns_403() throws Exception {
     mockMvc
         .perform(
-            options("/api/products")
+            options("/api/admin/products")
                 .header("Origin", "http://evil.com")
                 .header("Access-Control-Request-Method", "POST"))
         .andExpect(status().isForbidden());

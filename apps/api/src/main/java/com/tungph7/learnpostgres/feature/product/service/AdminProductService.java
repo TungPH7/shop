@@ -103,7 +103,7 @@ public class AdminProductService {
         queryRepository.findPage(
             new Criteria(
                 ProductSearchTerms.of(q).orElse(null),
-                status.status(),
+                status.statuses(),
                 ProductSort.NEWEST,
                 offset,
                 limit));

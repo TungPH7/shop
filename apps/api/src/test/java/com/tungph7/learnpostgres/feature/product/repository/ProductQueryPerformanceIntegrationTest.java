@@ -3,8 +3,10 @@ package com.tungph7.learnpostgres.feature.product.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 import javax.sql.DataSource;
 
@@ -36,6 +38,9 @@ class ProductQueryPerformanceIntegrationTest extends AbstractContainerBaseTest {
   private static final int PRODUCTS = 10_000;
   private static final int RUNS = 5;
   private static final long MAX_MEDIAN_MILLIS = 200;
+  private static final Set<ProductStatus> EVERY_STATUS = EnumSet.allOf(ProductStatus.class);
+  private static final Set<ProductStatus> ONLY_ACTIVE = Set.of(ProductStatus.ACTIVE);
+  private static final Set<ProductStatus> ONLY_HIDDEN = Set.of(ProductStatus.HIDDEN);
   private static final Logger LOG =
       LoggerFactory.getLogger(ProductQueryPerformanceIntegrationTest.class);
 
@@ -46,34 +51,25 @@ class ProductQueryPerformanceIntegrationTest extends AbstractContainerBaseTest {
   void findPage_with10000Products_takesAtMost200MillisecondsAtTheMedianForEachKindOfList() {
     insertProducts();
     Map<String, Criteria> kinds = new LinkedHashMap<>();
-    kinds.put("store, newest", criteria(null, ProductStatus.ACTIVE, ProductSort.NEWEST, 0, 24));
+    kinds.put("store, newest", criteria(null, ONLY_ACTIVE, ProductSort.NEWEST, 0, 24));
+    kinds.put("store, price asc", criteria(null, ONLY_ACTIVE, ProductSort.PRICE_ASC, 0, 24));
+    kinds.put("store, price desc", criteria(null, ONLY_ACTIVE, ProductSort.PRICE_DESC, 0, 24));
+    kinds.put("store, last page", criteria(null, ONLY_ACTIVE, ProductSort.NEWEST, 8_976, 24));
+    kinds.put("store, 100 products", criteria(null, ONLY_ACTIVE, ProductSort.PRICE_ASC, 0, 100));
     kinds.put(
-        "store, price asc", criteria(null, ProductStatus.ACTIVE, ProductSort.PRICE_ASC, 0, 24));
+        "store, search, relevance", criteria("ao thun", ONLY_ACTIVE, ProductSort.RELEVANCE, 0, 24));
+    kinds.put("store, search, newest", criteria("ao thun", ONLY_ACTIVE, ProductSort.NEWEST, 0, 24));
     kinds.put(
-        "store, price desc", criteria(null, ProductStatus.ACTIVE, ProductSort.PRICE_DESC, 0, 24));
+        "store, search, price asc", criteria("ao", ONLY_ACTIVE, ProductSort.PRICE_ASC, 0, 24));
     kinds.put(
-        "store, last page", criteria(null, ProductStatus.ACTIVE, ProductSort.NEWEST, 8_976, 24));
-    kinds.put(
-        "store, 100 products", criteria(null, ProductStatus.ACTIVE, ProductSort.PRICE_ASC, 0, 100));
-    kinds.put(
-        "store, search, relevance",
-        criteria("ao thun", ProductStatus.ACTIVE, ProductSort.RELEVANCE, 0, 24));
-    kinds.put(
-        "store, search, newest",
-        criteria("ao thun", ProductStatus.ACTIVE, ProductSort.NEWEST, 0, 24));
-    kinds.put(
-        "store, search, price asc",
-        criteria("ao", ProductStatus.ACTIVE, ProductSort.PRICE_ASC, 0, 24));
-    kinds.put(
-        "store, search, price desc",
-        criteria("dam", ProductStatus.ACTIVE, ProductSort.PRICE_DESC, 0, 24));
+        "store, search, price desc", criteria("dam", ONLY_ACTIVE, ProductSort.PRICE_DESC, 0, 24));
     kinds.put(
         "store, search, relevance, page 20",
-        criteria("ao", ProductStatus.ACTIVE, ProductSort.RELEVANCE, 456, 24));
-    kinds.put("admin, all", criteria(null, null, ProductSort.NEWEST, 0, 20));
-    kinds.put("admin, hidden", criteria(null, ProductStatus.HIDDEN, ProductSort.NEWEST, 0, 20));
-    kinds.put("admin, search", criteria("quan jean", null, ProductSort.NEWEST, 0, 20));
-    kinds.put("admin, last page", criteria(null, null, ProductSort.NEWEST, 9_980, 20));
+        criteria("ao", ONLY_ACTIVE, ProductSort.RELEVANCE, 456, 24));
+    kinds.put("admin, all", criteria(null, EVERY_STATUS, ProductSort.NEWEST, 0, 20));
+    kinds.put("admin, hidden", criteria(null, ONLY_HIDDEN, ProductSort.NEWEST, 0, 20));
+    kinds.put("admin, search", criteria("quan jean", EVERY_STATUS, ProductSort.NEWEST, 0, 20));
+    kinds.put("admin, last page", criteria(null, EVERY_STATUS, ProductSort.NEWEST, 9_980, 20));
 
     Map<String, Long> medians = new LinkedHashMap<>();
     kinds.forEach((kind, criteria) -> medians.put(kind, medianMillis(criteria)));
@@ -101,9 +97,9 @@ class ProductQueryPerformanceIntegrationTest extends AbstractContainerBaseTest {
   }
 
   private static Criteria criteria(
-      String q, ProductStatus status, ProductSort sort, int offset, int limit) {
+      String q, Set<ProductStatus> statuses, ProductSort sort, int offset, int limit) {
     ProductSearchTerms search = q == null ? null : ProductSearchTerms.of(q).orElseThrow();
-    return new Criteria(search, status, sort, offset, limit);
+    return new Criteria(search, statuses, sort, offset, limit);
   }
 
   /**

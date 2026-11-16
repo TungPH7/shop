@@ -8,7 +8,9 @@ import java.sql.Connection;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -45,6 +47,9 @@ import com.tungph7.learnpostgres.feature.product.repository.ProductQueryReposito
 class ProductQueryRepositoryIntegrationTest extends AbstractContainerBaseTest {
 
   private static final Instant T0 = Instant.parse("2026-11-16T02:00:00Z");
+  private static final Set<ProductStatus> EVERY_STATUS = EnumSet.allOf(ProductStatus.class);
+  private static final Set<ProductStatus> ONLY_ACTIVE = Set.of(ProductStatus.ACTIVE);
+  private static final Set<ProductStatus> ONLY_HIDDEN = Set.of(ProductStatus.HIDDEN);
 
   @Autowired ProductQueryRepository repository;
   @Autowired DataSource dataSource;
@@ -218,7 +223,8 @@ class ProductQueryRepositoryIntegrationTest extends AbstractContainerBaseTest {
     insert("Đồng hồ cũ", 9_999_999_999L, ProductStatus.HIDDEN, minutes(1));
     insert("Áo thun", 250_000L, ProductStatus.ACTIVE, minutes(2));
 
-    Result result = repository.findPage(new Criteria(null, null, ProductSort.PRICE_DESC, 0, 20));
+    Result result =
+        repository.findPage(new Criteria(null, EVERY_STATUS, ProductSort.PRICE_DESC, 0, 20));
 
     assertThat(result.items()).extracting(Row::priceVnd).containsExactly(9_999_999_999L, 250_000L);
   }
@@ -232,8 +238,7 @@ class ProductQueryRepositoryIntegrationTest extends AbstractContainerBaseTest {
     insert("Áo thun cổ tròn", 250_000L, ProductStatus.ACTIVE, minutes(1));
     insert("Bao tay len", 0L, ProductStatus.HIDDEN, minutes(2));
 
-    Result result =
-        repository.findPage(new Criteria(null, ProductStatus.ACTIVE, ProductSort.NEWEST, 0, 24));
+    Result result = repository.findPage(new Criteria(null, ONLY_ACTIVE, ProductSort.NEWEST, 0, 24));
 
     assertThat(names(result)).containsExactly("Áo thun cổ tròn");
     assertThat(result.totalItems()).isEqualTo(1);
@@ -246,7 +251,7 @@ class ProductQueryRepositoryIntegrationTest extends AbstractContainerBaseTest {
 
     Result result =
         repository.findPage(
-            new Criteria(terms("ao thun"), ProductStatus.ACTIVE, ProductSort.RELEVANCE, 0, 24));
+            new Criteria(terms("ao thun"), ONLY_ACTIVE, ProductSort.RELEVANCE, 0, 24));
 
     assertThat(names(result)).containsExactly("Áo thun cổ tròn");
     assertThat(result.totalItems()).isEqualTo(1);
@@ -257,19 +262,19 @@ class ProductQueryRepositoryIntegrationTest extends AbstractContainerBaseTest {
     insert("Áo thun cổ tròn", 250_000L, ProductStatus.ACTIVE, minutes(1));
     insert("Bao tay len", 0L, ProductStatus.HIDDEN, minutes(2));
 
-    Result result =
-        repository.findPage(new Criteria(null, ProductStatus.HIDDEN, ProductSort.NEWEST, 0, 20));
+    Result result = repository.findPage(new Criteria(null, ONLY_HIDDEN, ProductSort.NEWEST, 0, 20));
 
     assertThat(names(result)).containsExactly("Bao tay len");
     assertThat(result.totalItems()).isEqualTo(1);
   }
 
   @Test
-  void findPage_withoutStatus_findsEveryStatus() {
+  void findPage_withEveryStatus_findsEveryStatus() {
     insert("Áo thun cổ tròn", 250_000L, ProductStatus.ACTIVE, minutes(1));
     insert("Bao tay len", 0L, ProductStatus.HIDDEN, minutes(2));
 
-    Result result = repository.findPage(new Criteria(null, null, ProductSort.NEWEST, 0, 20));
+    Result result =
+        repository.findPage(new Criteria(null, EVERY_STATUS, ProductSort.NEWEST, 0, 20));
 
     assertThat(names(result)).containsExactly("Bao tay len", "Áo thun cổ tròn");
     assertThat(result.totalItems()).isEqualTo(2);
@@ -285,9 +290,11 @@ class ProductQueryRepositoryIntegrationTest extends AbstractContainerBaseTest {
       insert("Áo thun " + i, 100_000L + i, minutes(i));
     }
 
-    Result first = repository.findPage(new Criteria(null, null, ProductSort.NEWEST, 0, 20));
-    Result second = repository.findPage(new Criteria(null, null, ProductSort.NEWEST, 20, 20));
-    Result beyond = repository.findPage(new Criteria(null, null, ProductSort.NEWEST, 40, 20));
+    Result first = repository.findPage(new Criteria(null, EVERY_STATUS, ProductSort.NEWEST, 0, 20));
+    Result second =
+        repository.findPage(new Criteria(null, EVERY_STATUS, ProductSort.NEWEST, 20, 20));
+    Result beyond =
+        repository.findPage(new Criteria(null, EVERY_STATUS, ProductSort.NEWEST, 40, 20));
 
     assertThat(first.items()).hasSize(20);
     assertThat(first.items().getFirst().name()).isEqualTo("Áo thun 25");
@@ -310,7 +317,7 @@ class ProductQueryRepositoryIntegrationTest extends AbstractContainerBaseTest {
 
     List<UUID> paged = new ArrayList<>();
     for (int offset = 0; offset < 9; offset += 3) {
-      Result page = repository.findPage(new Criteria(search, null, sort, offset, 3));
+      Result page = repository.findPage(new Criteria(search, EVERY_STATUS, sort, offset, 3));
       page.items().forEach(row -> paged.add(row.id()));
       assertThat(page.totalItems()).isEqualTo(7);
     }
@@ -343,7 +350,10 @@ UPDATE app.products
             .toInstant();
 
     Row row =
-        repository.findPage(new Criteria(null, null, ProductSort.NEWEST, 0, 20)).items().getFirst();
+        repository
+            .findPage(new Criteria(null, EVERY_STATUS, ProductSort.NEWEST, 0, 20))
+            .items()
+            .getFirst();
 
     assertThat(row)
         .isEqualTo(
@@ -383,7 +393,7 @@ UPDATE app.products
     ProductQueryRepository counted = countingRepository(statements);
     ProductSearchTerms search = sort == ProductSort.RELEVANCE ? terms("ao thun") : terms("ao");
 
-    Result result = counted.findPage(new Criteria(search, ProductStatus.ACTIVE, sort, 0, 24));
+    Result result = counted.findPage(new Criteria(search, ONLY_ACTIVE, sort, 0, 24));
 
     assertThat(result.items()).hasSize(24);
     assertThat(statements).hasValue(2);
@@ -394,7 +404,8 @@ UPDATE app.products
     AtomicInteger statements = new AtomicInteger();
     ProductQueryRepository counted = countingRepository(statements);
 
-    Result result = counted.findPage(new Criteria(terms("%"), null, ProductSort.NEWEST, 0, 20));
+    Result result =
+        counted.findPage(new Criteria(terms("%"), EVERY_STATUS, ProductSort.NEWEST, 0, 20));
 
     assertThat(result.items()).isEmpty();
     assertThat(result.totalItems()).isZero();
@@ -406,11 +417,11 @@ UPDATE app.products
   // ============================================================
 
   private Result search(String q, ProductSort sort) {
-    return repository.findPage(new Criteria(terms(q), null, sort, 0, 24));
+    return repository.findPage(new Criteria(terms(q), EVERY_STATUS, sort, 0, 24));
   }
 
   private Result list(ProductSort sort) {
-    return repository.findPage(new Criteria(null, null, sort, 0, 24));
+    return repository.findPage(new Criteria(null, EVERY_STATUS, sort, 0, 24));
   }
 
   private static ProductSearchTerms terms(String q) {

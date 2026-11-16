@@ -182,7 +182,7 @@ local hoặc CI.
 ./mvnw test
 
 # Chỉ 1 class
-./mvnw test -Dtest=ProductServiceTest
+./mvnw test -Dtest=ProductSlugsTest
 
 # Test + coverage report
 ./mvnw verify
