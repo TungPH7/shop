@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 
 import { productKeys } from '@/features/product/api/query-keys';
-import { type AdminProduct, adminProductSchema } from '@/features/product/model/product';
 import { type CreateProductInput } from '@/features/product/model/product-form';
 import { api } from '@/lib/api/api';
 import { isApiError } from '@/lib/api/api-error';
@@ -10,8 +9,30 @@ import { isApiError } from '@/lib/api/api-error';
 // POST /api/admin/products (API Contract of docs/specs/SHOP-7/plan.md), for S2 in add
 // mode (US2). A POST is never retried, by the api layer or here (NFR19).
 
-export function createProduct(input: CreateProductInput): Promise<AdminProduct> {
-  return api.post('/admin/products', input, { schema: adminProductSchema });
+/** What a 201 tells: the product is saved, and its id when the api gives it. */
+export interface CreatedProduct {
+  id: string | null;
+}
+
+const createdBodySchema = z.object({ id: z.string().min(1) });
+
+function idOfLocation(location: unknown): string | null {
+  if (typeof location !== 'string') return null;
+  const id = location.split('/').filter(Boolean).at(-1);
+  return id === undefined ? null : decodeURIComponent(id);
+}
+
+/**
+ * A 2xx means saved. The id comes from `Location: /api/admin/products/{id}`, or else
+ * from the body; a body that does not match AdminProduct is no failed save, which
+ * would have the admin save again and add the product twice, with a slug `-2`.
+ */
+export async function createProduct(input: CreateProductInput): Promise<CreatedProduct> {
+  // The Axios instance, not api.post: the id may be in a header. Its interceptors
+  // still normalize every error into an ApiError.
+  const response = await api.instance.post<unknown>('/admin/products', input);
+  const body = createdBodySchema.safeParse(response.data);
+  return { id: idOfLocation(response.headers['location']) ?? (body.success ? body.data.id : null) };
 }
 
 /**
