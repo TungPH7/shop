@@ -37,7 +37,8 @@ export function ProductDetail({ product }: { product: StoreProduct }) {
                   </span>
                   <span className="badge badge--bad badge--plain">
                     <span className="visually-hidden">{t('discount')} </span>
-                    <span>-{discountPercent(product.price, compareAtPrice)}%</span>
+                    {/* One text node, so a screen reader reads "-20%" and not "-", "20", "%". */}
+                    <span>{`-${discountPercent(product.price, compareAtPrice)}%`}</span>
                   </span>
                 </p>
               )}

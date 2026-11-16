@@ -62,6 +62,8 @@ describe('<ProductDetail />', () => {
     expect(original.parentElement).toHaveTextContent('Giá gốc: 250.000 ₫');
     const discount = screen.getByText('-20%');
     expect(discount.parentElement).toHaveTextContent('Giảm -20%');
+    // One text node, so the accessibility tree has "-20%" and not "-", "20", "%".
+    expect(discount.childNodes).toHaveLength(1);
   });
 
   test('says the hidden words in English on the English page', () => {
