@@ -147,6 +147,13 @@ describe('ProductList', () => {
     expect(rows()).toHaveLength(6);
   });
 
+  it('names the skeleton for a screen reader, once', () => {
+    fakeApi([shirt]);
+    renderWithProviders(<ProductList />, { route: '/products' });
+
+    expect(screen.getByText('Loading the products')).toHaveClass('visually-hidden');
+  });
+
   it('AC1 lists active and hidden products with tile, name, slug, price, status and availability', async () => {
     fakeApi([shirt, jeans]);
     renderWithProviders(<ProductList />, { route: '/products' });
