@@ -44,3 +44,15 @@ const NO_BREAK_SPACE = String.fromCodePoint(0xa0);
 export function formatPrice(price: number): string {
   return `${priceNumber.format(price)}${NO_BREAK_SPACE}₫`;
 }
+
+// The filters of the admin list as the URL holds them (S1.4, S1.5, S1.11):
+// `?q=&status=all|active|hidden&page=N`. The API takes the status in upper case.
+export const PRODUCT_STATUS_FILTERS = ['all', 'active', 'hidden'] as const;
+export type ProductStatusFilter = (typeof PRODUCT_STATUS_FILTERS)[number];
+
+export interface ProductListFilters {
+  q: string;
+  status: ProductStatusFilter;
+  /** From 1. */
+  page: number;
+}
