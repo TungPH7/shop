@@ -8,6 +8,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
+import java.util.Properties;
 import java.util.UUID;
 
 import org.junit.jupiter.api.AfterAll;
@@ -17,6 +18,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import com.tungph7.learnpostgres.AbstractContainerBaseTest;
@@ -32,6 +35,8 @@ class GenUuidV7SearchPathTest extends AbstractContainerBaseTest {
 
   /** A UUIDv7 carries the ms of its creation; the database clock must agree within this. */
   private static final long CLOCK_TOLERANCE_MS = 1_000L;
+
+  private static final String URL_KEY = "spring.datasource.url";
 
   private MigrationDatabase db;
   private JdbcClient jdbc;
@@ -64,8 +69,23 @@ class GenUuidV7SearchPathTest extends AbstractContainerBaseTest {
   }
 
   @Test
-  void the_connection_of_the_servers_has_search_path_app_only() {
+  void the_connection_of_the_harness_has_search_path_app_only() {
     assertThat(jdbc.sql("SHOW search_path").query(String.class).single()).isEqualTo("app");
+  }
+
+  /**
+   * The harness above copies {@code currentSchema=app} from the URL of the servers; this checks
+   * that URL, with what each profile of a server sets over {@code application.yml}.
+   */
+  @ParameterizedTest(name = "profile {0}")
+  @ValueSource(strings = {"dev", "staging", "prod"})
+  void the_datasource_url_of_the_servers_sets_current_schema_app(String profile) {
+    Properties base = yaml("application.yml");
+    Properties overrides = yaml("application-" + profile + ".yml");
+
+    String url = overrides.getProperty(URL_KEY, base.getProperty(URL_KEY));
+
+    assertThat(url).as(URL_KEY).matches(".*[?&]currentSchema=app(&.*)?");
   }
 
   @Test
@@ -135,6 +155,13 @@ class GenUuidV7SearchPathTest extends AbstractContainerBaseTest {
 
     assertThat(second).isNotEqualTo(first);
     assertThat(timestampMs(second)).isGreaterThanOrEqualTo(timestampMs(first));
+  }
+
+  /** The properties of one {@code application*.yml} of the classpath, without placeholders. */
+  private static Properties yaml(String file) {
+    YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
+    yaml.setResources(new ClassPathResource(file));
+    return yaml.getObject();
   }
 
   /** The 48-bit unix_ts_ms at the front of a UUIDv7 (RFC 9562 § 5.7). */
