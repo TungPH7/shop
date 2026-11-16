@@ -60,9 +60,10 @@ interface ProductDetailProps { product: Product; actions?: ReactNode }
 ```
 ```tsx
 // app/routes/products/product-detail-route.tsx  ← chỉ tầng app biết cả hai
-<ProductDetail product={product} actions={<Can method="DELETE" path="/products"><DeleteButton /></Can>} />
+const { hasModule } = usePermission();
+<ProductDetail product={product} actions={hasModule('product') ? <DeleteButton /> : null} />
 ```
-❌ `features/product/...` import `features/auth/components/can`
+❌ `features/product/...` import `features/auth/hooks/use-permission`
 
 **Enforce:** `import-x/no-restricted-paths` — **thêm feature mới phải thêm một zone cross-feature cho nó** trong `eslint.config.js`.
 
