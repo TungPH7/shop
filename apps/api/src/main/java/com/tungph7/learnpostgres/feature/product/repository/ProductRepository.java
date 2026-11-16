@@ -16,27 +16,48 @@ import com.tungph7.learnpostgres.feature.product.domain.Product;
 /**
  * Writes and single reads of {@link Product} through JPA. The list queries, with search, filter and
  * sort, are hand-written SQL in {@link ProductQueryRepository}.
+ *
+ * <p>The slug is {@code citext}, whose operators live in schema {@code public}. The servers connect
+ * with {@code currentSchema=app}, so their {@code search_path} is {@code app} only: a plain {@code
+ * =} on the slug finds no {@code citext} operator and compares as {@code text}, case-sensitively,
+ * without the index of {@code products_slug_unique}. Every query on the slug therefore names the
+ * operator, {@code OPERATOR(public.=)}, in native SQL, since JPQL cannot.
  */
 @Repository
 public interface ProductRepository extends JpaRepository<Product, UUID> {
 
-  /** The product with this slug, compared case-insensitively ({@code citext}). */
-  Optional<Product> findBySlug(String slug);
+  /** The SQL of {@link #findBySlug}, with its one parameter {@code :slug}. */
+  String BY_SLUG_SQL =
+      "SELECT * FROM app.products WHERE slug OPERATOR(public.=) CAST(:slug AS public.citext)";
 
-  /** Whether a product has this slug, compared case-insensitively ({@code citext}). */
-  boolean existsBySlug(String slug);
+  /** The SQL of {@link #existsBySlug}, with its one parameter {@code :slug}. */
+  String EXISTS_BY_SLUG_SQL =
+      "SELECT EXISTS (SELECT 1 FROM app.products"
+          + " WHERE slug OPERATOR(public.=) CAST(:slug AS public.citext))";
 
   /** The SQL of {@link #findSlugsAmong}, with its one parameter {@code :slugs}. */
   String SLUGS_AMONG_SQL =
-      "SELECT slug::text FROM app.products WHERE slug = ANY(CAST(:slugs AS public.citext[]))";
+      "SELECT slug::text FROM app.products"
+          + " WHERE slug OPERATOR(public.=) ANY(CAST(:slugs AS public.citext[]))";
+
+  /** The product with this slug, compared case-insensitively ({@code citext}). */
+  @Query(value = BY_SLUG_SQL, nativeQuery = true)
+  Optional<Product> findBySlug(@Param("slug") String slug);
+
+  /** Whether a product has this slug, compared case-insensitively ({@code citext}). */
+  @Query(value = EXISTS_BY_SLUG_SQL, nativeQuery = true)
+  boolean existsBySlug(@Param("slug") String slug);
 
   /**
    * The slugs of products among the given ones, compared case-insensitively ({@code citext}), as
    * they are stored: every slug a generated slug and its suffixes could take, read in one query.
    *
-   * <p>An equality on the slug, so each slug given is one lookup in the index of {@code
-   * products_slug_unique}, whatever the size of the table; a {@code LIKE} on {@code citext} cannot
-   * use that index. Native SQL, since JPQL has no array. The array is cast to {@code citext[]}: a
+   * <p>An equality on the slug, so PostgreSQL can read the slugs in the index of {@code
+   * products_slug_unique}; a {@code LIKE} on {@code citext} cannot use that index. The planner
+   * chooses whether it does, from the size of the table and the number of slugs: with 10,000
+   * products and the 1,000 slugs an add without slug tries, PostgreSQL 17 reads them in the index
+   * in about 3 ms ({@code ProductRepositoryDataJpaTest}); on a small table it may read the whole
+   * table instead. Native SQL, since JPQL has no array. The array is cast to {@code citext[]}: a
    * {@code text[]} would make PostgreSQL compare as {@code text}, case-sensitively.
    *
    * @param slugs the slugs to look for, such as {@code ao-thun}, {@code ao-thun-2}…
