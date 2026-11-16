@@ -1,6 +1,6 @@
 # Design system: user
 
-> **App:** `apps/user` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-16, SHOP-11
+> **App:** `apps/user` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-16, SHOP-23
 
 Design system của `user` là CSS variables và CSS thường, không có Tailwind hay thư viện UI (NFR13). Mỗi màn hình chỉ dùng token semantic và class dưới đây, không tự đặt màu, cỡ chữ hay khoảng cách (quy ước `apps/user/docs/coding-conventions/v1/12-styling-theming-a11y.md`). Khung trang (thanh điều hướng S4.1, chân trang S4.11) làm ở SHOP-11, mục Page Frame.
 
@@ -88,7 +88,7 @@ Giá trị viết bằng OKLCH ở tầng primitive (`--slate-950`, `--blue-600`
 | Nút chính, nút hộp thoại | 13,5/19,6, 600 | `.btn` |
 | Nút phụ nhỏ | 12,5/18,1, 600 | `.btn--sm` |
 | Huy hiệu | 12/17,4, 600. **Đã đo** | `.badge` |
-| Giá | Thẻ 17/700; chi tiết 34/700 (26 ở điện thoại); giá gốc 13,5/500 `--hint` gạch ngang | Dùng token `--fs-xl`, `--fs-display`, `--fs-4xl`, `--fs-md`; component Giá làm ở Story của S4, S5 |
+| Giá | Thẻ 17/700; chi tiết 34/700 (26 ở điện thoại); giá gốc 13,5/500 `--hint` gạch ngang | Dùng token `--fs-xl`, `--fs-display`, `--fs-4xl`, `--fs-md`; chi tiết ở `.product-price` (SHOP-23), thẻ ở Story của S4 |
 | Chữ cái đầu của ô giữ chỗ | 700, 40% chiều cao ô | `.tile__initial` |
 
 ### Font
@@ -175,6 +175,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.skeleton` | Khung xương | Nền `--muted`, nhấp nháy 1,2 s, tắt khi giảm chuyển động; đặt `border-radius` như phần tử thật; vùng chứa có `aria-busy="true"` |
 | `.visually-hidden` | | Chữ chỉ cho trình đọc màn hình: nhãn ẩn "Tìm theo tên", "Giảm", "Giá gốc:" |
 | `.tile`, `.tile--card`, `.tile--detail`, `.tile--row`, `.tile--<nhóm>`, `.tile__initial` | Ô giữ chỗ | Do `PlaceholderTile` đặt; không dùng tay |
+| `.product-page`, `.back-link`, `.product-detail`, `.product-detail__body`, `__name`, `__about`, `__description`, `.product-price`, `__label`, `__row`, `__value`, `__was` | Trang chi tiết S5 (SHOP-23) | Do `ProductDetail` (`src/features/product/components/product-detail.tsx`) đặt. `<main>` rộng tối đa 64rem; một thẻ kính hai cột 2fr 3fr (ô giữ chỗ 1:1 chiếm 40%), một cột dưới 768 px với ô 4:3. Tên h1 26/700 (22 dưới 768 px), `overflow-wrap: anywhere`. Giá trong `.well`: nhãn 12,5 `--muted-foreground`, giá 34/700 (26 dưới 768 px), giá gốc 13,5 `--hint` trong `<s>` kèm chữ ẩn, huy hiệu `.badge--bad .badge--plain`. Mô tả `white-space: pre-line`. Khung xương `ProductDetailSkeleton` cùng hình |
 | `.site-shell`, `.site-nav`, `.pill`, `.pill--brand`, `.pill__link`, `.nav-group`, `.nav-btn`, `.nav-btn--text`, `.nav-btn__icon`, `.nav-btn__label`, `.nav-account`, `.site-footer` | Viên thuốc điều hướng (S4.1), chân trang (S4.11) | Do `SiteNav`, các nút chuyển và `SiteFooter` đặt; xem mục Page Frame |
 
 Tên class giống `admin` (`apps/admin/src/styles/components.css` của SHOP-8), để một màn hình đọc như nhau ở hai app.
@@ -238,4 +239,5 @@ Một dòng Component của bảng Design System là của `user` nhưng chưa c
 
 ## Not Yet Built
 
-- Thẻ sản phẩm S4.6 (giá trị ở Components Built Later) và lưới S4.5: SHOP-25 (US5a). Hiển thị giá và `formatPrice`: Story của S4 và S5.
+- Thẻ sản phẩm S4.6 (giá trị ở Components Built Later) và lưới S4.5: SHOP-25 (US5a).
+- Giá: `formatPrice` và `discountPercent` ở `src/features/product/model/product.ts` (SHOP-23), dùng cho mọi chỗ hiện giá; thẻ S4.6 dùng lại chúng.
