@@ -7,6 +7,9 @@ import { isLocal } from './support/env';
 // THẬT (unit chỉ test rời từng mảnh: seal, action). Cookie `__Host-session` là Secure → Chromium chấp
 // nhận trên http://localhost (secure-context), giống ghi chú ở lib/auth/session.ts.
 
+const withAuthMock = (baseURL?: string): boolean =>
+  isLocal(baseURL) && process.env.E2E_API_MOCKING === '1';
+
 async function login(page: Page): Promise<void> {
   await page.goto('/en/login');
   await page.getByLabel('Email').fill('admin@e2e.test');
@@ -17,9 +20,10 @@ async function login(page: Page): Promise<void> {
 }
 
 test.describe('auth: login, logout', () => {
-  // These tests need the MSW mock of the old NestJS auth API in the server, which only the apps started here have.
-  // The login Epic replaces them.
-  test.skip(({ baseURL }) => !isLocal(baseURL), 'reason: login Epic');
+  // These tests need the MSW mock of the old NestJS auth API in the server, which only the apps started here have, and
+  // only with E2E_API_MOCKING=1 in the environment of Playwright, which gives it to the app it starts. The login Epic
+  // replaces them.
+  test.skip(({ baseURL }) => !withAuthMock(baseURL), 'reason: login Epic');
 
   test('login → hiển thị trạng thái đăng nhập (ADMIN)', async ({ page }) => {
     await login(page);

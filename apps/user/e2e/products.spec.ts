@@ -14,14 +14,19 @@ test.describe('products page shell', () => {
         page.getByRole('main').getByRole('heading', { level: 1, name: title }),
       ).toBeVisible();
       await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
-      const breadcrumb = page.locator('script[type="application/ld+json"]', {
-        hasText: 'BreadcrumbList',
-      });
-      await expect(breadcrumb).toHaveCount(1);
-      const data = JSON.parse((await breadcrumb.textContent()) ?? '{}') as {
-        itemListElement: { name: string }[];
-      };
-      expect(data.itemListElement.map((item) => item.name)).toEqual([home, title]);
+      // Playwright does not match text inside <script>, so the JSON-LD blocks are read from the DOM.
+      const blocks = await page
+        .locator('script[type="application/ld+json"]')
+        .evaluateAll((scripts) => scripts.map((script) => script.textContent ?? ''));
+      const breadcrumbs = blocks
+        .map(
+          (block) =>
+            JSON.parse(block) as { '@type'?: string; itemListElement?: { name: string }[] },
+        )
+        .filter((block) => block['@type'] === 'BreadcrumbList');
+      expect(breadcrumbs.map((block) => block.itemListElement?.map((item) => item.name))).toEqual([
+        [home, title],
+      ]);
     });
   }
 
