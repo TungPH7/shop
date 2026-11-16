@@ -118,11 +118,3 @@ export function httpPost<T>(path: string, schema: ZodType<T>, init?: RequestInit
 export function httpPut<T>(path: string, schema: ZodType<T>, init?: RequestInit): Promise<T> {
   return request('PUT', path, schema, init);
 }
-
-/**
- * DELETE + validate response ở biên (folder 12). Mutation THẬT đi qua đây từ DAL `server-only`,
- * được gọi bởi Server Action (sau khi action đã validate input + re-authorize).
- */
-export function httpDelete<T>(path: string, schema: ZodType<T>, init?: RequestInit): Promise<T> {
-  return request('DELETE', path, schema, init);
-}
