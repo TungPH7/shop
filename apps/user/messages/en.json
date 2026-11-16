@@ -43,6 +43,12 @@
     "password_too_short": "Password must be at least 6 characters.",
     "password_mismatch": "The passwords don't match."
   },
+  "Nav": {
+    "label": "Main navigation",
+    "home": "Home",
+    "products": "Products",
+    "about": "About"
+  },
   "LanguageSwitcher": {
     "label": "Language"
   },

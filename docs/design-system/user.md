@@ -1,8 +1,8 @@
 # Design system: user
 
-> **App:** `apps/user` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-15, SHOP-10
+> **App:** `apps/user` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-16, SHOP-11
 
-Design system của `user` là CSS variables và CSS thường, không có Tailwind hay thư viện UI (NFR13). Mỗi màn hình chỉ dùng token semantic và class dưới đây, không tự đặt màu, cỡ chữ hay khoảng cách (quy ước `apps/user/docs/coding-conventions/v1/12-styling-theming-a11y.md`). Khung trang (thanh điều hướng S4.1, chân trang S4.11) làm ở SHOP-11.
+Design system của `user` là CSS variables và CSS thường, không có Tailwind hay thư viện UI (NFR13). Mỗi màn hình chỉ dùng token semantic và class dưới đây, không tự đặt màu, cỡ chữ hay khoảng cách (quy ước `apps/user/docs/coding-conventions/v1/12-styling-theming-a11y.md`). Khung trang (thanh điều hướng S4.1, chân trang S4.11) làm ở SHOP-11, mục Page Frame.
 
 ## Files
 
@@ -10,11 +10,13 @@ Design system của `user` là CSS variables và CSS thường, không có Tailw
 |---|---|
 | `apps/user/src/styles/tokens.css` | Mọi token: tầng primitive (bảng màu OKLCH), tầng semantic sáng (`:root`) và tối (`.dark`), chữ, khoảng cách, bo góc, bóng, kính, chuyển động |
 | `apps/user/src/styles/tokens.test.ts` | Ghim từng vai trò màu vào hex của `design.md` ở hai giao diện, và kiểm các cặp tương phản WCAG AA |
-| `apps/user/src/styles/components.css` | Class dùng chung: nút, huy hiệu, thẻ kính, ô "well", ô nhập, ô chọn, ô tìm, khung xương, ô giữ chỗ |
+| `apps/user/src/styles/components.css` | Class dùng chung: nút, huy hiệu, thẻ kính, ô "well", ô nhập, ô chọn, ô tìm, khung xương, ô giữ chỗ; khung trang (SHOP-11) |
 | `apps/user/src/app/globals.css` | Reset, nền trang, chữ thân, h1, h2, liên kết, vòng focus |
 | `apps/user/src/config/fonts.ts` | Be Vietnam Pro qua `next/font/google` |
 | `apps/user/src/components/ui/placeholder-tile.tsx` | `PlaceholderTile`, `placeholderGroup`, `placeholderInitial` |
-| `apps/user/src/app/[locale]/layout.tsx` | Nạp `tokens.css`, `components.css`, `globals.css` theo thứ tự đó; gắn `--font-sans` vào `<html>` |
+| `apps/user/src/components/ui/icons.tsx` | Biểu tượng 16 px nét `currentColor`, `aria-hidden`: mặt trời, mặt trăng, màn hình, người, đăng xuất (SHOP-11). Không có thư viện biểu tượng |
+| `apps/user/src/features/site/components/site-nav.tsx`, `site-footer.tsx`, `model/nav.ts` | Thanh điều hướng S4.1, chân trang S4.11, ba mục điều hướng và quy tắc mục đang chọn (SHOP-11) |
+| `apps/user/src/app/[locale]/layout.tsx` | Nạp `tokens.css`, `components.css`, `globals.css` theo thứ tự đó; gắn `--font-sans` vào `<html>`; ghép khung `.site-shell`: `SiteNav` (nhận `AuthStatus` trong `Suspense` qua prop `account`), trang, `SiteFooter` |
 | `apps/user/src/app/global-error.tsx` | Gốc `<html>` thay layout khi layout lỗi: nạp cùng ba file, cùng thứ tự, và gắn `--font-sans`, vì khi đó Next chỉ gửi CSS mà file này nạp. `--font` có dự phòng `system-ui` nếu thiếu `--font-sans` |
 
 `components.css` được nạp từ layout, không bằng `@import` trong `globals.css`: với `@import`, Turbopack ở chế độ dev tách file ra một chunk riêng và preload nó mà không dùng, nên console có cảnh báo.
@@ -22,7 +24,7 @@ Design system của `user` là CSS variables và CSS thường, không có Tailw
 ## Theme
 
 - Mặc định theo giao diện của hệ thống. `next-themes` (`src/components/theme-provider.tsx`) đặt class `.dark` lên `<html>` khi giao diện là tối, và tự đặt `color-scheme`; `tokens.css` không khai `color-scheme`.
-- Ba nút Sáng, Tối, Hệ thống của `ThemeSwitcher` giữ nguyên; SHOP-11 đưa chúng vào thanh điều hướng.
+- Ba nút Sáng, Tối, Hệ thống của `ThemeSwitcher` nằm trong viên tiện ích của thanh điều hướng (SHOP-11): từ 1024 px là chữ, dưới 1024 px là biểu tượng, chữ vẫn là tên của nút.
 - Chỉ tầng semantic đổi theo giao diện. `tokens.test.ts` kiểm khối `.dark` không khai lại token nào của bảng màu primitive.
 
 ## Tokens
@@ -136,7 +138,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 
 ### Điểm ngắt
 
-640, 768, 1024, 1440 px (`sm`, `md`, `lg`, `xl`). CSS variables không dùng được trong media query, nên viết số trực tiếp, như `@media (width < 768px)`. `user` hỗ trợ từ 320 px, không có thanh cuộn ngang: đã kiểm trang chủ và trang Giới thiệu ở 390 px (`scrollWidth` bằng bề rộng). Dưới 768 px: h1 28 px; ô nhập dùng chữ 16 px vì iOS phóng to trang khi ô nhập nhỏ hơn. Lưới sản phẩm 1, 2, 3, 4 cột và thanh điều hướng hai hàng thuộc Story của S4 và SHOP-11.
+640, 768, 1024, 1440 px (`sm`, `md`, `lg`, `xl`). CSS variables không dùng được trong media query, nên viết số trực tiếp, như `@media (width < 768px)`. `user` hỗ trợ từ 320 px, không có thanh cuộn ngang: đã kiểm trang chủ và trang Giới thiệu ở 390 px (`scrollWidth` bằng bề rộng). Dưới 768 px: h1 28 px; ô nhập dùng chữ 16 px vì iOS phóng to trang khi ô nhập nhỏ hơn. Thanh điều hướng: một hàng từ 768 px, hai hàng dưới 768 px (SHOP-11, mục Page Frame); hai điểm ngắt theo nội dung, 1024 px (biểu tượng thay chữ) và 390 px (tên site xuống hai dòng). Đã kiểm 320, 390, 767, 768, 1024, 1440 px không cuộn ngang (`apps/user/e2e/site-frame.spec.ts`). Lưới sản phẩm 1, 2, 3, 4 cột thuộc Story của S4.
 
 ## Số đo
 
@@ -173,16 +175,39 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.skeleton` | Khung xương | Nền `--muted`, nhấp nháy 1,2 s, tắt khi giảm chuyển động; đặt `border-radius` như phần tử thật; vùng chứa có `aria-busy="true"` |
 | `.visually-hidden` | | Chữ chỉ cho trình đọc màn hình: nhãn ẩn "Tìm theo tên", "Giảm", "Giá gốc:" |
 | `.tile`, `.tile--card`, `.tile--detail`, `.tile--row`, `.tile--<nhóm>`, `.tile__initial` | Ô giữ chỗ | Do `PlaceholderTile` đặt; không dùng tay |
+| `.site-shell`, `.site-nav`, `.pill`, `.pill--brand`, `.pill__link`, `.nav-group`, `.nav-btn`, `.nav-btn--text`, `.nav-btn__icon`, `.nav-btn__label`, `.nav-account`, `.site-footer` | Viên thuốc điều hướng (S4.1), chân trang (S4.11) | Do `SiteNav`, các nút chuyển và `SiteFooter` đặt; xem mục Page Frame |
 
 Tên class giống `admin` (`apps/admin/src/styles/components.css` của SHOP-8), để một màn hình đọc như nhau ở hai app.
 
+## Page Frame
+
+Khung của mọi trang `user` (SHOP-11): `.site-shell` rộng tối đa `--app-max` (1840 px), lề ngang `--gutter`, đệm trên 18 dưới 28; trang (`<main>`) giãn ra để chân trang nằm cuối trang ngắn. `<main>` của từng trang giữ 48rem, không còn lề ngang riêng (lề là của khung). `global-error.tsx` cũng bọc `<main>` trong `.site-shell`.
+
+**Thanh điều hướng S4.1** (`SiteNav`, `<header>`): ba viên `.pill`, như `admin` (SHOP-8).
+
+| Phần | Giá trị |
+|---|---|
+| Viên | Cao 49,6 (mục 39,6 trong đệm 5), bo `--r-ctl`, nền `--surface`, `--card-shadow`, kính `--blur` `--sat`; nền `--solid` khi không có `backdrop-filter` hay khi giảm độ trong suốt |
+| Tên site `.pill--brand` | Liên kết về trang chủ, 15/700, đệm 0 24. Không phải h1: mỗi trang có h1 riêng |
+| Điều hướng `.pill__link` | `<nav aria-label="Điều hướng chính">`: Trang chủ, Sản phẩm, Giới thiệu (`model/nav.ts`). Cao 39,6, đệm 10 16, 13,5/600. Mục đang chọn là liên kết có `aria-current="page"`, nền `--muted`, chọn bằng thuộc tính đó; Sản phẩm là mục đang chọn ở cả `/products/<slug>`. Hover nền `--muted` |
+| Tiện ích `.nav-btn` | Theo thứ tự: nhóm Ngôn ngữ (`role=group`, nút EN, VI chữ, ngôn ngữ hiện tại `aria-current="true"` và khóa), nhóm Giao diện (`role=group`, Sáng, Tối, Hệ thống, `aria-pressed`), tài khoản (`AuthStatus`: Đăng nhập; hoặc Tài khoản, vai trò, Đăng xuất). Nút cao 39,6, tối thiểu 39,6 rộng, bo `--r-ctl`, 13,5/600; mục đang chọn nền `--border-strong` (line-2, như nút phân đoạn), hover `--muted` |
+| Biểu tượng | Từ 1024 px nút Giao diện và tài khoản là chữ; dưới 1024 px là biểu tượng 16 px (`ui/icons.tsx`), chữ và dòng vai trò ẩn như `.visually-hidden` nhưng vẫn là tên của nút. Có `title` để hiện chú thích khi rê chuột |
+| 768–1023 px | Một hàng: khoảng cách giữa viên 8, tên site đệm 0 16, mục điều hướng đệm 10 12, nút biểu tượng rộng 36. Đo ở 768 px: vừa, còn dư |
+| Dưới 768 px | Hai hàng, không có menu ẩn: hàng 1 tên site (13,5/700, cao 40) và viên tiện ích (cao 40, nút 30×32, trên mức 24 px của WCAG 2.5.8); hàng 2 viên điều hướng hết bề rộng, ba mục chia đều. Là hàng flex có xuống dòng, không phải lưới: với chữ lớn hơn, viên tiện ích xuống hàng riêng thay vì chồng lên tên site hay gây cuộn ngang |
+| Dưới 390 px | Tên site xuống hai dòng, 12,5/700, đệm 0 10, để hàng 1 vừa 320 px. Đo ở 320 px: tên 83, tiện ích 194, dư 7 px; ở 390 px tên một dòng 151, dư 9 px |
+
+Khi đã đăng nhập (bản demo cũ, Epic đăng nhập sẽ thay), viên tiện ích dài hơn: ở 320 px và ở 1024 px nó xuống hàng riêng, không cuộn ngang.
+
+**Chân trang S4.11** (`SiteFooter`, `<footer class="site-footer">`): dòng bản quyền, `--hint` 12,5 px, căn giữa, cách trang 24.
+
+**Kiểm tra:** `apps/user/e2e/site-frame.spec.ts` (mục đang chọn, số hàng và cuộn ngang ở 320, 390, 767, 768, 1024, 1440 px, biểu tượng giữ tên); `apps/user/e2e/accessibility.spec.ts` thêm axe ở 320 px, sáng và tối.
+
 ## Components Built Later
 
-Hai dòng Component của bảng Design System là của `user` nhưng chưa có class: chúng là bố cục của một màn hình, nên item làm màn hình đó dựng chúng từ token và class ở trên, rồi chuyển dòng của chúng lên mục Classes. Giá trị dưới đây là của `design.md`, chưa đo lại.
+Một dòng Component của bảng Design System là của `user` nhưng chưa có class: chúng là bố cục của một màn hình, nên item làm màn hình đó dựng chúng từ token và class ở trên, rồi chuyển dòng của chúng lên mục Classes. Giá trị dưới đây là của `design.md`, chưa đo lại.
 
 | Component của `design.md` | Giá trị | Làm ở |
 |---|---|---|
-| Viên thuốc điều hướng (S4.1) | Ba viên: tên app, điều hướng, tiện ích. Thanh cao 49,6, bo 999 (`--r-ctl`), nền `--surface`. Mục cao 39,6, đệm 10 16, chữ 13,5/600 (`--fs-md`, `--fw-semibold`). Mục đang chọn nền `--muted` và `aria-current="page"`, chọn bằng thuộc tính đó, không bằng class riêng. Hover đổi nền `--muted` | SHOP-11 |
 | Thẻ sản phẩm (S4.6) | Thẻ kính `.card`, đệm 18. Ô giữ chỗ 4:3 (`PlaceholderTile`). Tên 15/600 (`--fs-lg`), tối đa 2 dòng. Giá bán 17/700 (`--fs-xl`, `--fw-bold`); giá gốc 13,5/500 `--hint` gạch ngang; huy hiệu "-xx%" `.badge--bad .badge--plain`. Huy hiệu Hết hàng đè góc trên trái ô. Hover nâng 2 px và sáng viền; `:focus-visible` vòng `--ring`. Cả thẻ là một liên kết | SHOP-25 (US5a) |
 
 ## PlaceholderTile
@@ -213,5 +238,4 @@ Hai dòng Component của bảng Design System là của `user` nhưng chưa có
 
 ## Not Yet Built
 
-- Khung trang: thanh điều hướng S4.1 (giá trị ở Components Built Later), chân trang S4.11, `--gutter` và `--app-max` vào bố cục (SHOP-11).
 - Thẻ sản phẩm S4.6 (giá trị ở Components Built Later) và lưới S4.5: SHOP-25 (US5a). Hiển thị giá và `formatPrice`: Story của S4 và S5.

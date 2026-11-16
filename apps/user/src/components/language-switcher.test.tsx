@@ -48,6 +48,19 @@ describe('LanguageSwitcher', () => {
 
   test('aria-label dịch theo locale (vi)', () => {
     renderWithProviders(<LanguageSwitcher />, { locale: 'vi' });
-    expect(screen.getByRole('navigation', { name: 'Ngôn ngữ' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Ngôn ngữ' })).toBeInTheDocument();
+  });
+
+  // The buttons sit in the tools pill of the navigation bar (S4.1, SHOP-11): a group of buttons, not a second
+  // navigation landmark next to the main one.
+  test('is a group of buttons, not a navigation landmark', () => {
+    renderWithProviders(<LanguageSwitcher />, { locale: 'vi' });
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+  });
+
+  test('marks the current locale with aria-current', () => {
+    renderWithProviders(<LanguageSwitcher />, { locale: 'vi' });
+    expect(screen.getByRole('button', { name: 'VI' })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('button', { name: 'EN' })).toHaveAttribute('aria-current', 'false');
   });
 });

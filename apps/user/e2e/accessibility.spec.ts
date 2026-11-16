@@ -50,6 +50,20 @@ test.describe('accessibility (axe, WCAG A/AA)', () => {
     }
   }
 
+  // The navigation bar of SHOP-11 under 768px: two rows, icon buttons for the theme and the account.
+  for (const colorScheme of ['light', 'dark'] as const) {
+    test(`the home page at 320px has no violation in the ${colorScheme} theme`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width: 320, height: 800 });
+      await page.emulateMedia({ colorScheme });
+      await page.goto('/vi');
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+      const { violations } = await scan(page);
+      expect(violations).toEqual([]);
+    });
+  }
+
   test('trang Products (mocked) không vi phạm — quét sau khi stream xong', async ({
     page,
     baseURL,

@@ -1,7 +1,7 @@
 /* Shared classes of user (SHOP-10), built only from the semantic tokens of tokens.css. Each class is listed in
    docs/design-system/user.md with the component of design.md it draws. The class names are the ones admin uses
    (apps/admin/src/styles/components.css of SHOP-8), so a screen reads the same in both
-   apps. The page frame (navigation, footer) comes in SHOP-11. */
+   apps. The page frame (navigation S4.1, footer S4.11) is at the end, from SHOP-11. */
 
 /* --- Utilities -------------------------------------------------------------- */
 
@@ -346,17 +346,266 @@ select.input option {
   --tile-text: var(--group-ink-text);
 }
 
+/* --- Page frame: navigation bar S4.1 and footer S4.11 (SHOP-11) ------------- */
+
+/* The frame of every page: the bar, the page, the footer, at most --app-max wide within the --gutter. The page grows,
+   so the footer sits at the bottom of a short page. */
+.site-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: var(--app-max);
+  margin: 0 auto;
+  padding: var(--space-4-5) var(--gutter) var(--space-7);
+}
+
+.site-shell > main {
+  flex: 1 0 auto;
+  width: 100%;
+}
+
+/* Three pills: the site name, the main navigation, the tools. They wrap rather than scroll if they ever run out of
+   room, such as with the long signed-in tools. */
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--gap);
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* A pill bar: 49.6 high, a 39.6 item inside 5px of padding. */
+.pill {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+  min-height: 49.6px;
+  padding: 5px;
+  background: var(--surface);
+  border-radius: var(--r-ctl);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(var(--blur)) saturate(var(--sat));
+}
+
+.pill--brand {
+  padding: 0 var(--space-6);
+  color: var(--foreground);
+  font: var(--fw-bold) var(--fs-lg) / 1.2 var(--font);
+  text-decoration: none;
+}
+
+/* An item of the main navigation: 39.6 high, padding 10 16, 13.5/600. The current page is the link with
+   aria-current="page": the look follows the accessibility tree, not a class of its own. */
+.pill__link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 39.6px;
+  padding: var(--space-2-5) var(--space-4);
+  color: var(--foreground);
+  font: var(--fw-semibold) var(--fs-md) / 19.6px var(--font);
+  white-space: nowrap;
+  text-decoration: none;
+  border-radius: var(--r-ctl);
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.pill__link:hover,
+.pill__link[aria-current='page'] {
+  background: var(--muted);
+}
+
+/* The tools: the language and theme groups, then the account. */
+.nav-group,
+.nav-account {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+}
+
+/* A control of the tools pill: words from 1024px, an icon under it. The words stay its name either way. */
+.nav-btn {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: center;
+  min-width: 39.6px;
+  height: 39.6px;
+  padding: 0 var(--space-3-5);
+  color: var(--foreground);
+  font: var(--fw-semibold) var(--fs-md) / 19.6px var(--font);
+  white-space: nowrap;
+  text-decoration: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-ctl);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.nav-btn:hover {
+  background: var(--muted);
+}
+
+/* The chosen theme and the current language, as the chosen item of a segmented control: line-2. The current language
+   is a disabled button, which keeps its full colour: it is the current choice, not an unavailable one. */
+.nav-btn[aria-pressed='true'],
+.nav-btn[aria-current='true'] {
+  background: var(--border-strong);
+}
+
+.nav-btn:disabled {
+  cursor: default;
+}
+
+/* VI and EN: short words, no icon, at every width. */
+.nav-btn--text {
+  padding: 0 var(--space-3);
+}
+
+.nav-btn__icon {
+  flex: none;
+}
+
+.nav-account__form {
+  display: contents;
+}
+
+.nav-account__role {
+  padding: 0 var(--space-2);
+  color: var(--muted-foreground);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+@media (width >= 1024px) {
+  .nav-btn__icon {
+    display: none;
+  }
+}
+
+/* Under 1024px the three pills of words do not fit one row: the theme and account controls show their icon, and their
+   words, like the role, are kept for screen readers only (as .visually-hidden). */
+@media (width < 1024px) {
+  .nav-btn:not(.nav-btn--text) {
+    padding: 0;
+  }
+
+  .nav-btn__label,
+  .nav-account__role {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
+/* From 768px to 1023px the bar keeps one row: tighter spacing, measured to fit 768px with room to spare. */
+@media (768px <= width < 1024px) {
+  .site-nav {
+    column-gap: var(--space-2);
+  }
+
+  .pill--brand {
+    padding: 0 var(--space-4);
+  }
+
+  .pill__link {
+    padding: var(--space-2-5) var(--space-3);
+  }
+
+  .site-nav__tools {
+    gap: 2px;
+  }
+
+  .site-nav__tools .nav-btn {
+    min-width: 36px;
+  }
+}
+
+/* Under 768px: two rows and no hidden menu. Row 1, the site name and the tools; row 2, the navigation across the
+   whole width, its three items sharing it. Sizes measured so row 1 fits 320px: the name may wrap onto two lines, the
+   tool buttons are 30 wide (above the 24px target of WCAG 2.5.8). Still a flex row that wraps: with a larger font the
+   tools take a row of their own rather than overlap the name or scroll. */
+@media (width < 768px) {
+  .site-nav {
+    gap: var(--space-2) var(--space-1);
+  }
+
+  .pill--brand {
+    min-width: 0;
+    min-height: 40px;
+    margin-right: auto;
+    padding: 0 var(--space-3);
+    font-size: var(--fs-md);
+  }
+
+  .site-nav__tools {
+    gap: 0;
+    min-height: 40px;
+    padding: var(--space-1);
+  }
+
+  .site-nav__tools .nav-btn {
+    min-width: 30px;
+    height: 32px;
+  }
+
+  .site-nav__tools .nav-btn--text {
+    padding: 0 var(--space-1);
+  }
+
+  .site-nav__links {
+    order: 1;
+    flex-basis: 100%;
+  }
+
+  .site-nav__links .pill__link {
+    flex: 1;
+    padding: var(--space-2-5) var(--space-2);
+  }
+}
+
+/* Under 390px the name and the tools only share row 1 if the name breaks onto two lines: its width is that of its
+   longest word. Measured: at 320px name 83, tools 194, 7px to spare; at 390px on one line, name 151, 9px to spare. */
+@media (width < 390px) {
+  .pill--brand {
+    flex-basis: min-content;
+    padding: 0 var(--space-2-5);
+    font-size: var(--fs-sm);
+  }
+}
+
+/* S4.11: the copyright line, hint 12.5px, centred. */
+.site-footer {
+  padding-top: var(--space-6);
+  color: var(--hint);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+
+.site-footer small {
+  font-size: inherit;
+}
+
 /* --- Fallbacks -------------------------------------------------------------- */
 
 /* No backdrop-filter, or the person asks for less transparency: solid surfaces. */
 @supports not (backdrop-filter: blur(1px)) {
-  .card {
+  .card,
+  .pill {
     background: var(--solid);
   }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .card {
+  .card,
+  .pill {
     background: var(--solid);
     backdrop-filter: none;
   }

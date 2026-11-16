@@ -47,16 +47,19 @@ export default function GlobalError({
     <html lang="en" className={sans.variable}>
       <body>
         <title>Something went wrong</title>
-        <main role="alert">
-          <h1>Something went wrong</h1>
-          <p>
-            A critical error occurred and the page could not be displayed. Please try again in a
-            moment.
-          </p>
-          <button type="button" onClick={() => unstable_retry()}>
-            Try again
-          </button>
-        </main>
+        {/* The frame of the layout (SHOP-11) without its bar and footer: the --gutter on each side of the page. */}
+        <div className="site-shell">
+          <main role="alert">
+            <h1>Something went wrong</h1>
+            <p>
+              A critical error occurred and the page could not be displayed. Please try again in a
+              moment.
+            </p>
+            <button type="button" onClick={() => unstable_retry()}>
+              Try again
+            </button>
+          </main>
+        </div>
       </body>
     </html>
   );

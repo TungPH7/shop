@@ -6,7 +6,8 @@ import { locales } from '~/config/i18n';
 import { getPathname, usePathname } from '~/i18n/navigation';
 
 /**
- * Đổi ngôn ngữ — HEADLESS (chỉ `<button>`, không style; consumer tự skin ở Phase 1.2).
+ * Đổi ngôn ngữ: hai nút VI và EN trong viên tiện ích của thanh điều hướng S4.1 (SHOP-11), class `.nav-btn` của
+ * components.css. Là một `role=group`, không phải `<nav>`: đây là nút, và trang chỉ có một nav chính.
  * Client Component (cần `onClick` + đọc locale/pathname phía client).
  *
  * ⭐ Đổi locale = FULL RELOAD CỐ Ý (`window.location.replace`), KHÔNG soft-nav
@@ -25,11 +26,12 @@ export function LanguageSwitcher() {
   const pathname = usePathname();
 
   return (
-    <nav aria-label={t('label')}>
+    <div className="nav-group" role="group" aria-label={t('label')}>
       {locales.map((locale) => (
         <button
           key={locale}
           type="button"
+          className="nav-btn nav-btn--text"
           disabled={locale === activeLocale}
           aria-current={locale === activeLocale}
           onClick={() => {
@@ -41,6 +43,6 @@ export function LanguageSwitcher() {
           {locale.toUpperCase()}
         </button>
       ))}
-    </nav>
+    </div>
   );
 }

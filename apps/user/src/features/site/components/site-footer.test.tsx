@@ -11,4 +11,11 @@ describe('<SiteFooter />', () => {
 
     expect(screen.getByText('© 2026 tungph7 codebase. All rights reserved.')).toBeInTheDocument();
   });
+
+  // S4.11: the footer landmark of the page frame, drawn by .site-footer (hint 12.5px, centred) in components.css.
+  it('is the footer landmark of the page frame', () => {
+    renderWithProviders(<SiteFooter year={2026} />);
+
+    expect(screen.getByRole('contentinfo')).toHaveClass('site-footer');
+  });
 });
