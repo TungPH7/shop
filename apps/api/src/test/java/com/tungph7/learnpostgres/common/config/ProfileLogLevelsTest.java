@@ -40,6 +40,33 @@ class ProfileLogLevelsTest {
 
   private static final Set<String> QUIET_LEVELS = Set.of("INFO", "WARN", "ERROR", "OFF");
 
+  /**
+   * The logger with which Hibernate writes a failed statement with its values, such as the INSERT
+   * of a product whose slug breaks {@code products_slug_unique} (SHOP-51).
+   */
+  private static final String JDBC_ERROR_LOGGER = "logging.level.org.hibernate.orm.jdbc.error";
+
+  @Test
+  void theBaseFileTurnsOffTheLoggerOfFailedStatements() {
+    assertThat(levelsOf(JDBC_ERROR_LOGGER, load("application.yml")))
+        .containsExactly(Map.entry(JDBC_ERROR_LOGGER, "OFF"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "application-dev.yml",
+        "application-test.yml",
+        "application-staging.yml",
+        "application-prod.yml"
+      })
+  void noProfileTurnsTheLoggerOfFailedStatementsBackOn(String file) {
+    assertThat(levelsOf(JDBC_ERROR_LOGGER, load(file)))
+        .allSatisfy(
+            (logger, level) ->
+                assertThat(level.toUpperCase(Locale.ROOT)).as(logger).isEqualTo("OFF"));
+  }
+
   @ParameterizedTest
   @ValueSource(
       strings = {
@@ -93,5 +120,22 @@ class ProfileLogLevelsTest {
       }
     }
     return levels;
+  }
+
+  /** The levels set on one logger, by property name, the names compared ignoring case. */
+  private static Map<String, String> levelsOf(String property, Properties properties) {
+    Map<String, String> levels = new TreeMap<>();
+    for (String name : properties.stringPropertyNames()) {
+      if (name.equalsIgnoreCase(property)) {
+        levels.put(name, properties.getProperty(name));
+      }
+    }
+    return levels;
+  }
+
+  private static Properties load(String file) {
+    YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
+    yaml.setResources(new ClassPathResource(file));
+    return yaml.getObject();
   }
 }

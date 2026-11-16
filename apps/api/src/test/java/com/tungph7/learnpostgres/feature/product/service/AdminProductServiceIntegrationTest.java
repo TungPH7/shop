@@ -428,6 +428,55 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
         .doesNotContain("c2VjcmV0LXVzZXI6c2VjcmV0LXBhc3M=");
   }
 
+  /**
+   * SHOP-51: the service handles an insert that breaks {@code products_slug_unique}, so Hibernate
+   * must not log the statement with its values, such as the name and the description (NFR12).
+   */
+  @Test
+  void create_whenTheGeneratedSlugIsTakenAfterTheCheck_logsNoValueOfTheInsert(
+      CapturedOutput output) {
+    create("Ao thun SHOP51", null);
+    // The read runs before the other add commits, so it still sees every slug free.
+    doReturn(List.of())
+        .doAnswer(invocation -> slugsAmong(invocation.getArgument(0)))
+        .when(repository)
+        .findSlugsAmong(any(String[].class));
+
+    AdminProduct product =
+        service.create(
+            new CreateProductRequest(
+                "Ao thun SHOP51",
+                null,
+                "mo-ta-shop51-generated",
+                new BigDecimal("100000"),
+                null,
+                null,
+                null));
+
+    assertThat(product.slug()).isEqualTo("ao-thun-shop51-2");
+    assertThat(output.getOut())
+        .doesNotContain("org.hibernate.orm.jdbc.error")
+        .doesNotContain("Ao thun SHOP51")
+        .doesNotContain("mo-ta-shop51-generated");
+  }
+
+  @Test
+  void create_whenATypedSlugIsTakenAfterTheCheck_logsNoValueOfTheInsert(CapturedOutput output)
+      throws Exception {
+    create("Ao thun SHOP51", null);
+    missTheSlugOnce("ao-thun-shop51");
+
+    postJson(
+            "{\"name\":\"Ao thun SHOP51 typed\",\"slug\":\"ao-thun-shop51\","
+                + "\"description\":\"mo-ta-shop51-typed\",\"price\":200000}")
+        .andExpect(status().isConflict());
+
+    assertThat(output.getOut())
+        .doesNotContain("org.hibernate.orm.jdbc.error")
+        .doesNotContain("Ao thun SHOP51 typed")
+        .doesNotContain("mo-ta-shop51-typed");
+  }
+
   // ============================================================
   // Helpers
   // ============================================================
