@@ -54,6 +54,16 @@ class GenUuidV7SearchPathTest extends AbstractContainerBaseTest {
   }
 
   @Test
+  void v5_writes_its_line_in_the_migration_log() {
+    assertThat(
+            jdbc.sql("SELECT count(*) FROM app._app_migration_log WHERE migration_name = ?")
+                .param("V5__gen_uuid_v7_qualify_pgcrypto")
+                .query(Long.class)
+                .single())
+        .isEqualTo(1L);
+  }
+
+  @Test
   void the_connection_of_the_servers_has_search_path_app_only() {
     assertThat(jdbc.sql("SHOW search_path").query(String.class).single()).isEqualTo("app");
   }

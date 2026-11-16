@@ -39,6 +39,9 @@ final class MigrationDatabase implements AutoCloseable {
   /** The Flyway target of the schema {@code v0.2.0} ships. */
   static final String V3 = "3";
 
+  /** The Flyway target of the expand step of {@code v0.3.0}, the last before V5 (SHOP-44). */
+  static final String V4 = "4";
+
   /** The migrations of {@code v0.2.0}: the only ones its Flyway resolves. */
   private static final List<String> V0_2_0_MIGRATIONS =
       List.of("V1__init.sql", "V2__app_helpers.sql", "V3__create_products_table.sql");
