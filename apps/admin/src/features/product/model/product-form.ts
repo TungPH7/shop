@@ -85,30 +85,41 @@ export type ProductFormError =
 
 const error = (message: ProductFormError) => ({ message });
 
-function priceField(whenEmptyOrInvalid: ProductFormError | null) {
-  return z.string().transform((text, ctx): number | null => {
-    const price = parsePriceInput(text);
-    const fail = (message: ProductFormError) => {
-      ctx.addIssue({ code: 'custom', message });
-      return z.NEVER;
-    };
-    if (price.kind === 'fraction') return fail('priceWhole');
-    if (price.kind === 'empty')
-      return whenEmptyOrInvalid === null ? null : fail(whenEmptyOrInvalid);
-    if (price.kind === 'invalid') return fail(whenEmptyOrInvalid ?? 'priceInvalid');
-    if (price.value > PRICE_MAX) return fail('priceMax');
-    return price.value;
-  });
+/** A price field read: the number it holds, empty, or the error to show under it. */
+type PriceRead =
+  | { kind: 'number'; value: number }
+  | { kind: 'empty' }
+  | { kind: 'error'; error: ProductFormError };
+
+function readPrice(text: string, whenInvalid: ProductFormError): PriceRead {
+  const price = parsePriceInput(text);
+  if (price.kind === 'fraction') return { kind: 'error', error: 'priceWhole' };
+  if (price.kind === 'invalid') return { kind: 'error', error: whenInvalid };
+  if (price.kind === 'number' && price.value > PRICE_MAX) {
+    return { kind: 'error', error: 'priceMax' };
+  }
+  return price;
+}
+
+function fail(ctx: z.RefinementCtx, message: ProductFormError): never {
+  ctx.addIssue({ code: 'custom', message });
+  return z.NEVER;
 }
 
 // The selling price is required: empty, 0 or not a number is "must be above 0" (S2.9).
-const priceSchema = priceField('priceMin').refine(
-  (price) => price !== null && price >= 1,
-  error('priceMin'),
-);
+const priceSchema = z.string().transform((text, ctx): number => {
+  const price = readPrice(text, 'priceMin');
+  if (price.kind === 'error') return fail(ctx, price.error);
+  if (price.kind === 'empty' || price.value < 1) return fail(ctx, 'priceMin');
+  return price.value;
+});
 
 // The compare-at price is optional: empty is none.
-const compareAtPriceSchema = priceField(null);
+const compareAtPriceSchema = z.string().transform((text, ctx): number | null => {
+  const price = readPrice(text, 'priceInvalid');
+  if (price.kind === 'error') return fail(ctx, price.error);
+  return price.kind === 'empty' ? null : price.value;
+});
 
 function isTypedSlug(form: { slug: string; slugEdited: boolean }): boolean {
   return form.slugEdited && form.slug !== '';
@@ -143,24 +154,20 @@ export const productFormSchema = z
       !isTypedSlug(form) || form.slug.length > SLUG_MAX_LENGTH || SLUG_FORMAT.test(form.slug),
     { ...error('slugFormat'), path: ['slug'], when: () => true },
   )
-  .refine(
-    (form) =>
-      form.compareAtPrice === null || form.price === null || form.compareAtPrice > form.price,
-    {
-      ...error('compareAtPriceGreater'),
-      path: ['compareAtPrice'],
-      // Only once both prices are valid numbers.
-      when: ({ issues }) =>
-        issues.every((issue) => !['price', 'compareAtPrice'].includes(String(issue.path?.[0]))),
-    },
-  )
+  .refine((form) => form.compareAtPrice === null || form.compareAtPrice > form.price, {
+    ...error('compareAtPriceGreater'),
+    path: ['compareAtPrice'],
+    // Only once both prices are valid numbers.
+    when: ({ issues }) =>
+      issues.every((issue) => !['price', 'compareAtPrice'].includes(String(issue.path?.[0]))),
+  })
   .transform(
     (form): CreateProductInput => ({
       name: form.name,
       slug: isTypedSlug(form) ? form.slug : null,
       // Kept verbatim; empty or only white space is none, as the api stores it.
       description: form.description.trim() === '' ? null : form.description,
-      price: form.price ?? 0,
+      price: form.price,
       compareAtPrice: form.compareAtPrice,
       status: form.status,
       availability: form.availability,
