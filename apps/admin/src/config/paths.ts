@@ -17,6 +17,16 @@ export const paths = {
     path: '/products',
     getHref: () => '/products',
   },
+  /** S2 in add mode (US2). Its route comes with SHOP-20; until then the link shows 404. */
+  productNew: {
+    path: '/products/new',
+    getHref: () => '/products/new',
+  },
+  /** S2 in edit mode (US3). Its route comes with SHOP-34; until then the link shows 404. */
+  productEdit: {
+    path: '/products/:productId/edit',
+    getHref: (productId: string) => `/products/${encodeURIComponent(productId)}/edit`,
+  },
   about: {
     path: '/about',
     getHref: () => '/about',

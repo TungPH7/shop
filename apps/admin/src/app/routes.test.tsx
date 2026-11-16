@@ -1,7 +1,9 @@
+import { http, HttpResponse } from 'msw';
 import { createMemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { routes } from '@/app/routes';
+import { server } from '@/testing/msw/server';
 import { renderWithRouter, screen } from '@/testing/render';
 
 function renderAt(url: string) {
@@ -9,13 +11,19 @@ function renderAt(url: string) {
 }
 
 describe('routes', () => {
-  it('shows only the S1.2 title on /products until US1 builds the list', async () => {
-    renderAt('/products');
+  it('opens the product list S1 on /products without signing in (AC1)', async () => {
+    server.use(
+      http.get('*/admin/products', () =>
+        HttpResponse.json({ items: [], totalItems: 0, offset: 0, limit: 20 }),
+      ),
+    );
+    const router = createMemoryRouter(routes, { initialEntries: ['/products'] });
+    renderWithRouter(router);
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Products' })).toBeInTheDocument();
-    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
-    expect(screen.queryByRole('searchbox')).not.toBeInTheDocument();
-    expect(screen.queryByRole('list')).not.toBeInTheDocument();
+    expect(screen.getByRole('searchbox', { name: 'Search by name' })).toBeInTheDocument();
+    expect(await screen.findByText('No products yet.')).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/products');
   });
 
   it('has no product detail page of the template', async () => {

@@ -141,6 +141,8 @@
   /* Round icon button: the close button of the dialog (S3.2). The close button of a
      toast is smaller, 34 px (components.css). */
   --icon-btn: 40px;
+  /* Search box of a list (S1.5), on the right of the filter row. */
+  --search-width: 320px;
 
   /* --- Glass ---------------------------------------------------------------- */
   --blur: 14px;
