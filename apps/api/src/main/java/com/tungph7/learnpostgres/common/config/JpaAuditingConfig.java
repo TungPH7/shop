@@ -1,6 +1,7 @@
 package com.tungph7.learnpostgres.common.config;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 
 import org.springframework.context.annotation.Bean;
@@ -47,9 +48,13 @@ public class JpaAuditingConfig {
    * <p>Returns {@code Instant.now()} — pure UTC, matches Postgres {@code timestamptz}. Avoids
    * {@code LocalDateTime.now()} (system timezone) to remove ambiguity when the container runs in a
    * timezone other than the developer's machine.
+   *
+   * <p>The instant is cut to microseconds, the precision of {@code timestamptz}: the entity then
+   * holds the value the database keeps, instead of one PgJDBC rounds on the insert. Without the
+   * cut, an add could return {@code …:11.123Z} and a later read {@code …:11.124Z} (SHOP-46).
    */
   @Bean
   DateTimeProvider utcDateTimeProvider() {
-    return () -> Optional.of(Instant.now());
+    return () -> Optional.of(Instant.now().truncatedTo(ChronoUnit.MICROS));
   }
 }

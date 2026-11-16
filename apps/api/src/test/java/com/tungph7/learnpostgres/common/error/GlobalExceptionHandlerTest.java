@@ -4,12 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.lang.reflect.Method;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import org.assertj.core.api.InstanceOfAssertFactories;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.core.MethodParameter;
@@ -21,7 +24,10 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.validation.BeanPropertyBindingResult;
+import org.springframework.validation.FieldError;
 import org.springframework.validation.method.MethodValidationResult;
+import org.springframework.validation.method.ParameterErrors;
 import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -108,6 +114,20 @@ class GlobalExceptionHandlerTest {
   }
 
   @Test
+  void handleTypeMismatch_addsOnlyTheParameterOfTheApiContract() {
+    MethodArgumentTypeMismatchException ex =
+        new MethodArgumentTypeMismatchException(
+            "abc", UUID.class, "id", null, new IllegalArgumentException());
+
+    ResponseEntity<ProblemDetail> resp = handler.handleTypeMismatch(ex, request());
+
+    assertThat(resp.getBody().getProperties())
+        .doesNotContainKeys("rejectedValue", "expectedType", "errors");
+    assertThat(resp.getBody().getDetail())
+        .isEqualTo("Parameter 'id' has invalid value 'abc' (expected: UUID).");
+  }
+
+  @Test
   void handleTypeMismatch_returns_400_when_requiredType_null() {
     MethodArgumentTypeMismatchException ex =
         new MethodArgumentTypeMismatchException("abc", null, "id", null, new RuntimeException());
@@ -115,7 +135,7 @@ class GlobalExceptionHandlerTest {
     ResponseEntity<ProblemDetail> resp = handler.handleTypeMismatch(ex, request());
 
     assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-    assertThat(resp.getBody().getProperties()).containsEntry("expectedType", "unknown");
+    assertThat(resp.getBody().getDetail()).contains("expected: unknown");
   }
 
   @Test
@@ -215,7 +235,14 @@ class GlobalExceptionHandlerTest {
     int plain(int count) {
       return count;
     }
+
+    int bodyAndParameter(Body body, int count) {
+      return count;
+    }
   }
+
+  /** A request body, as a {@code @Valid @RequestBody} of a handler method. */
+  record Body(String name, String note) {}
 
   @Test
   void handleMethodValidation_namesAPathVariableByItsAnnotation() throws Exception {
@@ -228,8 +255,72 @@ class GlobalExceptionHandlerTest {
     assertThat(resp.getBody().getProperties())
         .containsEntry("code", "INVALID_PARAMETER")
         .containsEntry("parameter", "id")
-        .containsEntry("rejectedValue", -1);
+        .doesNotContainKey("rejectedValue");
     assertThat(resp.getBody().getDetail()).contains("must be positive");
+  }
+
+  @Test
+  void handleMethodValidation_ofARequestBody_listsItsFieldsLikeABodyError() throws Exception {
+    Body body = new Body("", "secret note");
+    ParameterErrors bodyErrors = bodyErrors(body, "name", "", "must not be blank");
+
+    ResponseEntity<ProblemDetail> resp =
+        handler.handleMethodValidation(
+            invalid(bodyErrors.getMethodParameter().getMethod(), bodyErrors), request());
+
+    assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(resp.getBody().getProperties())
+        .containsEntry("code", "VALIDATION_FAILED")
+        .doesNotContainKeys("parameter", "rejectedValue");
+    assertThat(resp.getBody().getDetail()).isEqualTo("Validation failed for 1 field(s).");
+    assertThat(resp.getBody().getProperties().get("errors"))
+        .asInstanceOf(InstanceOfAssertFactories.LIST)
+        .singleElement()
+        .isEqualTo(Map.of("field", "name", "rejectedValue", "", "message", "must not be blank"));
+    assertThat(resp.getBody().toString()).doesNotContain("secret note");
+  }
+
+  @Test
+  void handleMethodValidation_ofABodyAndAParameter_namesTheParameterWithoutTheBody()
+      throws Exception {
+    Body body = new Body("", "secret note");
+    ParameterErrors bodyErrors = bodyErrors(body, "name", "", "must not be blank");
+    MethodParameter count =
+        new MethodParameter(
+            Handlers.class.getDeclaredMethod("bodyAndParameter", Body.class, int.class), 1);
+
+    ResponseEntity<ProblemDetail> resp =
+        handler.handleMethodValidation(
+            invalid(count.getMethod(), bodyErrors, result(count, -1, "must be positive")),
+            request());
+
+    assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(resp.getBody().getProperties())
+        .containsEntry("code", "INVALID_PARAMETER")
+        .containsEntry("parameter", "count")
+        .doesNotContainKey("rejectedValue");
+    assertThat(resp.getBody().getDetail()).doesNotContain("secret note");
+  }
+
+  @Test
+  void handleMethodValidation_ofABodyWithOnlyAnObjectError_isABodyErrorWithoutTheBody()
+      throws Exception {
+    MethodParameter parameter =
+        new MethodParameter(
+            Handlers.class.getDeclaredMethod("bodyAndParameter", Body.class, int.class), 0);
+    Body body = new Body("a", "secret note");
+    BeanPropertyBindingResult errors = new BeanPropertyBindingResult(body, "body");
+    errors.reject("Invalid", "is invalid");
+    ParameterErrors objectError = new ParameterErrors(parameter, body, errors, null, null, null);
+
+    ResponseEntity<ProblemDetail> resp =
+        handler.handleMethodValidation(invalid(parameter.getMethod(), objectError), request());
+
+    assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(resp.getBody().getProperties())
+        .containsEntry("code", "VALIDATION_FAILED")
+        .doesNotContainKey("parameter");
+    assertThat(resp.getBody().toString()).doesNotContain("secret note");
   }
 
   @Test
@@ -273,16 +364,37 @@ class GlobalExceptionHandlerTest {
 
   private static HandlerMethodValidationException invalid(
       MethodParameter parameter, Object value, String message) {
-    ParameterValidationResult result =
-        new ParameterValidationResult(
-            parameter,
-            value,
-            List.of(new DefaultMessageSourceResolvable(new String[] {"Min"}, message)),
-            null,
-            null,
-            null,
-            (error, type) -> null);
+    return invalid(parameter.getMethod(), result(parameter, value, message));
+  }
+
+  private static HandlerMethodValidationException invalid(
+      Method method, ParameterValidationResult... results) {
     return new HandlerMethodValidationException(
-        MethodValidationResult.create(new Handlers(), parameter.getMethod(), List.of(result)));
+        MethodValidationResult.create(new Handlers(), method, List.of(results)));
+  }
+
+  private static ParameterValidationResult result(
+      MethodParameter parameter, Object value, String message) {
+    return new ParameterValidationResult(
+        parameter,
+        value,
+        List.of(new DefaultMessageSourceResolvable(new String[] {"Min"}, message)),
+        null,
+        null,
+        null,
+        (error, type) -> null);
+  }
+
+  /** The errors of the body, parameter 0 of {@code bodyAndParameter}, with one field error. */
+  private static ParameterErrors bodyErrors(
+      Body body, String field, Object rejectedValue, String message) throws NoSuchMethodException {
+    MethodParameter parameter =
+        new MethodParameter(
+            Handlers.class.getDeclaredMethod("bodyAndParameter", Body.class, int.class), 0);
+    BeanPropertyBindingResult errors = new BeanPropertyBindingResult(body, "body");
+    errors.addError(
+        new FieldError(
+            "body", field, rejectedValue, false, new String[] {"NotBlank"}, null, message));
+    return new ParameterErrors(parameter, body, errors, null, null, null);
   }
 }

@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
+import com.tungph7.learnpostgres.common.dto.ApiInstant;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Row;
@@ -20,8 +21,8 @@ public record AdminProductSummary(
     long price,
     ProductStatus status,
     ProductAvailability availability,
-    Instant createdAt,
-    Instant updatedAt) {
+    @ApiInstant Instant createdAt,
+    @ApiInstant Instant updatedAt) {
 
   /** The product of a list row, with the instants cut to milliseconds as {@link AdminProduct}. */
   public static AdminProductSummary from(Row row) {
