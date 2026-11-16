@@ -1,7 +1,10 @@
 package com.tungph7.learnpostgres.feature.product.service;
 
 import java.math.BigDecimal;
+import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
@@ -37,7 +40,7 @@ import com.tungph7.learnpostgres.feature.product.repository.ProductSearchTerms;
  * <ul>
  *   <li>typed: kept as it is; taken, ignoring case, is a 409 {@code PRODUCT_SLUG_DUPLICATED};
  *   <li>absent: generated from the name by {@link ProductSlugs}, with {@code -2}, {@code -3}… when
- *       taken.
+ *       taken, up to {@code -}{@value #MAX_SLUG_NUMBER}; past it, a 409 asks for a typed slug.
  * </ul>
  *
  * <p>The check for a taken slug runs before the insert, so two adds at once can both pass it. The
@@ -51,6 +54,9 @@ public class AdminProductService {
 
   /** How many times an add whose generated slug was taken meanwhile tries again. */
   static final int MAX_SLUG_RETRIES = 3;
+
+  /** The highest suffix of a generated slug. */
+  static final int MAX_SLUG_NUMBER = 1000;
 
   private static final String SLUG_UNIQUE_CONSTRAINT = "products_slug_unique";
   private static final String SLUG_TAKEN = "Product slug already exists.";
@@ -177,17 +183,35 @@ public class AdminProductService {
     }
   }
 
-  /** {@code base} when free, else the first of {@code base-2}, {@code base-3}… that is free. */
+  /**
+   * {@code base} when free, else the first of {@code base-2}, {@code base-3}… up to {@code
+   * base-}{@value #MAX_SLUG_NUMBER} that is free. The slugs taken are read in one query, then
+   * compared here, ignoring case as {@code citext} does.
+   *
+   * <p>The base has only {@code a-z}, {@code 0-9} and hyphens ({@link ProductSlugs#fromName}), so
+   * it holds no wildcard of {@code LIKE}. A long base is cut before its suffix ({@link
+   * ProductSlugs#withSuffix}), so its slugs are read by the shortest cut, its stem.
+   *
+   * @throws ConflictException {@code PRODUCT_SLUG_DUPLICATED} when every number is taken
+   */
   private String firstFreeSlug(String base) {
-    if (!repository.existsBySlug(base)) {
+    String stem = ProductSlugs.withSuffix(base, MAX_SLUG_NUMBER);
+    stem = stem.substring(0, stem.lastIndexOf('-'));
+    String pattern = stem.equals(base) ? base + "-%" : stem + "%";
+    Set<String> taken =
+        repository.findSlugsOfFamily(base, pattern).stream()
+            .map(slug -> slug.toLowerCase(Locale.ROOT))
+            .collect(Collectors.toSet());
+    if (!taken.contains(base)) {
       return base;
     }
-    for (int number = 2; ; number++) {
+    for (int number = 2; number <= MAX_SLUG_NUMBER; number++) {
       String slug = ProductSlugs.withSuffix(base, number);
-      if (!repository.existsBySlug(slug)) {
+      if (!taken.contains(slug)) {
         return slug;
       }
     }
+    throw slugTaken(null);
   }
 
   private static Product newProduct(CreateProductRequest request, String slug) {

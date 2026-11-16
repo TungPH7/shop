@@ -91,8 +91,8 @@ class AdminProductControllerWebMvcTest {
         .andExpect(jsonPath("$.compareAtPrice").value(250000))
         .andExpect(jsonPath("$.status").value("ACTIVE"))
         .andExpect(jsonPath("$.availability").value("IN_STOCK"))
-        .andExpect(jsonPath("$.createdAt").value("2026-11-16T02:10:00Z"))
-        .andExpect(jsonPath("$.updatedAt").value("2026-11-16T02:15:30Z"))
+        .andExpect(jsonPath("$.createdAt").value("2026-11-16T02:10:00.000Z"))
+        .andExpect(jsonPath("$.updatedAt").value("2026-11-16T02:15:30.000Z"))
         .andExpect(jsonPath("$.version").value(1));
   }
 
@@ -172,6 +172,133 @@ class AdminProductControllerWebMvcTest {
         ArgumentCaptor.forClass(CreateProductRequest.class);
     verify(service).create(request.capture());
     assertThat(request.getValue().description()).isEqualTo("  Kích thước < 5 cm\n");
+  }
+
+  @Test
+  void create_writesTheInstantsWithMillisecondsLikeTheContract() throws Exception {
+    when(service.create(any(CreateProductRequest.class)))
+        .thenReturn(
+            new AdminProduct(
+                ID,
+                "A",
+                "a",
+                null,
+                1L,
+                null,
+                ProductStatus.ACTIVE,
+                ProductAvailability.IN_STOCK,
+                Instant.parse("2026-11-16T02:10:00.120Z"),
+                Instant.parse("2026-11-16T02:10:00.123456Z"),
+                0L));
+
+    post("{\"name\":\"A\",\"price\":1}")
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.createdAt").value("2026-11-16T02:10:00.120Z"))
+        .andExpect(jsonPath("$.updatedAt").value("2026-11-16T02:10:00.123Z"));
+  }
+
+  /** White space beyond ASCII that {@code String.prototype.trim()} of the admin form removes. */
+  static Stream<Arguments> unicodeSpaces() {
+    return Stream.of(
+        Arguments.of("U+00A0 no-break space", Character.toString(0x00A0)),
+        Arguments.of("U+2007 figure space", Character.toString(0x2007)),
+        Arguments.of("U+202F narrow no-break space", Character.toString(0x202F)),
+        Arguments.of("U+FEFF byte order mark", Character.toString(0xFEFF)),
+        Arguments.of("U+3000 ideographic space", Character.toString(0x3000)),
+        Arguments.of("U+2028 line separator", Character.toString(0x2028)));
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("unicodeSpaces")
+  void create_withANameOfOnlyUnicodeSpaces_returns400OnTheName(String label, String space)
+      throws Exception {
+    post(body(space + space, null, null, "1", null))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+        .andExpect(jsonPath("$.errors", hasSize(1)))
+        .andExpect(jsonPath("$.errors[0].field").value("name"))
+        .andExpect(jsonPath("$.errors[0].message").value("must not be blank"));
+
+    verify(service, never()).create(any());
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("unicodeSpaces")
+  void create_trimsUnicodeSpacesLikeTheAdminForm(String label, String space) throws Exception {
+    when(service.create(any(CreateProductRequest.class))).thenReturn(sampleProduct());
+
+    post(body(space + "Áo thun" + space, null, space + " " + space, "1", null))
+        .andExpect(status().isCreated());
+
+    ArgumentCaptor<CreateProductRequest> request =
+        ArgumentCaptor.forClass(CreateProductRequest.class);
+    verify(service).create(request.capture());
+    assertThat(request.getValue().name()).isEqualTo("Áo thun");
+    assertThat(request.getValue().description()).isNull();
+  }
+
+  @Test
+  void create_withASlugOf20000CharactersOfWords_returns400OnTheSlug() throws Exception {
+    String slug = "a-".repeat(9_999) + "aa";
+
+    post(body("A", slug, null, "1", null))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+        .andExpect(jsonPath("$.errors", hasSize(1)))
+        .andExpect(jsonPath("$.errors[0].field").value("slug"))
+        .andExpect(jsonPath("$.errors[0].message").value("must be at most 100 characters"));
+
+    verify(service, never()).create(any());
+  }
+
+  @Test
+  void create_withASlugOfTheWrongFormat_saysWhatTheFormatIs() throws Exception {
+    post(body("A", "Ao--thun", null, "1", null))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors", hasSize(1)))
+        .andExpect(jsonPath("$.errors[0].field").value("slug"))
+        .andExpect(
+            jsonPath("$.errors[0].message")
+                .value(
+                    "must be lowercase letters a-z and digits, in words joined by single"
+                        + " hyphens"));
+  }
+
+  static Stream<Arguments> fieldsBreakingSeveralRules() {
+    return Stream.of(
+        Arguments.of("price 1000000000", "1000000000", null, "price", "must be at most 999999999"),
+        Arguments.of("price 0.5", "0.5", null, "price", "must be a whole number"),
+        Arguments.of("price -1.5", "-1.5", null, "price", "must be a whole number"),
+        Arguments.of(
+            "compareAtPrice 1000000000.5",
+            "1",
+            "1000000000.5",
+            "compareAtPrice",
+            "must be a whole number"),
+        Arguments.of(
+            "compareAtPrice 0, below price", "5", "0", "compareAtPrice", "must be at least 1"));
+  }
+
+  @ParameterizedTest(name = "{0}")
+  @MethodSource("fieldsBreakingSeveralRules")
+  void create_withAFieldBreakingSeveralRules_returnsOneMessageForIt(
+      String label, String price, String compareAtPrice, String field, String message)
+      throws Exception {
+    post(body("A", null, null, price, compareAtPrice))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.detail").value("Validation failed for 1 field(s)."))
+        .andExpect(jsonPath("$.errors", hasSize(1)))
+        .andExpect(jsonPath("$.errors[0].field").value(field))
+        .andExpect(jsonPath("$.errors[0].message").value(message));
+  }
+
+  @Test
+  void create_countsTheInvalidFieldsNotTheBrokenRules() throws Exception {
+    post(body("A", null, null, "0.5", "-0.5"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.detail").value("Validation failed for 2 field(s)."))
+        .andExpect(jsonPath("$.errors", hasSize(2)))
+        .andExpect(jsonPath("$.errors[*].field").value(hasItems("price", "compareAtPrice")));
   }
 
   static Stream<Arguments> valuesAtTheLimits() {

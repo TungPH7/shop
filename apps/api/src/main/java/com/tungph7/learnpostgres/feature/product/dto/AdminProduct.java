@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
+import com.tungph7.learnpostgres.common.dto.ApiInstant;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
@@ -21,14 +22,15 @@ public record AdminProduct(
     Long compareAtPrice,
     ProductStatus status,
     ProductAvailability availability,
-    Instant createdAt,
-    Instant updatedAt,
+    @ApiInstant Instant createdAt,
+    @ApiInstant Instant updatedAt,
     long version) {
 
   /**
    * The product as it was saved. The instants are cut to milliseconds, as the API Contract writes
-   * them: the clock of the JVM may give nanoseconds, the database keeps microseconds, and a later
-   * read must not show another value.
+   * them ({@link ApiInstant}). They are already in microseconds, the precision the database keeps
+   * (see {@code JpaAuditingConfig}), so a later read of the product cuts the same value and shows
+   * the same milliseconds.
    */
   public static AdminProduct from(Product product) {
     return new AdminProduct(
