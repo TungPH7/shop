@@ -3,10 +3,13 @@ package com.tungph7.learnpostgres.feature.product.repository;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import org.springframework.jdbc.core.RowMapper;
@@ -26,7 +29,7 @@ import com.tungph7.learnpostgres.feature.product.domain.ProductSort;
  * <p>Each list runs two statements, a page and a total, and no more (NFR2). The SQL text is built
  * only from constants of this class: the {@code ORDER BY} comes from a fixed {@link ProductSort},
  * the number of {@code LIKE} conditions from the number of words, and every value the user sent —
- * the keyword, the status, the offset and the limit — goes into bind parameters (NFR10).
+ * the keyword, the statuses, the offset and the limit — goes into bind parameters (NFR10).
  */
 @Repository
 public class ProductQueryRepository {
@@ -52,16 +55,27 @@ public class ProductQueryRepository {
    * What one list asks for.
    *
    * @param search the keyword, or {@code null} for no search
-   * @param status the one status to list, or {@code null} for every status: only the admin lists
-   *     ask for that, the store always asks for {@link ProductStatus#ACTIVE} (NFR9)
+   * @param statuses the statuses to list, at least one and never {@code null}: the store always
+   *     asks for {@link ProductStatus#ACTIVE} only (NFR9), and only the admin lists ask for every
+   *     status, by naming every status. No value means "every status", so a caller that forgets the
+   *     statuses fails instead of listing hidden products.
    * @param sort the order; {@link ProductSort#RELEVANCE} needs a keyword
    * @param offset the products to skip, 0 or more
    * @param limit the products of the page, 1 to {@value ProductQueryRepository#MAX_LIMIT}
    */
   public record Criteria(
-      ProductSearchTerms search, ProductStatus status, ProductSort sort, int offset, int limit) {
+      ProductSearchTerms search,
+      Set<ProductStatus> statuses,
+      ProductSort sort,
+      int offset,
+      int limit) {
 
     public Criteria {
+      Objects.requireNonNull(statuses, "statuses");
+      if (statuses.isEmpty()) {
+        throw new IllegalArgumentException("No status to list");
+      }
+      statuses = Collections.unmodifiableSet(EnumSet.copyOf(statuses));
       Objects.requireNonNull(sort, "sort");
       if (sort == ProductSort.RELEVANCE && search == null) {
         throw new IllegalArgumentException("Sort RELEVANCE needs a keyword");
@@ -72,6 +86,14 @@ public class ProductQueryRepository {
       if (limit < 1 || limit > MAX_LIMIT) {
         throw new IllegalArgumentException("A limit out of 1 to " + MAX_LIMIT + ": " + limit);
       }
+    }
+
+    /**
+     * Whether the criteria name every status, so the list needs no status condition: the column
+     * {@code status} is NOT NULL and holds only the values of {@link ProductStatus}.
+     */
+    public boolean coversEveryStatus() {
+      return statuses.size() == ProductStatus.values().length;
     }
   }
 
@@ -132,9 +154,9 @@ public class ProductQueryRepository {
   /** The WHERE clause of the criteria; its values go to {@code params}. */
   private static String where(Criteria criteria, Map<String, Object> params) {
     StringBuilder where = new StringBuilder(" WHERE TRUE");
-    if (criteria.status() != null) {
-      where.append(" AND p.status = :status");
-      params.put("status", criteria.status().name());
+    if (!criteria.coversEveryStatus()) {
+      where.append(" AND p.status IN (:statuses)");
+      params.put("statuses", criteria.statuses().stream().map(ProductStatus::name).toList());
     }
     if (criteria.search() != null) {
       List<String> patterns = criteria.search().wordPatterns();
