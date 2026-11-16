@@ -12,7 +12,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
@@ -102,7 +108,7 @@ class AdminProductListDeleteIntegrationTest extends AbstractContainerBaseTest {
         .andExpect(jsonPath("$.items[0].price").value(0))
         .andExpect(jsonPath("$.items[0].status").value("HIDDEN"))
         .andExpect(jsonPath("$.items[0].availability").value("IN_STOCK"))
-        .andExpect(jsonPath("$.items[0].createdAt").value("2026-11-16T02:01:00Z"))
+        .andExpect(jsonPath("$.items[0].createdAt").value("2026-11-16T02:01:00.000Z"))
         .andExpect(jsonPath("$.items[0]", org.hamcrest.Matchers.not(hasKey("description"))));
   }
 
@@ -243,6 +249,36 @@ class AdminProductListDeleteIntegrationTest extends AbstractContainerBaseTest {
     assertThat(exists(id)).isFalse();
   }
 
+  /**
+   * Why the delete is one JPQL {@code DELETE} (NFR19): a delete of the loaded entity checks its
+   * version, so the second of two deletes at once would fail on a row already gone.
+   */
+  @Test
+  void delete_twiceAtOnce_returns204BothTimes() throws Exception {
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    try {
+      for (int round = 0; round < 10; round++) {
+        UUID id = insert("Quần jean " + round, 450_000L, "ACTIVE", round);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<Integer>> deletes =
+            List.of(
+                pool.submit(() -> deleteAfter(start, id)),
+                pool.submit(() -> deleteAfter(start, id)));
+
+        start.countDown();
+
+        assertThat(
+                List.of(
+                    deletes.get(0).get(30, TimeUnit.SECONDS),
+                    deletes.get(1).get(30, TimeUnit.SECONDS)))
+            .containsExactly(204, 204);
+        assertThat(exists(id)).isFalse();
+      }
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
   @Test
   void delete_ofAnIdNeverUsed_returns204() throws Exception {
     insert("Quần jean nam", 450_000L, "ACTIVE", 1);
@@ -306,9 +342,32 @@ class AdminProductListDeleteIntegrationTest extends AbstractContainerBaseTest {
         .andExpect(jsonPath("$.paths['/api/admin/products/{id}'].delete").exists());
   }
 
+  @Test
+  void apiDocs_describeEachResponseOfThePost() throws Exception {
+    String post = "$.paths['/api/admin/products'].post.responses";
+
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath(post).value(hasKey("201")))
+        .andExpect(jsonPath(post + "['201'].headers").value(hasKey("Location")))
+        .andExpect(jsonPath(post).value(hasKey("400")))
+        .andExpect(jsonPath(post).value(hasKey("409")))
+        .andExpect(jsonPath(post).value(hasKey("500")))
+        .andExpect(
+            jsonPath(post + "['409'].content['application/problem+json'].schema['$ref']")
+                .value("#/components/schemas/ProblemDetail"));
+  }
+
   // ============================================================
   // Helpers
   // ============================================================
+
+  /** Sends a delete once {@code start} opens, and returns its status. */
+  private int deleteAfter(CountDownLatch start, UUID id) throws Exception {
+    start.await(30, TimeUnit.SECONDS);
+    return mockMvc.perform(delete(URL + "/" + id)).andReturn().getResponse().getStatus();
+  }
 
   /**
    * Inserts as {@code v0.3.0} does, created {@code minutes} after {@link #T0}. The ids grow with
