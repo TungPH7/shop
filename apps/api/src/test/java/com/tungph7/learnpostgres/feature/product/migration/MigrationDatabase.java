@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
+import javax.sql.DataSource;
+
 import org.flywaydb.core.Flyway;
 import org.flywaydb.core.api.configuration.FluentConfiguration;
 import org.springframework.core.io.ClassPathResource;
@@ -80,6 +82,11 @@ final class MigrationDatabase implements AutoCloseable {
 
   JdbcClient jdbc() {
     return jdbc;
+  }
+
+  /** The pool behind {@link #jdbc()}, for a test that needs a connection of its own. */
+  DataSource dataSource() {
+    return dataSource;
   }
 
   /** Flyway as {@code application.yml} sets it, over every migration of this build. */
