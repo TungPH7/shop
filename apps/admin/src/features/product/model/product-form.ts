@@ -68,13 +68,6 @@ export function parsePriceInput(text: string): PriceInput {
   return { kind: 'invalid' };
 }
 
-const groupedNumber = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
-
-/** A whole price as the field shows it once left: `450000` as `450.000` (S2.9). */
-export function formatPriceInput(value: number): string {
-  return groupedNumber.format(value);
-}
-
 /** The error codes of the form; the component shows `form.errors.<code>`. */
 export type ProductFormError =
   | 'nameRequired'

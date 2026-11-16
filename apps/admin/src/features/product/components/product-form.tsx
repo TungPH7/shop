@@ -9,10 +9,10 @@ import { InputField, TextAreaField } from '@/components/ui/field';
 import { SegmentedChoice } from '@/components/ui/segmented-control';
 import { paths } from '@/config/paths';
 import { createProductErrorOf, useCreateProduct } from '@/features/product/api/create-product';
+import { formatPrice } from '@/features/product/model/product';
 import {
   type CreateProductInput,
   DESCRIPTION_MAX_LENGTH,
-  formatPriceInput,
   NAME_MAX_LENGTH,
   parsePriceInput,
   productFormDefaults,
@@ -98,7 +98,10 @@ export function ProductForm() {
     onBlur: (event: FocusEvent<HTMLInputElement>) => {
       const price = parsePriceInput(event.target.value);
       if (price.kind === 'number') {
-        setValue(event.target.name as 'price' | 'compareAtPrice', formatPriceInput(price.value));
+        setValue(
+          event.target.name as 'price' | 'compareAtPrice',
+          formatPrice(price.value, { sign: false }),
+        );
       }
     },
   };
