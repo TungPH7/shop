@@ -17,7 +17,7 @@ export const paths = {
     path: '/products',
     getHref: () => '/products',
   },
-  /** S2 in add mode (US2). Its route comes with SHOP-20; until then the link shows 404. */
+  /** S2 in add mode (US2). */
   productNew: {
     path: '/products/new',
     getHref: () => '/products/new',

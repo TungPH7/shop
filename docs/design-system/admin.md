@@ -1,6 +1,6 @@
 # Design system: admin
 
-> **App:** `apps/admin` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-16, SHOP-8, SHOP-9 và SHOP-19
+> **App:** `apps/admin` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-16, SHOP-8, SHOP-9, SHOP-19 và SHOP-20
 
 Design system của `admin` là CSS variables và CSS thường, không có Tailwind hay thư viện UI (NFR13). Mỗi màn hình dùng token và class dưới đây, không tự đặt màu, cỡ chữ hay khoảng cách.
 
@@ -158,7 +158,9 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.page-header` | Hàng tiêu đề của trang danh sách (S1.2, S1.3) | h1 bên trái, nút chính bên phải, cách bảng lọc 24 (SHOP-19) |
 | `.toolbar`, `.toolbar__group`, `.toolbar__count` | Hàng bộ lọc (S1.4, S1.5) | Nút phân đoạn và nhãn đếm 12,5/600 `--muted` bên trái, ô tìm rộng `--search-width` bên phải; xuống dòng khi hẹp (SHOP-19) |
 | `.list-page__card` | Thẻ của bảng (S1.6, S1.11) | `.card` chứa bảng; phân trang bên dưới, cách một đường kẻ `--line` (SHOP-19) |
-| `.banner .banner--error`, `.banner--warn`, `.banner__icon` | Banner (S2.5, S2.7) | Bo 14, nền tint 14% hay 16%, biểu tượng màu bad hay warn, chữ `--text` 14/500. Lỗi `role="alert"`, cảnh báo `role="status"` |
+| `.banner .banner--error`, `.banner--warn`, `.banner__icon` | Banner (S2.5, S2.7) | Bo 14, nền tint 14% hay 16%, biểu tượng màu bad hay warn, chữ `--text` 14/500. Lỗi `role="alert"`, cảnh báo `role="status"`. Chữ là một `<p>`, không có lề |
+| `.form-page`, `.form-page__back` | Trang form (S2.2, S2.4) | Cột rộng tối đa 640 px, căn giữa; liên kết "← Sản phẩm" 13,5/600 `--accent-text` cách thẻ 16, mũi tên `aria-hidden` (SHOP-20) |
+| `.product-form`, `.product-form__header`, `.product-form__subtitle`, `.product-form__pair`, `.product-form__actions` | Khung form (S2.3, S2.4, S2.13, S2.14) | Đặt cùng `.card`. Các khối cách nhau `--gap` 16; tiêu đề h1 và dòng phụ `--muted` ở đầu thẻ, như ảnh 02; giá bán và giá gốc, rồi Trạng thái và Tình trạng, mỗi cặp hai cột bằng nhau, một cột dưới 640 px; nút Hủy và nút Lưu căn phải ở cuối thẻ (SHOP-20) |
 | `.skeleton` | Khung xương | Nền `--surface-2`, nhấp nháy 1,2 s; đặt `border-radius` như phần tử thật; vùng chứa có `aria-busy="true"` |
 | `.visually-hidden` | | Chữ chỉ cho trình đọc màn hình, như nhãn ẩn "Tìm theo tên" |
 | `.shell`, `.shell__bar`, `.shell__main`, `.shell__status` | Khung trang | Rộng tối đa `--app-max`, lề `--gutter` |

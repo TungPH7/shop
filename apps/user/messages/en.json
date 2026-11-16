@@ -129,6 +129,15 @@
     "metaDescription": "Browse products fetched server-side through the Data Access Layer, validated at the boundary and cached for performance.",
     "title": "Products"
   },
+  "ProductDetail": {
+    "back": "Products",
+    "price": "Price",
+    "originalPrice": "Original price:",
+    "discount": "Off",
+    "inStock": "In stock",
+    "outOfStock": "Out of stock",
+    "description": "Description"
+  },
   "ErrorDemo": {
     "title": "Error handling demo",
     "intro": "Each link triggers a different failure so you can see which boundary catches it (folder 17).",

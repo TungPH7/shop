@@ -44,6 +44,13 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
   @Query(value = BY_SLUG_SQL, nativeQuery = true)
   Optional<Product> findBySlug(@Param("slug") String slug);
 
+  /**
+   * The product with this slug, compared case-insensitively ({@code citext}): the same query as
+   * {@link #findBySlug}, which the store reads through ({@code StoreProductService}).
+   */
+  @Query(value = BY_SLUG_SQL, nativeQuery = true)
+  Optional<Product> findBySlugIgnoringCase(@Param("slug") String slug);
+
   /** Whether a product has this slug, compared case-insensitively ({@code citext}). */
   @Query(value = EXISTS_BY_SLUG_SQL, nativeQuery = true)
   boolean existsBySlug(@Param("slug") String slug);

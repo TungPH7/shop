@@ -72,6 +72,13 @@ export async function createProducts(
   return created;
 }
 
+/** The products whose name matches `q`, as the admin list finds them: for products a test made in the form. */
+export async function findProducts(request: APIRequestContext, q: string): Promise<E2eProduct[]> {
+  const response = await request.get(API, { params: { q, offset: 0, limit: 100 } });
+  expect(response.status()).toBe(200);
+  return ((await response.json()) as { items: E2eProduct[] }).items;
+}
+
 export async function deleteProducts(
   request: APIRequestContext,
   products: readonly { id: string }[],

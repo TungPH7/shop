@@ -129,6 +129,15 @@
     "metaDescription": "Duyệt sản phẩm được lấy phía server qua Data Access Layer, validate ở biên và cache để tối ưu hiệu năng.",
     "title": "Sản phẩm"
   },
+  "ProductDetail": {
+    "back": "Sản phẩm",
+    "price": "Giá bán",
+    "originalPrice": "Giá gốc:",
+    "discount": "Giảm",
+    "inStock": "Còn hàng",
+    "outOfStock": "Hết hàng",
+    "description": "Mô tả"
+  },
   "ErrorDemo": {
     "title": "Demo xử lý lỗi",
     "intro": "Mỗi liên kết kích hoạt một loại lỗi khác nhau để thấy ranh giới nào bắt nó (folder 17).",
