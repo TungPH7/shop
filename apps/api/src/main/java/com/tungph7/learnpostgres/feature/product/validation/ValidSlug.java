@@ -14,9 +14,16 @@ import jakarta.validation.Payload;
 import com.tungph7.learnpostgres.feature.product.domain.ProductSlugs;
 
 /**
- * A slug an admin typed has the slug format of the Product Rules, checked by {@link
- * ProductSlugs#isValid}, the one place that rule is written. {@code null} is valid: the field is
- * optional where it is optional, and {@code @NotNull} says when it is not.
+ * A slug an admin typed in the add of a product has the slug format of the Product Rules, checked
+ * by {@link ProductSlugs#isValid}, the one place that rule is written. {@code null} is valid: the
+ * slug of the add is optional, and {@code api} then generates it.
+ *
+ * <p>Only the add uses this constraint. The edit must not (API Contract, section "Slug khi sửa",
+ * and NFR16): a slug equal to the one stored, ignoring case, is kept without checking its format,
+ * so a product of before the Epic with a slug out of the format can still be saved. Only a slug
+ * that differs from the stored one is checked, which needs the stored slug, so the service of the
+ * edit (US3, SHOP-34) checks it with {@link ProductSlugs#isValid}, not a constraint on the request
+ * body.
  *
  * <p>The length is checked before the format, so a slug of thousands of characters is one 400 on
  * the field and never reaches the regular expression. The message says which of the two failed.

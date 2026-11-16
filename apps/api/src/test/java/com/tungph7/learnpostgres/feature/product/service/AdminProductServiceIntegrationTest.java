@@ -2,6 +2,7 @@ package com.tungph7.learnpostgres.feature.product.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doReturn;
@@ -16,6 +17,7 @@ import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -281,8 +283,18 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
 
     assertThat(create("Áo thun", null).slug()).isEqualTo("ao-thun-3");
 
-    verify(repository, times(1)).findSlugsOfFamily(anyString(), anyString());
+    verify(repository, times(1)).findSlugsAmong(any(String[].class));
     verify(repository, never()).existsBySlug(anyString());
+  }
+
+  @Test
+  void create_withoutSlug_takesTheBaseWhenOnlySlugsStartingLikeItAreTaken() {
+    create("Áo thun cổ tròn", null);
+    create("Áo", "ao-2a");
+    create("Áo", "ao-x");
+
+    assertThat(create("Áo", null).slug()).isEqualTo("ao");
+    assertThat(create("Áo", null).slug()).isEqualTo("ao-2");
   }
 
   // ============================================================
@@ -340,9 +352,9 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
     create("Áo thun cổ tròn", null);
     // The read runs before the other add commits, so it still sees every slug free.
     doReturn(List.of())
-        .doAnswer(invocation -> slugsOfFamily(invocation.getArgument(0), invocation.getArgument(1)))
+        .doAnswer(invocation -> slugsAmong(invocation.getArgument(0)))
         .when(repository)
-        .findSlugsOfFamily("ao-thun-co-tron", "ao-thun-co-tron-%");
+        .findSlugsAmong(any(String[].class));
 
     AdminProduct product = create("Áo thun cổ tròn", null);
 
@@ -460,12 +472,12 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
         .existsBySlug(slug);
   }
 
-  private List<String> slugsOfFamily(String base, String pattern) {
+  /** The slugs among the given ones, ignoring case, read by the test outside the spied query. */
+  private List<String> slugsAmong(String[] slugs) {
     return transaction.execute(
         status ->
-            jdbc.sql("SELECT slug::text FROM app.products WHERE slug = :base OR slug LIKE :pattern")
-                .param("base", base)
-                .param("pattern", pattern)
+            jdbc.sql("SELECT slug::text FROM app.products WHERE lower(slug::text) IN (:slugs)")
+                .param("slugs", Arrays.asList(slugs))
                 .query(String.class)
                 .list());
   }

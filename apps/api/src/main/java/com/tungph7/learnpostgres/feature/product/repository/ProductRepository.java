@@ -26,24 +26,23 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
   /** Whether a product has this slug, compared case-insensitively ({@code citext}). */
   boolean existsBySlug(String slug);
 
+  /** The SQL of {@link #findSlugsAmong}, with its one parameter {@code :slugs}. */
+  String SLUGS_AMONG_SQL =
+      "SELECT slug::text FROM app.products WHERE slug = ANY(CAST(:slugs AS public.citext[]))";
+
   /**
-   * The slugs equal to {@code base} or matching the {@code LIKE} pattern, both compared
-   * case-insensitively ({@code citext}): every slug a generated slug and its suffixes could take,
-   * read in one query.
+   * The slugs of products among the given ones, compared case-insensitively ({@code citext}), as
+   * they are stored: every slug a generated slug and its suffixes could take, read in one query.
    *
-   * <p>Native SQL, since JPQL refuses {@code LIKE} on the {@code citext} type of the slug. Both
-   * parameters are cast to {@code citext}: a {@code text} parameter would make PostgreSQL compare
-   * as {@code text}, case-sensitively.
+   * <p>An equality on the slug, so each slug given is one lookup in the index of {@code
+   * products_slug_unique}, whatever the size of the table; a {@code LIKE} on {@code citext} cannot
+   * use that index. Native SQL, since JPQL has no array. The array is cast to {@code citext[]}: a
+   * {@code text[]} would make PostgreSQL compare as {@code text}, case-sensitively.
    *
-   * @param base the generated slug
-   * @param pattern a {@code LIKE} pattern, such as {@code ao-thun-%}
+   * @param slugs the slugs to look for, such as {@code ao-thun}, {@code ao-thun-2}…
    */
-  @Query(
-      value =
-          "SELECT slug::text FROM app.products WHERE slug = CAST(:base AS public.citext)"
-              + " OR slug LIKE CAST(:pattern AS public.citext)",
-      nativeQuery = true)
-  List<String> findSlugsOfFamily(@Param("base") String base, @Param("pattern") String pattern);
+  @Query(value = SLUGS_AMONG_SQL, nativeQuery = true)
+  List<String> findSlugsAmong(@Param("slugs") String[] slugs);
 
   /**
    * Deletes the product with this id in one statement, without loading it or checking its version.

@@ -186,6 +186,42 @@ class ProductRepositoryDataJpaTest extends AbstractContainerBaseTest {
   }
 
   // ============================================================
+  // The slugs taken among the candidates of a generated slug
+  // ============================================================
+
+  @Test
+  void findSlugsAmong_readsOnlyTheSlugsGiven_ignoringCase() {
+    repository.save(product("Áo", "ao", 1L));
+    repository.save(product("Áo", "AO-2", 1L));
+    repository.save(product("Áo", "ao-2a", 1L));
+    repository.save(product("Áo", "ao-thun", 1L));
+    em.flush();
+
+    assertThat(repository.findSlugsAmong(new String[] {"ao", "ao-2", "ao-3"}))
+        .containsExactlyInAnyOrder("ao", "AO-2");
+  }
+
+  @Test
+  void findSlugsAmong_ofNoSlugTaken_readsNothing() {
+    repository.save(product("Áo", "ao-thun", 1L));
+    em.flush();
+
+    assertThat(repository.findSlugsAmong(new String[] {"ao", "ao-2"})).isEmpty();
+  }
+
+  @Test
+  void findSlugsAmong_canBeServedByTheIndexOfTheUniqueSlug() {
+    // Seq scans off: a plan that still reads the whole table means the condition cannot use the
+    // index, as a LIKE on citext could not.
+    jdbc.sql("SET LOCAL enable_seqscan = off").update();
+    String sql = ProductRepository.SLUGS_AMONG_SQL.replace(":slugs", "'{ao,ao-2,ao-3}'::text");
+
+    String plan = String.join("\n", jdbc.sql("EXPLAIN " + sql).query(String.class).list());
+
+    assertThat(plan).contains("products_slug_unique").doesNotContain("Seq Scan");
+  }
+
+  // ============================================================
   // Helpers
   // ============================================================
 
