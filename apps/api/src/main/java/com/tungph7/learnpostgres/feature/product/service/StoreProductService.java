@@ -35,8 +35,7 @@ public class StoreProductService {
   private final ProductRepository repository;
   private final ProductQueryRepository queryRepository;
 
-  public StoreProductService(
-      ProductRepository repository, ProductQueryRepository queryRepository) {
+  public StoreProductService(ProductRepository repository, ProductQueryRepository queryRepository) {
     this.repository = repository;
     this.queryRepository = queryRepository;
   }

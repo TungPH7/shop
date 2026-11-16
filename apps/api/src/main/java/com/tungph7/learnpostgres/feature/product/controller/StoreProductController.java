@@ -27,9 +27,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
  * The store API of products, {@code /api/products} and {@code /api/products/{slug}} (ADR-0003):
- * called only by the server of {@code user}, with {@code GET} and {@code HEAD} (NFR8). It shows only
- * {@code ACTIVE} products and takes no status parameter (NFR9). The API Contract is in the plan of
- * SHOP-7.
+ * called only by the server of {@code user}, with {@code GET} and {@code HEAD} (NFR8). It shows
+ * only {@code ACTIVE} products and takes no status parameter (NFR9). The API Contract is in the
+ * plan of SHOP-7.
  */
 @RestController
 @RequestMapping(StoreProductController.BASE_PATH)

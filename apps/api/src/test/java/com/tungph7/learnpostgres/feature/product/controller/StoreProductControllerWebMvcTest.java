@@ -49,8 +49,8 @@ import tools.jackson.databind.ObjectMapper;
  * {@code GET} and {@code HEAD /api/products/{slug}} at the HTTP boundary (SHOP-22): the field names
  * of {@code StoreProduct} in the API Contract of the plan of SHOP-7, the 404 {@code
  * PRODUCT_NOT_FOUND}, and a {@code HEAD} with no body. {@code GET /api/products} (SHOP-26): the
- * defaults and limits of {@code offset} and {@code limit}, the 400 {@code INVALID_PARAMETER} of each
- * invalid one (NFR3), a status parameter ignored (NFR9) and the field names of {@code
+ * defaults and limits of {@code offset} and {@code limit}, the 400 {@code INVALID_PARAMETER} of
+ * each invalid one (NFR3), a status parameter ignored (NFR9) and the field names of {@code
  * Page<StoreProductSummary>}. The service is a mock: which products a shopper sees, and the three
  * 404 compared on the database, are in {@code StoreProductIntegrationTest}.
  */
@@ -282,8 +282,7 @@ class StoreProductControllerWebMvcTest {
     assertThat(fieldNames(page))
         .containsExactlyInAnyOrder("items", "totalItems", "offset", "limit");
     assertThat(fieldNames(page.get("items").get(0)))
-        .containsExactlyInAnyOrder(
-            "id", "name", "slug", "price", "compareAtPrice", "availability");
+        .containsExactlyInAnyOrder("id", "name", "slug", "price", "compareAtPrice", "availability");
   }
 
   @Test
