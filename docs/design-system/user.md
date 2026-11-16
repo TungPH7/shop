@@ -181,7 +181,7 @@ Tên class giống `admin` (`apps/admin/src/styles/components.css` của SHOP-8)
 
 ## Page Frame
 
-Khung của mọi trang `user` (SHOP-11): `.site-shell` rộng tối đa `--app-max` (1840 px), lề ngang `--gutter`, đệm trên 18 dưới 28; trang (`<main>`) giãn ra để chân trang nằm cuối trang ngắn. `<main>` của từng trang giữ 48rem, không còn lề ngang riêng (lề là của khung). `global-error.tsx` cũng bọc `<main>` trong `.site-shell`.
+Khung của mọi trang `user` (SHOP-11): `.site-shell` rộng tối đa `--app-max` (1840 px), lề ngang `--gutter`, đệm trên 18 dưới 28; chân trang đẩy mình xuống (`margin-top: auto`) để nằm cuối trang ngắn, nên phần trang đặt sau `<main>` (như các liên kết demo của trang chủ) vẫn đi liền với trang (SHOP-41). `<main>` của từng trang giữ 48rem, không còn lề ngang riêng (lề là của khung). `global-error.tsx` cũng bọc `<main>` trong `.site-shell`.
 
 **Thanh điều hướng S4.1** (`SiteNav`, `<header>`): ba viên `.pill`, như `admin` (SHOP-8).
 

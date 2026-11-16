@@ -348,8 +348,9 @@ select.input option {
 
 /* --- Page frame: navigation bar S4.1 and footer S4.11 (SHOP-11) ------------- */
 
-/* The frame of every page: the bar, the page, the footer, at most --app-max wide within the --gutter. The page grows,
-   so the footer sits at the bottom of a short page. */
+/* The frame of every page: the bar, the page, the footer, at most --app-max wide within the --gutter. The footer takes
+   the free room above it (margin-top: auto), so it sits at the bottom of a short page, and what a page puts after its
+   <main> stays with the page rather than being pushed down onto the footer (SHOP-41). */
 .site-shell {
   display: flex;
   flex-direction: column;
@@ -360,7 +361,6 @@ select.input option {
 }
 
 .site-shell > main {
-  flex: 1 0 auto;
   width: 100%;
 }
 
@@ -581,8 +581,9 @@ select.input option {
   }
 }
 
-/* S4.11: the copyright line, hint 12.5px, centred. */
+/* S4.11: the copyright line, hint 12.5px, centred, at the bottom of a short page (.site-shell). */
 .site-footer {
+  margin-top: auto;
   padding-top: var(--space-6);
   color: var(--hint);
   font-size: var(--fs-sm);
