@@ -1,7 +1,9 @@
 package com.tungph7.learnpostgres.feature.product.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.head;
@@ -12,9 +14,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.time.Instant;
 import java.util.Iterator;
+import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -30,7 +37,9 @@ import com.tungph7.learnpostgres.common.error.ProblemDetailFactory;
 import com.tungph7.learnpostgres.common.logging.LoggingProperties;
 import com.tungph7.learnpostgres.common.security.TestSecurityConfig;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
+import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProduct;
+import com.tungph7.learnpostgres.feature.product.dto.StoreProductSummary;
 import com.tungph7.learnpostgres.feature.product.service.StoreProductService;
 
 import tools.jackson.databind.JsonNode;
@@ -39,9 +48,11 @@ import tools.jackson.databind.ObjectMapper;
 /**
  * {@code GET} and {@code HEAD /api/products/{slug}} at the HTTP boundary (SHOP-22): the field names
  * of {@code StoreProduct} in the API Contract of the plan of SHOP-7, the 404 {@code
- * PRODUCT_NOT_FOUND}, and a {@code HEAD} with no body. The service is a mock: which products a
- * shopper sees, and the three 404 compared on the database, are in {@code
- * StoreProductIntegrationTest}.
+ * PRODUCT_NOT_FOUND}, and a {@code HEAD} with no body. {@code GET /api/products} (SHOP-26): the
+ * defaults and limits of {@code offset} and {@code limit}, the 400 {@code INVALID_PARAMETER} of each
+ * invalid one (NFR3), a status parameter ignored (NFR9) and the field names of {@code
+ * Page<StoreProductSummary>}. The service is a mock: which products a shopper sees, and the three
+ * 404 compared on the database, are in {@code StoreProductIntegrationTest}.
  */
 @WebMvcTest(StoreProductController.class)
 @Import({TestSecurityConfig.class, GlobalExceptionHandler.class, ProblemDetailFactory.class})
@@ -49,6 +60,7 @@ import tools.jackson.databind.ObjectMapper;
 class StoreProductControllerWebMvcTest {
 
   private static final String URL = "/api/products/ao-thun-co-tron";
+  private static final String LIST_URL = "/api/products";
   private static final UUID ID = UUID.fromString("019a8f2e-5b7c-7d10-9e3f-1a2b3c4d5e6f");
 
   @Autowired MockMvc mockMvc;
@@ -175,6 +187,181 @@ class StoreProductControllerWebMvcTest {
   }
 
   // ============================================================
+  // GET list: 200 (SHOP-26)
+  // ============================================================
+
+  @Test
+  void list_withNoParameter_startsAtTheFirstProductTwentyFourAtATime() throws Exception {
+    when(service.list(0, 24)).thenReturn(new ProductPage<>(List.of(), 0, 0, 24));
+
+    mockMvc
+        .perform(get(LIST_URL))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items").isEmpty())
+        .andExpect(jsonPath("$.totalItems").value(0))
+        .andExpect(jsonPath("$.offset").value(0))
+        .andExpect(jsonPath("$.limit").value(24));
+
+    verify(service).list(0, 24);
+  }
+
+  @Test
+  void list_passesTheOffsetAndTheLimitToTheService() throws Exception {
+    when(service.list(anyInt(), anyInt())).thenReturn(new ProductPage<>(List.of(), 0, 96, 100));
+
+    mockMvc
+        .perform(get(LIST_URL).param("offset", "96").param("limit", "100"))
+        .andExpect(status().isOk());
+
+    verify(service).list(96, 100);
+  }
+
+  @Test
+  void list_withTheSmallestLimit_returns200() throws Exception {
+    when(service.list(anyInt(), anyInt())).thenReturn(new ProductPage<>(List.of(), 0, 0, 1));
+
+    mockMvc.perform(get(LIST_URL).param("limit", "1")).andExpect(status().isOk());
+
+    verify(service).list(0, 1);
+  }
+
+  @Test
+  void list_ignoresAStatusParameter() throws Exception {
+    when(service.list(anyInt(), anyInt())).thenReturn(new ProductPage<>(List.of(), 0, 0, 24));
+
+    mockMvc.perform(get(LIST_URL).param("status", "HIDDEN")).andExpect(status().isOk());
+
+    verify(service).list(0, 24);
+  }
+
+  @Test
+  void list_ignoresAnUnknownParameter() throws Exception {
+    when(service.list(anyInt(), anyInt())).thenReturn(new ProductPage<>(List.of(), 0, 0, 24));
+
+    mockMvc
+        .perform(get(LIST_URL).param("page", "abc").param("sort", "WHATEVER"))
+        .andExpect(status().isOk());
+
+    verify(service).list(0, 24);
+  }
+
+  @Test
+  void list_returnsThePageAsTheApiContractWritesIt() throws Exception {
+    when(service.list(anyInt(), anyInt()))
+        .thenReturn(new ProductPage<>(List.of(sampleSummary()), 30, 24, 24));
+
+    mockMvc
+        .perform(get(LIST_URL).param("offset", "24"))
+        .andExpect(status().isOk())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+        .andExpect(jsonPath("$.totalItems").value(30))
+        .andExpect(jsonPath("$.offset").value(24))
+        .andExpect(jsonPath("$.limit").value(24))
+        .andExpect(jsonPath("$.items[0].id").value(ID.toString()))
+        .andExpect(jsonPath("$.items[0].name").value("Áo khoác dạ"))
+        .andExpect(jsonPath("$.items[0].slug").value("ao-khoac-da"))
+        .andExpect(jsonPath("$.items[0].price").value(1_250_000))
+        .andExpect(jsonPath("$.items[0].compareAtPrice").value(1_500_000))
+        .andExpect(jsonPath("$.items[0].availability").value("OUT_OF_STOCK"));
+  }
+
+  @Test
+  void list_returnsExactlyTheFieldsOfPageAndStoreProductSummary() throws Exception {
+    when(service.list(anyInt(), anyInt()))
+        .thenReturn(new ProductPage<>(List.of(sampleSummary()), 1, 0, 24));
+
+    String body =
+        mockMvc
+            .perform(get(LIST_URL))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    JsonNode page = json.readTree(body);
+
+    assertThat(fieldNames(page))
+        .containsExactlyInAnyOrder("items", "totalItems", "offset", "limit");
+    assertThat(fieldNames(page.get("items").get(0)))
+        .containsExactlyInAnyOrder(
+            "id", "name", "slug", "price", "compareAtPrice", "availability");
+  }
+
+  @Test
+  void list_withNoCompareAtPrice_writesItAsNull() throws Exception {
+    when(service.list(anyInt(), anyInt()))
+        .thenReturn(
+            new ProductPage<>(
+                List.of(
+                    new StoreProductSummary(
+                        ID, "Mũ len", "mu-len", 90_000L, null, ProductAvailability.IN_STOCK)),
+                1,
+                0,
+                24));
+
+    String body =
+        mockMvc
+            .perform(get(LIST_URL))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    JsonNode item = json.readTree(body).get("items").get(0);
+
+    assertThat(item.has("compareAtPrice")).isTrue();
+    assertThat(item.get("compareAtPrice").isNull()).isTrue();
+  }
+
+  // ============================================================
+  // GET list: 400 INVALID_PARAMETER (NFR3)
+  // ============================================================
+
+  static Stream<Arguments> invalidListParameters() {
+    return Stream.of(
+        Arguments.of("offset", "-1", "negative"),
+        Arguments.of("offset", "abc", "not a number"),
+        Arguments.of("offset", "1.5", "a fraction"),
+        Arguments.of("offset", "99999999999", "beyond an int"),
+        Arguments.of("limit", "0", "below 1"),
+        Arguments.of("limit", "101", "above 100"),
+        Arguments.of("limit", "-5", "negative"),
+        Arguments.of("limit", "abc", "not a number"));
+  }
+
+  @ParameterizedTest(name = "{0}={1} ({2})")
+  @MethodSource("invalidListParameters")
+  void list_withAnInvalidParameter_returns400NamingIt(String name, String value, String label)
+      throws Exception {
+    mockMvc
+        .perform(get(LIST_URL).param(name, value))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.status").value(400))
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.parameter").value(name))
+        .andExpect(jsonPath("$.instance").value(LIST_URL))
+        .andExpect(jsonPath("$.correlationId").exists())
+        .andExpect(jsonPath("$.timestamp").exists());
+
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void list_withAnInvalidParameter_showsNoInternalDetail() throws Exception {
+    String body =
+        mockMvc
+            .perform(get(LIST_URL).param("limit", "101"))
+            .andExpect(status().isBadRequest())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+    assertThat(body)
+        .doesNotContain("Exception")
+        .doesNotContain("com.tungph7")
+        .doesNotContain("StoreProductController");
+  }
+
+  // ============================================================
   // HEAD
   // ============================================================
 
@@ -217,6 +404,11 @@ class StoreProductControllerWebMvcTest {
         ProductAvailability.IN_STOCK,
         "Áo thun cotton 100%.\nCổ tròn, tay ngắn.",
         Instant.parse("2026-11-16T02:15:30Z"));
+  }
+
+  private static StoreProductSummary sampleSummary() {
+    return new StoreProductSummary(
+        ID, "Áo khoác dạ", "ao-khoac-da", 1_250_000L, 1_500_000L, ProductAvailability.OUT_OF_STOCK);
   }
 
   private static NotFoundException notFound() {
