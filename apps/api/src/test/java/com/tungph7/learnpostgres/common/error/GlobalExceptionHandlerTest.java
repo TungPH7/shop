@@ -207,7 +207,6 @@ class GlobalExceptionHandlerTest {
   // ---- HandlerMethodValidationException (SHOP-16, NFR3) ----
 
   /** Handler methods whose parameters the tests below break. */
-  @SuppressWarnings("unused")
   static class Handlers {
     int pathVariable(@PathVariable(name = "id") int id) {
       return id;
