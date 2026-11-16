@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  formatPriceInput,
   parsePriceInput,
   productFormDefaults,
   productFormSchema,
@@ -81,13 +80,6 @@ describe('parsePriceInput', () => {
 
   it.each(['abc', '-5', '12a', '1..000', '+5'])('reads %s as not a number', (text) => {
     expect(parsePriceInput(text)).toEqual({ kind: 'invalid' });
-  });
-});
-
-describe('formatPriceInput', () => {
-  it('groups the thousands with dots, as the field shows a price on blur', () => {
-    expect(formatPriceInput(450000)).toBe('450.000');
-    expect(formatPriceInput(1250000)).toBe('1.250.000');
   });
 });
 

@@ -47,7 +47,7 @@ async function errorOf(response: () => Response): Promise<unknown> {
 }
 
 describe('createProduct', () => {
-  it('posts the input and returns the product the api made', async () => {
+  it('posts the input and returns the id of the product the api made', async () => {
     let body: unknown;
     server.use(
       http.post('*/admin/products', async ({ request }) => {
@@ -59,7 +59,36 @@ describe('createProduct', () => {
     const product = await createProduct(input);
 
     expect(body).toEqual(input);
-    expect(product).toEqual(created);
+    expect(product).toEqual({ id: created.id });
+  });
+
+  it('reads the id from the Location header of the 201', async () => {
+    server.use(
+      http.post('*/admin/products', () =>
+        HttpResponse.json(
+          { ...created, id: 'not-this-one' },
+          { status: 201, headers: { Location: `/api/admin/products/${created.id}` } },
+        ),
+      ),
+    );
+
+    await expect(createProduct(input)).resolves.toEqual({ id: created.id });
+  });
+
+  it('is saved when the body of the 201 does not match AdminProduct, so a retry adds no -2', async () => {
+    server.use(
+      http.post('*/admin/products', () =>
+        HttpResponse.json({ id: created.id, price: 'not a number' }, { status: 201 }),
+      ),
+    );
+
+    await expect(createProduct(input)).resolves.toEqual({ id: created.id });
+  });
+
+  it('is saved, with no id, when the 201 has neither a Location nor an id', async () => {
+    server.use(http.post('*/admin/products', () => new HttpResponse(null, { status: 201 })));
+
+    await expect(createProduct(input)).resolves.toEqual({ id: null });
   });
 
   it('posts once, never again after a server error (NFR19)', async () => {
@@ -96,6 +125,25 @@ describe('createProductErrorOf', () => {
     });
   });
 
+  it('lists the fields of a 400 in their order on the form, not the order of the api', async () => {
+    const error = await errorOf(() =>
+      problem(400, 'VALIDATION_FAILED', {
+        errors: [
+          { field: 'compareAtPrice', rejectedValue: 1, message: '…' },
+          { field: 'price', rejectedValue: 0, message: '…' },
+          { field: 'slug', rejectedValue: 'A', message: '…' },
+          { field: 'price', rejectedValue: 0, message: '…' },
+          { field: 'name', rejectedValue: '', message: '…' },
+        ],
+      }),
+    );
+
+    expect(createProductErrorOf(error, input)).toEqual({
+      kind: 'fields',
+      fields: ['name', 'slug', 'price', 'compareAtPrice'],
+    });
+  });
+
   it('is a general error for a 400 that names no field of the form', async () => {
     const error = await errorOf(() =>
       problem(400, 'VALIDATION_FAILED', {
@@ -124,7 +172,6 @@ describe('createProductErrorOf', () => {
     ['a 5xx', () => problem(500, 'INTERNAL_ERROR')],
     ['a network error', () => HttpResponse.error()],
     ['another 409', () => problem(409, 'SOMETHING_ELSE')],
-    ['a 2xx the schema rejects', () => HttpResponse.json({ id: 1 }, { status: 201 })],
   ])('is a general error for %s (S2.5)', async (_name, response) => {
     const error = await errorOf(response);
 

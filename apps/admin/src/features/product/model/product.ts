@@ -48,10 +48,13 @@ const NO_BREAK_SPACE = String.fromCodePoint(0xa0);
 
 /**
  * A price as `1.250.000 ₫`, the same in both languages (design.md, component Giá).
- * A no-break space keeps the sign on the line of its number.
+ * A no-break space keeps the sign on the line of its number. The one price format of
+ * admin (SPEC, Boundaries): a price field, which shows the sign beside it, takes
+ * `{ sign: false }`, as `450.000` (S2.9).
  */
-export function formatPrice(price: number): string {
-  return `${priceNumber.format(price)}${NO_BREAK_SPACE}₫`;
+export function formatPrice(price: number, { sign = true }: { sign?: boolean } = {}): string {
+  const number = priceNumber.format(price);
+  return sign ? `${number}${NO_BREAK_SPACE}₫` : number;
 }
 
 // The filters of the admin list as the URL holds them (S1.4, S1.5, S1.11):

@@ -83,6 +83,11 @@ describe('formatPrice', () => {
     expect(formatPrice(0)).toBe('0\u00a0₫');
   });
 
+  it('leaves out the dong sign for a price field, which shows it beside the field (S2.9)', () => {
+    expect(formatPrice(450000, { sign: false })).toBe('450.000');
+    expect(formatPrice(1250000, { sign: false })).toBe('1.250.000');
+  });
+
   it('formats the largest price', () => {
     expect(formatPrice(999999999)).toBe('999.999.999\u00a0₫');
   });
