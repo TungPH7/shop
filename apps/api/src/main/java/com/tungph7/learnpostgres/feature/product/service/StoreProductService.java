@@ -55,7 +55,7 @@ public class StoreProductService {
 
   private Optional<Product> findActive(String slug) {
     return repository
-        .findBySlug(slug)
+        .findBySlugIgnoringCase(slug)
         .filter(product -> product.getStatus() == ProductStatus.ACTIVE);
   }
 }

@@ -43,7 +43,7 @@ class StoreProductServiceTest {
   @Test
   void get_anActiveProduct_returnsItsStoreFields() {
     Product product = product(ProductStatus.ACTIVE, Instant.parse("2026-11-16T02:15:30.123456Z"));
-    when(repository.findBySlug("ao-thun-co-tron")).thenReturn(Optional.of(product));
+    when(repository.findBySlugIgnoringCase("ao-thun-co-tron")).thenReturn(Optional.of(product));
 
     StoreProduct found = service.get("ao-thun-co-tron");
 
@@ -62,7 +62,7 @@ class StoreProductServiceTest {
 
   @Test
   void get_aHiddenProduct_throwsProductNotFound() {
-    when(repository.findBySlug("ao-thun-co-tron"))
+    when(repository.findBySlugIgnoringCase("ao-thun-co-tron"))
         .thenReturn(Optional.of(product(ProductStatus.HIDDEN, Instant.now())));
 
     assertThatThrownBy(() -> service.get("ao-thun-co-tron"))
@@ -74,7 +74,7 @@ class StoreProductServiceTest {
 
   @Test
   void get_aSlugWithNoProduct_throwsProductNotFound() {
-    when(repository.findBySlug("khong-co")).thenReturn(Optional.empty());
+    when(repository.findBySlugIgnoringCase("khong-co")).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.get("khong-co"))
         .isInstanceOf(NotFoundException.class)
@@ -85,7 +85,8 @@ class StoreProductServiceTest {
 
   @Test
   void get_aHiddenProduct_carriesNoPropertyThatTellsItApartFromAMissingOne() {
-    when(repository.findBySlug("an")).thenReturn(Optional.of(product(ProductStatus.HIDDEN, null)));
+    when(repository.findBySlugIgnoringCase("an"))
+        .thenReturn(Optional.of(product(ProductStatus.HIDDEN, null)));
 
     assertThatThrownBy(() -> service.get("an"))
         .extracting(e -> ((BusinessException) e).getProperties())
@@ -94,7 +95,7 @@ class StoreProductServiceTest {
 
   @Test
   void isVisible_anActiveProduct_isTrue() {
-    when(repository.findBySlug("ao-thun-co-tron"))
+    when(repository.findBySlugIgnoringCase("ao-thun-co-tron"))
         .thenReturn(Optional.of(product(ProductStatus.ACTIVE, null)));
 
     assertThat(service.isVisible("ao-thun-co-tron")).isTrue();
@@ -102,7 +103,7 @@ class StoreProductServiceTest {
 
   @Test
   void isVisible_aHiddenProduct_isFalse() {
-    when(repository.findBySlug("ao-thun-co-tron"))
+    when(repository.findBySlugIgnoringCase("ao-thun-co-tron"))
         .thenReturn(Optional.of(product(ProductStatus.HIDDEN, null)));
 
     assertThat(service.isVisible("ao-thun-co-tron")).isFalse();
@@ -110,7 +111,7 @@ class StoreProductServiceTest {
 
   @Test
   void isVisible_aSlugWithNoProduct_isFalse() {
-    when(repository.findBySlug("khong-co")).thenReturn(Optional.empty());
+    when(repository.findBySlugIgnoringCase("khong-co")).thenReturn(Optional.empty());
 
     assertThat(service.isVisible("khong-co")).isFalse();
   }

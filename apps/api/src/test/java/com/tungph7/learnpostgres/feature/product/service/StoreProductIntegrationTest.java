@@ -36,8 +36,13 @@ import tools.jackson.databind.node.ObjectNode;
  * 17, schema V4), SHOP-22: an {@code ACTIVE} product as saved, the slug compared ignoring case
  * ({@code citext}), and one same 404 for a slug that never existed, a hidden product and a deleted
  * one (NFR9), and both operations in {@code /v3/api-docs}.
+ *
+ * <p>Each connection has {@code currentSchema=app}, as the URL of {@code application.yml} sets it
+ * for the deployed app. That {@code search_path} leaves out {@code public}, where the {@code
+ * citext} operators are; the default {@code app, public} of the test role would hide a slug
+ * compared as {@code text}, with case.
  */
-@SpringBootTest
+@SpringBootTest(properties = "spring.datasource.hikari.data-source-properties.currentSchema=app")
 @AutoConfigureMockMvc
 class StoreProductIntegrationTest extends AbstractContainerBaseTest {
 
@@ -98,6 +103,24 @@ class StoreProductIntegrationTest extends AbstractContainerBaseTest {
         .andExpect(jsonPath("$.slug").value("ao-thun-co-tron"))
         .andExpect(jsonPath("$.compareAtPrice").isEmpty())
         .andExpect(jsonPath("$.description").isEmpty());
+  }
+
+  @Test
+  void connections_haveTheSearchPathOfTheDeployedApp() {
+    String searchPath =
+        transaction.execute(tx -> jdbc.sql("SHOW search_path").query(String.class).single());
+
+    assertThat(searchPath).isEqualTo("app");
+  }
+
+  @Test
+  void get_withAnotherCase_findsAnOldProductWhoseSavedSlugHasCapitals() throws Exception {
+    insert(ACTIVE_ID, "Ao-Thun-Cu", "ACTIVE", null, null);
+
+    mockMvc
+        .perform(get("/api/products/ao-thun-cu"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.slug").value("Ao-Thun-Cu"));
   }
 
   @Test
