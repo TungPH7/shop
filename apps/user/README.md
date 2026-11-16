@@ -40,20 +40,20 @@ NFR13): token, font Be Vietnam Pro và class dùng chung ở `src/styles/`, mô 
 
 ## 1. Tech stack
 
-| Nhóm                      | Công nghệ                                                                                                             |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Runtime · package manager | Node **24.17.0** · pnpm **11.8.0** (pin chính xác, commit lockfile)                                                   |
-| Framework                 | **Next.js 16.2.9** (App Router, Turbopack, Cache Components/PPR) · **React 19.2.7**                                   |
-| Ngôn ngữ                  | **TypeScript 6** `strict` + `noUncheckedIndexedAccess`                                                                |
-| Data                      | **BFF**: DAL `server-only` + native `fetch` → backend NestJS · **Zod 4** ở mọi biên                                   |
-| State                     | RSC (mặc định) · **nuqs** (URL) · **TanStack Query** (server-state client) · **Redux Toolkit** (UI state, sau facade) |
-| Auth                      | Tự xây: **jose** (JWE) + cookie `__Host-session` httpOnly + RBAC từ backend                                           |
-| Form                      | **react-hook-form** + `zodResolver` · Server Actions                                                                  |
-| i18n                      | **next-intl 4** (`/en`, `/vi`) — key type-safe                                                                        |
-| Theme                     | **next-themes** + design tokens CSS variables (light/dark/system); font Be Vietnam Pro qua `next/font`                |
-| Quan sát                  | logger (**pino** ở server) · monitoring seam · analytics seam · `instrumentation.ts`                                  |
-| Test                      | **Vitest 4** + RTL (unit/integration) · **Playwright 1.61** + axe (E2E) · **MSW**                                     |
-| Chất lượng                | ESLint 9 (flat, type-aware) · Prettier · Husky + lint-staged + commitlint · GitHub Actions                            |
+| Nhóm                      | Công nghệ                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Runtime · package manager | Node **24.17.0** · pnpm **11.8.0** (pin chính xác, commit lockfile)                                    |
+| Framework                 | **Next.js 16.2.9** (App Router, Turbopack, Cache Components/PPR) · **React 19.2.7**                    |
+| Ngôn ngữ                  | **TypeScript 6** `strict` + `noUncheckedIndexedAccess`                                                 |
+| Data                      | **BFF**: DAL `server-only` + native `fetch` → backend NestJS · **Zod 4** ở mọi biên                    |
+| State                     | RSC (mặc định) · URL qua `searchParams` · **Redux Toolkit** (UI state, sau facade)                     |
+| Auth                      | Tự xây: **jose** (JWE) + cookie `__Host-session` httpOnly + RBAC từ backend                            |
+| Form                      | **react-hook-form** + `zodResolver` · Server Actions                                                   |
+| i18n                      | **next-intl 4** (`/en`, `/vi`) — key type-safe                                                         |
+| Theme                     | **next-themes** + design tokens CSS variables (light/dark/system); font Be Vietnam Pro qua `next/font` |
+| Quan sát                  | logger (**pino** ở server) · monitoring seam · analytics seam · `instrumentation.ts`                   |
+| Test                      | **Vitest 4** + RTL (unit/integration) · **Playwright 1.61** + axe (E2E) · **MSW**                      |
+| Chất lượng                | ESLint 9 (flat, type-aware) · Prettier · Husky + lint-staged + commitlint · GitHub Actions             |
 
 **Luồng dữ liệu (BFF)** — trình duyệt không bao giờ gọi thẳng backend:
 
@@ -174,7 +174,7 @@ Danh sách trang nên thử để thấy đủ tính năng:
 | Đường dẫn                      | Xem được gì                                                                                    |
 | ------------------------------ | ---------------------------------------------------------------------------------------------- |
 | `/en` · `/vi`                  | Trang chủ · đổi **ngôn ngữ** và **theme sáng/tối** ở đầu trang                                 |
-| `/en/products`                 | Danh sách sản phẩm **lấy thật từ backend** · tìm kiếm, sắp xếp, phân trang, đổi grid/list      |
+| `/en/products`                 | Mới có tiêu đề: danh sách, tìm kiếm và sắp xếp đến ở các Story catalog của SHOP-7              |
 | `/en/caching`                  | Cùng một trang: một phần **cache tĩnh**, một phần **render theo từng request** (PPR)           |
 | `/en/error-demo`               | 3 kịch bản lỗi khác nhau và ranh giới nào bắt được lỗi đó                                      |
 | `/en/login`                    | Đăng nhập _(cần tài khoản thật trên backend demo — không có vẫn xem được các trang công khai)_ |
@@ -284,10 +284,9 @@ src/
 │       ├── model/        #     type + schema Zod + logic thuần (dễ test nhất)
 │       ├── server/       #     DAL `server-only` gọi backend
 │       ├── actions/      #     Server Actions ('use server') — mutation
-│       ├── api/          #     TanStack Query hooks (phía client)
 │       └── components/   #     UI của feature
-├── lib/                  # hạ tầng chung: http · auth · errors · logger · monitoring · query · seo · validation
-├── components/           # UI dùng chung ≥ 2 feature (theme/language switcher, <Can>, <JsonLd>…)
+├── lib/                  # hạ tầng chung: http · auth · errors · logger · monitoring · seo · validation
+├── components/           # UI dùng chung ≥ 2 feature (theme/language switcher, <JsonLd>…)
 ├── config/               # env (Zod, fail-fast) · i18n · security-headers
 ├── i18n/                 # next-intl: routing · navigation · request
 ├── stores/               # facade Redux (feature chỉ gọi hook hướng-domain, không chạm RTK)
@@ -337,11 +336,11 @@ Pin phiên bản **chính xác** (`x.y.z`, không `^`/`~`) và commit `pnpm-lock
 
 Ba tầng **bổ sung nhau**, không thay thế nhau:
 
-| Tầng            | Lệnh                     | Phủ cái gì                                                                    |
-| --------------- | ------------------------ | ----------------------------------------------------------------------------- |
-| **Unit**        | `pnpm test`              | Hàm thuần, schema, component đồng bộ, DAL (qua MSW)                           |
-| **Integration** | `pnpm test`              | Nhiều seam trong một cây component (Redux + Query + nuqs + i18n cùng tồn tại) |
-| **E2E**         | `pnpm build && pnpm e2e` | Render ở **server**, PPR, đổi ngôn ngữ/theme runtime, a11y động (axe)         |
+| Tầng            | Lệnh                     | Phủ cái gì                                                            |
+| --------------- | ------------------------ | --------------------------------------------------------------------- |
+| **Unit**        | `pnpm test`              | Hàm thuần, schema, component đồng bộ, DAL (qua MSW)                   |
+| **Integration** | `pnpm test`              | Nhiều seam trong một cây component (Redux + i18n + theme)             |
+| **E2E**         | `pnpm build && pnpm e2e` | Render ở **server**, PPR, đổi ngôn ngữ/theme runtime, a11y động (axe) |
 
 ```bash
 # Lần đầu chạy E2E: cài trình duyệt
@@ -352,8 +351,10 @@ pnpm e2e:report            # xem báo cáo
 ```
 
 > **Vì sao E2E quan trọng ở đây:** async Server Component **không** unit-test được (giới hạn chính thức
-> của Next) → E2E là nơi _duy nhất_ verify chúng. Backend trong E2E được mock bằng **MSW chạy trong process
-> Next** (không phải `page.route`) vì việc fetch diễn ra ở server.
+> của Next) → E2E là nơi _duy nhất_ verify chúng. Test của catalog chạy với `api` thật. Mock **MSW chạy trong
+> process Next** (không phải `page.route`, vì việc fetch diễn ra ở server) chỉ còn giả API đăng nhập của backend
+> NestJS cũ, cho hai test đăng nhập và đăng xuất của `e2e/auth.spec.ts`. Hai test này chỉ chạy ở local với
+> `E2E_API_MOCKING=1`, còn lại bị bỏ qua với `reason: login Epic`.
 
 CI (`.github/workflows/ci.yml`) chạy 2 job song song: `verify` (lint → typecheck → format → test+coverage → audit)
 và `build-e2e` (build production → Playwright).
@@ -398,14 +399,6 @@ taskkill /F /T /PID <số PID ở cột cuối>
 
 > Trên Git Bash phải dùng `taskkill //F //T //PID <pid>` — lệnh `kill` của Git Bash **không** diệt tiến
 > trình con của Node, để lại server cũ giữ cổng và phục vụ bản build cũ (rất dễ đánh lừa).
-
-</details>
-
-<details>
-<summary><b>⚠️ Trang Products báo "Too many refreshes" / danh sách trống</b></summary>
-
-Backend demo là **dịch vụ công cộng dùng chung có giới hạn số request/phút**. Chờ khoảng 1 phút rồi tải
-lại. Đây là hành vi _đã được xử lý có chủ đích_ (lỗi dự kiến → hiện thông báo, giữ trang sống), không phải bug.
 
 </details>
 

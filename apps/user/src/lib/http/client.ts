@@ -34,6 +34,22 @@ function apiUrl(path: string): URL {
   return new URL(path, env.API_URL);
 }
 
+/**
+ * The time limit aborts the whole request, its headers and its body: `fetch` or `response.json()` then throws the reason
+ * of the signal, a `DOMException` named `TimeoutError`.
+ */
+function isTimeout(cause: unknown): boolean {
+  return cause instanceof DOMException && cause.name === 'TimeoutError';
+}
+
+function timeoutError(cause: unknown): ApiError {
+  return new ApiError({
+    kind: 'timeout',
+    message: `Request timed out after ${REQUEST_TIMEOUT_MS} ms`,
+    cause,
+  });
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -49,13 +65,7 @@ async function request<T>(
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (cause) {
-    if (cause instanceof DOMException && cause.name === 'TimeoutError') {
-      throw new ApiError({
-        kind: 'timeout',
-        message: `Request timed out after ${REQUEST_TIMEOUT_MS} ms`,
-        cause,
-      });
-    }
+    if (isTimeout(cause)) throw timeoutError(cause);
     throw new ApiError({
       kind: 'network',
       message: 'Network error — could not reach the server',
@@ -75,6 +85,7 @@ async function request<T>(
   try {
     body = await response.json();
   } catch (cause) {
+    if (isTimeout(cause)) throw timeoutError(cause);
     throw new ApiError({ kind: 'validation', message: 'Response was not valid JSON', cause });
   }
 
@@ -106,12 +117,4 @@ export function httpPost<T>(path: string, schema: ZodType<T>, init?: RequestInit
 /** PUT + validate response ở biên (folder 16: cập nhật hồ sơ). Như `httpPost` về header/body. */
 export function httpPut<T>(path: string, schema: ZodType<T>, init?: RequestInit): Promise<T> {
   return request('PUT', path, schema, init);
-}
-
-/**
- * DELETE + validate response ở biên (folder 12). Mutation THẬT đi qua đây từ DAL `server-only`,
- * được gọi bởi Server Action (sau khi action đã validate input + re-authorize).
- */
-export function httpDelete<T>(path: string, schema: ZodType<T>, init?: RequestInit): Promise<T> {
-  return request('DELETE', path, schema, init);
 }
