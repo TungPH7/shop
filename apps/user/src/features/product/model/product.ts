@@ -74,3 +74,17 @@ export function formatPrice(amount: number): string {
 export function discountPercent(price: number, compareAtPrice: number): number {
   return Math.max(1, Math.floor(((compareAtPrice - price) * 100) / compareAtPrice));
 }
+
+/** The longest meta description of S5 (AC27). */
+const META_DESCRIPTION_LENGTH = 160;
+
+/**
+ * The meta description of S5 (AC27): the first 160 characters of the description, each run of line breaks and spaces
+ * folded into one space. Characters are code points, so a letter or an emoji is never cut in half. `null` when there is
+ * no description, and the page then uses its own sentence. HTML stays text: the Metadata API of Next escapes it (NFR11).
+ */
+export function metaDescriptionOf(description: string | null): string | null {
+  const folded = description?.replace(/\s+/g, ' ').trim();
+  if (!folded) return null;
+  return Array.from(folded).slice(0, META_DESCRIPTION_LENGTH).join('').trimEnd();
+}

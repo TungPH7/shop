@@ -4,6 +4,7 @@ import {
   discountPercent,
   formatPrice,
   isStoreSlug,
+  metaDescriptionOf,
   pageSchema,
   sitemapEntrySchema,
   storeProductSchema,
@@ -136,4 +137,59 @@ describe('isStoreSlug', () => {
   test.each(['', '..', 'ao thun', 'áo-thun', 'a/b', 'a%2Fb'])('rejects %j', (slug) => {
     expect(isStoreSlug(slug)).toBe(false);
   });
+});
+
+describe('metaDescriptionOf', () => {
+  test('keeps a short description, its line breaks folded into one space (AC27)', () => {
+    expect(metaDescriptionOf('Áo thun cotton 100%.\nCổ tròn, tay ngắn.')).toBe(
+      'Áo thun cotton 100%. Cổ tròn, tay ngắn.',
+    );
+  });
+
+  test('folds a run of blank lines and spaces into one space, and trims both ends', () => {
+    expect(metaDescriptionOf('  Dòng một.\r\n\r\n   Dòng hai.\t\n')).toBe('Dòng một. Dòng hai.');
+  });
+
+  test('keeps the first 160 characters of a longer description', () => {
+    const description = `${'a'.repeat(159)}bcdef`;
+
+    expect(metaDescriptionOf(description)).toBe(`${'a'.repeat(159)}b`);
+  });
+
+  test('counts the 160 characters after folding the line breaks', () => {
+    const description = `${'a'.repeat(80)}\n\n\n${'b'.repeat(100)}`;
+
+    expect(metaDescriptionOf(description)).toBe(`${'a'.repeat(80)} ${'b'.repeat(79)}`);
+  });
+
+  test('counts a Vietnamese letter with its marks as one character', () => {
+    const description = 'ệ'.repeat(170);
+
+    expect(metaDescriptionOf(description)).toBe('ệ'.repeat(160));
+  });
+
+  test('never cuts an emoji in half', () => {
+    const description = `${'a'.repeat(159)}😀😀`;
+
+    expect(metaDescriptionOf(description)).toBe(`${'a'.repeat(159)}😀`);
+  });
+
+  test('ends on no space when the 160th character is one', () => {
+    const description = `${'a'.repeat(159)} bcd`;
+
+    expect(metaDescriptionOf(description)).toBe('a'.repeat(159));
+  });
+
+  test('keeps HTML as text, for the Metadata API of Next to escape (NFR11)', () => {
+    expect(metaDescriptionOf('</script><script>alert(1)</script>')).toBe(
+      '</script><script>alert(1)</script>',
+    );
+  });
+
+  test.each([null, '', '  \n\t '])(
+    'is null for the description %j, so the page uses its own sentence',
+    (description) => {
+      expect(metaDescriptionOf(description)).toBeNull();
+    },
+  );
 });
