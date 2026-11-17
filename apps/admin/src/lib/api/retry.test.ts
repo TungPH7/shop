@@ -12,7 +12,7 @@ function axiosError(opts: { code?: string; status?: number }): AxiosError {
 }
 
 describe('isRetryableError', () => {
-  it('retries idempotent methods on transient statuses', () => {
+  it('retries a read method on transient statuses', () => {
     for (const status of [408, 429, 500, 502, 503, 504]) {
       expect(isRetryableError(axiosError({ status }), 'get')).toBe(true);
     }

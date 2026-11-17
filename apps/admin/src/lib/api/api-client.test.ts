@@ -49,7 +49,7 @@ describe('createApiClient (integration via MSW)', () => {
     );
   });
 
-  it('retries an idempotent GET on a transient 500, then succeeds', async () => {
+  it('retries a GET, a read method, on a transient 500, then succeeds', async () => {
     vi.spyOn(Math, 'random').mockReturnValue(0); // zero backoff jitter → instant retry
     let calls = 0;
     server.use(
@@ -64,7 +64,7 @@ describe('createApiClient (integration via MSW)', () => {
     expect(calls).toBe(2); // original + 1 retry
   });
 
-  it('does NOT retry a non-idempotent POST on 500', async () => {
+  it('does NOT retry a POST, a write method, on 500', async () => {
     let calls = 0;
     server.use(
       http.post(`${BASE}/things`, () => {

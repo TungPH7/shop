@@ -13,9 +13,9 @@ import {
 } from '@/features/product/model/product';
 
 // The product table of S1.6, in its glass card: Product (tile, name, slug), Price,
-// Status, Availability, Actions (Edit S1.7, Delete S1.8). The body is the rows, the skeleton or a message
-// (S1.9, the error state); the header stays. Under 1024 px the table scrolls
-// sideways inside its labelled, focusable region.
+// Status, Availability, Actions (Edit S1.7, Delete S1.8). The body is the rows, the
+// skeleton or a message (S1.9, the error state); the header stays. Under 1024 px the
+// table scrolls sideways inside its labelled, focusable region.
 
 const COLUMNS = 5;
 const SKELETON_ROWS = 6;

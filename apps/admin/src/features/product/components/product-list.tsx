@@ -21,8 +21,9 @@ import { type AdminProductSummary, PRODUCT_STATUS_FILTERS } from '@/features/pro
 // S1 of docs/specs/SHOP-7/design.md, the admin product list (US1): the title and
 // Add product (S1.2, S1.3), the status filter with its count (S1.4), the search box
 // (S1.5), the table (S1.6, S1.7, S1.8) with its empty states (S1.9, S1.10), the
-// pagination (S1.11), and the delete dialog S3 that Delete of a row opens (US4). Every filter lives in the URL (AC4). Outside ProtectedRoute:
-// until the login Epic, the basic auth of the host guards admin (AC1).
+// pagination (S1.11), and the delete dialog S3 that Delete of a row opens (US4).
+// Every filter lives in the URL (AC4). Outside ProtectedRoute: until the login Epic,
+// the basic auth of the host guards admin (AC1).
 export function ProductList() {
   const { t } = useTranslation('product');
   const { filters, setStatus, setSearch, clearFilters, hrefForPage } = useProductFilters();
