@@ -82,6 +82,12 @@ describe('a page load of the product detail page', () => {
     expect(getRewrittenUrl(response)).toBe(`${SITE}/vi/product-not-found`);
   });
 
+  test('rewrites a malformed escape in the slug to S6 without asking the api', async () => {
+    const response = await proxy(pageLoad('/en/products/%E0%A4%A'));
+
+    expect(getRewrittenUrl(response)).toBe(`${SITE}/en/product-not-found`);
+  });
+
   test('asks the api with HEAD, within a time limit of 5 s', async () => {
     const timeout = vi.spyOn(AbortSignal, 'timeout');
     let method = '';
