@@ -2,6 +2,7 @@ package com.tungph7.learnpostgres.common.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.config.YamlPropertiesFactoryBean;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
 
 /**
@@ -162,6 +164,49 @@ class ProfileLogLevelsTest {
                 "spring.datasource.hikari.data-source-properties.logServerErrorDetail", "true"));
   }
 
+  /**
+   * SHOP-60: Spring Boot reads a map key in square brackets as written, and hands it to the driver,
+   * so a profile could turn the detail back on with {@code "[logServerErrorDetail]": true}.
+   */
+  @Test
+  void theDetailOfServerErrorsAsAMapKeyInSquareBracketsInYaml_isRead() {
+    Properties properties =
+        loadYaml(
+            """
+            spring:
+              datasource:
+                hikari:
+                  data-source-properties:
+                    "[logServerErrorDetail]": true
+            """);
+
+    assertThat(serverErrorDetailSettings(properties))
+        .containsExactly(
+            Map.entry(
+                "spring.datasource.hikari.data-source-properties[logServerErrorDetail]", "true"));
+  }
+
+  @Test
+  void theDetailOfServerErrorsAsAMapKeyInSquareBracketsAfterADot_isRead() {
+    Properties properties = new Properties();
+    properties.setProperty(
+        "spring.datasource.hikari.data-source-properties.[logServerErrorDetail]", "true");
+
+    assertThat(serverErrorDetailSettings(properties))
+        .containsExactly(
+            Map.entry(
+                "spring.datasource.hikari.data-source-properties.[logServerErrorDetail]", "true"));
+  }
+
+  @Test
+  void aPropertyWhoseNameOnlyEndsWithTheDetailOfServerErrors_isNotRead() {
+    Properties properties = new Properties();
+    properties.setProperty(
+        "spring.datasource.hikari.data-source-properties[noLogServerErrorDetail]", "true");
+
+    assertThat(serverErrorDetailSettings(properties)).isEmpty();
+  }
+
   @Test
   void theDetailOfServerErrorsAsAParameterOfTheUrl_isRead() {
     Properties properties = new Properties();
@@ -177,14 +222,20 @@ class ProfileLogLevelsTest {
    * any case and with any separator, or a parameter of that name in the value of a property, such
    * as a JDBC URL. Every entry is read: YAML gives an unquoted {@code true} as a {@link Boolean},
    * which {@link Properties#stringPropertyNames} skips.
+   *
+   * <p>The last part of the name is compared, the parts split at a dot and at the square brackets
+   * of a map key (SHOP-60): Spring Boot hands {@code data-source-properties[logServerErrorDetail]}
+   * to the driver as it does {@code data-source-properties.logServerErrorDetail}.
    */
   private static Map<String, String> serverErrorDetailSettings(Properties properties) {
     Map<String, String> settings = new TreeMap<>();
     for (Map.Entry<Object, Object> entry : properties.entrySet()) {
       String name = String.valueOf(entry.getKey());
       String value = String.valueOf(entry.getValue());
-      String bareName = name.replaceAll("[-_]", "").toLowerCase(Locale.ROOT);
-      if (bareName.endsWith("." + SERVER_ERROR_DETAIL) || bareName.equals(SERVER_ERROR_DETAIL)) {
+      String bareName =
+          name.replaceAll("[\\[\\]]", ".").replaceAll("[-_]", "").toLowerCase(Locale.ROOT);
+      String[] parts = bareName.split("\\.+");
+      if (parts.length > 0 && parts[parts.length - 1].equals(SERVER_ERROR_DETAIL)) {
         settings.put(name, value);
       }
       int at = value.toLowerCase(Locale.ROOT).indexOf(SERVER_ERROR_DETAIL + "=");
@@ -227,6 +278,12 @@ class ProfileLogLevelsTest {
   private static Properties load(String file) {
     YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
     yaml.setResources(new ClassPathResource(file));
+    return yaml.getObject();
+  }
+
+  private static Properties loadYaml(String content) {
+    YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
+    yaml.setResources(new ByteArrayResource(content.getBytes(StandardCharsets.UTF_8)));
     return yaml.getObject();
   }
 }

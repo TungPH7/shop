@@ -210,6 +210,26 @@ class GlobalExceptionHandlerTest {
   }
 
   /**
+   * SHOP-60: the handler reads the name as the service does, through {@link
+   * ConstraintViolations#isViolationOf}, its case aside.
+   */
+  @Test
+  void handleDataIntegrity_ofTheSlugConstraintNamedInUpperCase_returnsTheSlugCode() {
+    DataIntegrityViolationException ex =
+        new DataIntegrityViolationException(
+            "could not execute statement",
+            new ConstraintViolationException(
+                "could not execute statement",
+                new SQLException("ERROR: duplicate key value"),
+                "PRODUCTS_SLUG_UNIQUE"));
+
+    ResponseEntity<ProblemDetail> resp = handler.handleDataIntegrity(ex, request());
+
+    assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(resp.getBody().getProperties()).containsEntry("code", "PRODUCT_SLUG_DUPLICATED");
+  }
+
+  /**
    * SHOP-59: the code comes from the constraint name of Hibernate, as the log line does, and not
    * from the words of the driver message.
    */
