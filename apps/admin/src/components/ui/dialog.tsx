@@ -113,9 +113,12 @@ function OpenDialog({
           closingRef.current = false;
           return;
         }
-        // Closed by the browser, not by the caller.
-        if (isBusy) dialogRef.current?.showModal();
-        else onCancel();
+        // Closed by the browser, not by the caller. While busy, open it again with the
+        // first focus on Cancel as on open (S3.1): showModal() alone would focus Close.
+        if (isBusy) {
+          dialogRef.current?.showModal();
+          cancelRef.current?.focus();
+        } else onCancel();
       }}
     >
       <div className="dialog__header">
