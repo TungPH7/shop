@@ -141,7 +141,9 @@ jobs:
       # the packages of the project are not installed.
       - name: pnpm
         run: node .ai-orchestrator/scripts/ci-package-manager.mjs
-      - run: pnpm --filter ./apps/admin run check:caddy
+      # --fail-if-no-match: when the filter matches no project, as after apps/admin moves, pnpm prints "No projects
+      # matched the filters" and exits 0; with it the step fails instead of passing with nothing checked (SHOP-62).
+      - run: pnpm --fail-if-no-match --filter ./apps/admin run check:caddy
 
   # A check of this project, not of the kit (SHOP-61): the product not found page S6 answers HTTP 404 on the build of
   # user, as Production serves it (AC26). Next renders it one way under `next dev`, where the E2E tests run, and another
@@ -168,8 +170,9 @@ jobs:
       # pnpm, by packageManager of package.json, installed as in build-test. Only user and what it needs are installed.
       - name: pnpm
         run: node .ai-orchestrator/scripts/ci-package-manager.mjs
-      - run: pnpm install --frozen-lockfile --filter ./apps/user...
-      - run: pnpm --filter ./apps/user run check:not-found
+      # --fail-if-no-match, as in caddy-proxy: a filter that matches no project fails the step (SHOP-62).
+      - run: pnpm install --frozen-lockfile --fail-if-no-match --filter ./apps/user...
+      - run: pnpm --fail-if-no-match --filter ./apps/user run check:not-found
 
   # gitleaks on the commits the PR or the push brings, pinned and checked against its published checksum.
   secrets:
