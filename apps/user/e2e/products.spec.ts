@@ -636,10 +636,8 @@ test.describe('AC23 no product', () => {
       expect(response.status()).toBe(200);
       const { totalItems } = (await response.json()) as { totalItems: number };
       // The test hides and deletes no product it did not create (NFR23), so it needs a catalog with none on sale.
-      test.skip(
-        totalItems > 0,
-        `reason: the local catalog has ${totalItems} product(s) on sale, from the local database or tests running beside this one; AC23 needs none`,
-      );
+      // The local database, or tests running beside this one, may hold some.
+      test.skip(totalItems > 0, `reason: ${totalItems} local product(s) on sale; AC23 needs none`);
 
       await expect(async () => {
         await page.goto('/vi/products');
