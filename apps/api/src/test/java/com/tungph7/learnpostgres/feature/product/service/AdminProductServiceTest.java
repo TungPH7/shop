@@ -15,6 +15,9 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
+
+import jakarta.persistence.EntityManager;
 
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,15 +30,18 @@ import com.tungph7.learnpostgres.common.error.ConflictException;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.logging.CorrelationContext;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
+import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
+import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 import com.tungph7.learnpostgres.feature.product.domain.ProductSlugs;
 import com.tungph7.learnpostgres.feature.product.dto.CreateProductRequest;
+import com.tungph7.learnpostgres.feature.product.dto.UpdateProductRequest;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
 
 /**
- * The retries of {@link AdminProductService} when the database refuses an insert, which the
- * integration test cannot make happen on purpose: a generated slug taken at every try, and a
- * constraint other than the slug.
+ * The retries of {@link AdminProductService} when the database refuses an insert or an update,
+ * which the integration tests cannot make happen on purpose: a generated slug taken at every try, a
+ * slug taken between the check and the write, and a constraint other than the slug.
  */
 class AdminProductServiceTest {
 
@@ -47,7 +53,9 @@ class AdminProductServiceTest {
     repository = mock(ProductRepository.class);
     CorrelationContext correlation = mock(CorrelationContext.class);
     when(correlation.currentId()).thenReturn(Optional.empty());
-    service = new AdminProductService(repository, mock(ProductQueryRepository.class), correlation);
+    service =
+        new AdminProductService(
+            repository, mock(ProductQueryRepository.class), correlation, mock(EntityManager.class));
   }
 
   @Test
@@ -163,6 +171,55 @@ class AdminProductServiceTest {
             "a".repeat(150), null, null, new BigDecimal("1"), null, null, null));
 
     assertThat(savedSlug()).isEqualTo("a".repeat(98) + "-3");
+  }
+
+  /**
+   * An edit to a slug another edit or add takes between the check and the write: the UNIQUE
+   * constraint stops it, and it is the same 409 as a slug taken before (NFR12).
+   */
+  @Test
+  void update_toASlugTakenMeanwhile_returns409SlugDuplicated() {
+    UUID id = UUID.randomUUID();
+    Product stored = storedProduct();
+    when(repository.findById(id)).thenReturn(Optional.of(stored));
+    when(repository.existsBySlug("ao-thun-basic")).thenReturn(false);
+    when(repository.saveAndFlush(any(Product.class))).thenThrow(violation("products_slug_unique"));
+
+    assertThatThrownBy(() -> service.update(id, updateRequest("ao-thun-basic")))
+        .isInstanceOf(ConflictException.class)
+        .extracting(e -> ((BusinessException) e).getCode())
+        .isEqualTo(ErrorCode.PRODUCT_SLUG_DUPLICATED);
+  }
+
+  @Test
+  void update_whenAnotherConstraintFails_passesTheErrorOn() {
+    UUID id = UUID.randomUUID();
+    DataIntegrityViolationException other = violation("products_price_vnd_valid");
+    Product stored = storedProduct();
+    when(repository.findById(id)).thenReturn(Optional.of(stored));
+    when(repository.saveAndFlush(any(Product.class))).thenThrow(other);
+
+    assertThatThrownBy(() -> service.update(id, updateRequest("ao-thun"))).isSameAs(other);
+  }
+
+  /** A stored product at version 0, slug {@code ao-thun}. */
+  private static Product storedProduct() {
+    Product stored = mock(Product.class);
+    when(stored.getVersion()).thenReturn(0L);
+    when(stored.getSlug()).thenReturn("ao-thun");
+    return stored;
+  }
+
+  private static UpdateProductRequest updateRequest(String slug) {
+    return new UpdateProductRequest(
+        "Áo thun",
+        slug,
+        null,
+        new BigDecimal("200000"),
+        null,
+        ProductStatus.ACTIVE,
+        ProductAvailability.IN_STOCK,
+        0L);
   }
 
   /** The product the repository returns once saved: only its version is read back. */

@@ -54,6 +54,7 @@
   "form": {
     "back": "Products",
     "addTitle": "Add product",
+    "editTitle": "Edit product",
     "subtitle": "Customers only see products that are Active.",
     "name": {
       "label": "Product name",
@@ -61,7 +62,8 @@
     },
     "slug": {
       "label": "URL slug",
-      "hint": "Generated from the name. If taken, -2, -3… is added."
+      "hint": "Generated from the name. If taken, -2, -3… is added.",
+      "changed": "The old link /products/{{slug}} will stop working."
     },
     "description": {
       "label": "Description (optional)",
@@ -84,9 +86,18 @@
     },
     "cancel": "Cancel",
     "submitAdd": "Add product",
+    "submitEdit": "Save changes",
     "saving": "Saving…",
     "added": "Product added",
+    "saved": "Product saved",
     "saveFailed": "Couldn't save. Please try again.",
+    "conflict": "This product was just edited elsewhere. Reload to see the latest version.",
+    "reload": "Reload",
+    "loading": "Loading the product",
+    "loadFailed": "Couldn't load the product.",
+    "retry": "Try again",
+    "notFound": "We couldn't find this product. It may have been deleted.",
+    "backToList": "Back to products",
     "errors": {
       "nameRequired": "Enter a product name",
       "nameTooLong": "Name must be 150 characters or fewer",

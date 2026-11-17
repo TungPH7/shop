@@ -2,11 +2,15 @@ package com.tungph7.learnpostgres.feature.product.service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import jakarta.persistence.EntityManager;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,9 +18,11 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.tungph7.learnpostgres.common.error.BadRequestException;
 import com.tungph7.learnpostgres.common.error.ConflictException;
 import com.tungph7.learnpostgres.common.error.ConstraintViolations;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
+import com.tungph7.learnpostgres.common.error.NotFoundException;
 import com.tungph7.learnpostgres.common.logging.CorrelationContext;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
@@ -28,14 +34,17 @@ import com.tungph7.learnpostgres.feature.product.dto.AdminProductSummary;
 import com.tungph7.learnpostgres.feature.product.dto.CreateProductRequest;
 import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
 import com.tungph7.learnpostgres.feature.product.dto.ProductStatusFilter;
+import com.tungph7.learnpostgres.feature.product.dto.UpdateProductRequest;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Criteria;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Result;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
 import com.tungph7.learnpostgres.feature.product.repository.ProductSearchTerms;
+import com.tungph7.learnpostgres.feature.product.validation.ValidSlug;
 
 /**
- * The admin API of products (SHOP-7, API Contract of the plan): the add, the list and the delete.
+ * The admin API of products (SHOP-7, API Contract of the plan): the add, the list, the read, the
+ * edit and the delete.
  *
  * <p>The slug of a new product, as the plan sets it:
  *
@@ -50,6 +59,10 @@ import com.tungph7.learnpostgres.feature.product.repository.ProductSearchTerms;
  * is a 409, and a generated slug that loses is tried again with the next free number, at most
  * {@value #MAX_SLUG_RETRIES} times. That is why this class is not {@code @Transactional}: each
  * insert runs in its own transaction, and a lost insert does not abort the next one.
+ *
+ * <p>The edit ({@link #update}) checks, in this order: the product exists (404), a changed slug has
+ * the format (400), the version is the stored one (409), a changed slug is free (409). Each check
+ * fails before anything is written.
  */
 @Service
 public class AdminProductService {
@@ -61,6 +74,9 @@ public class AdminProductService {
   static final int MAX_SLUG_NUMBER = 1000;
 
   private static final String SLUG_TAKEN = "Product slug already exists.";
+  private static final String NOT_FOUND = "Product not found.";
+  private static final String VERSION_CHANGED =
+      "Product was modified by another request. Reload it and retry.";
   private static final String NO_CORRELATION_ID = "none";
 
   private static final Logger log = LoggerFactory.getLogger(AdminProductService.class);
@@ -68,14 +84,17 @@ public class AdminProductService {
   private final ProductRepository repository;
   private final ProductQueryRepository queryRepository;
   private final CorrelationContext correlation;
+  private final EntityManager entityManager;
 
   public AdminProductService(
       ProductRepository repository,
       ProductQueryRepository queryRepository,
-      CorrelationContext correlation) {
+      CorrelationContext correlation,
+      EntityManager entityManager) {
     this.repository = repository;
     this.queryRepository = queryRepository;
     this.correlation = correlation;
+    this.entityManager = entityManager;
   }
 
   /**
@@ -122,6 +141,112 @@ public class AdminProductService {
   }
 
   /**
+   * One product, whatever its status, as the edit form reads it.
+   *
+   * @throws NotFoundException {@code PRODUCT_NOT_FOUND} when no product has this id
+   */
+  @Transactional(readOnly = true)
+  public AdminProduct get(UUID id) {
+    return AdminProduct.from(find(id));
+  }
+
+  /**
+   * Edits a product with every field of a valid request, and returns it with its new version.
+   * Logged at INFO with the operation, the id, the slug and the correlation id, never the
+   * description or the request (NFR12).
+   *
+   * <p>The slug (API Contract, section "Slug khi sửa", and NFR16):
+   *
+   * <ul>
+   *   <li>equal to the stored one, ignoring case as {@code citext} does: the stored slug is kept as
+   *       it is, without checking its format, so a product of before the Epic with a slug out of
+   *       the format is saved, and a slug sent in upper case does not replace it;
+   *   <li>otherwise: it must have the format ({@link ProductSlugs#isValid}), and no other product
+   *       may have it. The UNIQUE constraint {@code products_slug_unique} is the last guard against
+   *       an add or an edit at the same time (NFR12).
+   * </ul>
+   *
+   * <p>The version (AC13): a version other than the stored one is a 409. Two edits at once with the
+   * same version both pass that check; {@code @Version} of Hibernate then writes {@code WHERE
+   * version = ?}, and the second edit is an {@code ObjectOptimisticLockingFailureException}, which
+   * {@code GlobalExceptionHandler} makes the same 409.
+   *
+   * <p>After the write the product is read again, since the trigger {@code
+   * trg_products_set_updated_at} sets {@code updated_at} in the database: the response then shows
+   * the instant a later read shows.
+   *
+   * @throws NotFoundException {@code PRODUCT_NOT_FOUND} when no product has this id
+   * @throws BadRequestException {@code VALIDATION_FAILED} on the field {@code slug}, when the slug
+   *     changes to one out of the format
+   * @throws ConflictException {@code OPTIMISTIC_LOCK_CONFLICT} when the version is not the stored
+   *     one; {@code PRODUCT_SLUG_DUPLICATED} when another product has the new slug
+   */
+  @Transactional
+  public AdminProduct update(UUID id, UpdateProductRequest request) {
+    Product product = find(id);
+    boolean slugChanged = !sameSlug(request.slug(), product.getSlug());
+    if (slugChanged && !ProductSlugs.isValid(request.slug())) {
+      throw invalidSlug(
+          request.slug(),
+          request.slug().length() > ProductSlugs.MAX_LENGTH
+              ? ValidSlug.TOO_LONG
+              : ValidSlug.WRONG_FORMAT);
+    }
+    if (!product.getVersion().equals(request.version())) {
+      throw new ConflictException(ErrorCode.OPTIMISTIC_LOCK_CONFLICT, VERSION_CHANGED);
+    }
+    if (slugChanged && repository.existsBySlug(request.slug())) {
+      throw slugTaken(null);
+    }
+
+    product.setName(request.name());
+    if (slugChanged) {
+      product.setSlug(request.slug());
+    }
+    product.setDescription(request.description());
+    product.setPriceVnd(request.price().longValueExact());
+    product.setCompareAtPriceVnd(toLong(request.compareAtPrice()));
+    product.setStatus(request.status());
+    product.setAvailability(request.availability());
+    try {
+      repository.saveAndFlush(product);
+    } catch (DataIntegrityViolationException e) {
+      if (isSlugTaken(e)) {
+        throw slugTaken(e);
+      }
+      throw e;
+    }
+    entityManager.refresh(product);
+
+    log.info(
+        "Product updated: operation=update id={} slug={} correlationId={}",
+        product.getId(),
+        product.getSlug(),
+        correlation.currentId().orElse(NO_CORRELATION_ID));
+    return AdminProduct.from(product);
+  }
+
+  /**
+   * The 400 {@code VALIDATION_FAILED} of a changed slug out of the format: the body {@code
+   * GlobalExceptionHandler} writes for the field errors of Bean Validation, with one error, on the
+   * field {@code slug}.
+   *
+   * @param slug the slug sent
+   * @param message what is wrong with it, {@link ValidSlug#WRONG_FORMAT} or {@link
+   *     ValidSlug#TOO_LONG}
+   */
+  public static BadRequestException invalidSlug(String slug, String message) {
+    Map<String, Object> error = new LinkedHashMap<>();
+    error.put("field", "slug");
+    error.put("rejectedValue", slug);
+    error.put("message", message);
+    BadRequestException e =
+        new BadRequestException(ErrorCode.VALIDATION_FAILED, "Validation failed for 1 field(s).");
+    e.putProperty("errors", List.of(error));
+    return e;
+  }
+
+  /**
    * Deletes a product, and does nothing when it is already gone, so the delete is idempotent
    * (NFR19). Each call is logged at INFO with the operation, the id, the slug and the correlation
    * id (NFR12).
@@ -147,6 +272,17 @@ public class AdminProductService {
           id,
           correlationId);
     }
+  }
+
+  private Product find(UUID id) {
+    return repository
+        .findById(id)
+        .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, NOT_FOUND));
+  }
+
+  /** Whether two slugs are the same slug for {@code citext}, which ignores case. */
+  private static boolean sameSlug(String sent, String stored) {
+    return sent.toLowerCase(Locale.ROOT).equals(stored.toLowerCase(Locale.ROOT));
   }
 
   private Product createWithTypedSlug(CreateProductRequest request) {

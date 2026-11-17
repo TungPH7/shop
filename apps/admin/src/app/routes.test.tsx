@@ -6,6 +6,20 @@ import { routes } from '@/app/routes';
 import { server } from '@/testing/msw/server';
 import { renderWithRouter, screen } from '@/testing/render';
 
+const shirt = {
+  id: '019a8f2e-5b7c-7d10-9e3f-1a2b3c4d5e6f',
+  name: 'Áo thun cổ tròn',
+  slug: 'ao-thun-co-tron',
+  description: null,
+  price: 250000,
+  compareAtPrice: null,
+  status: 'ACTIVE',
+  availability: 'IN_STOCK',
+  createdAt: '2026-11-16T02:10:00.000Z',
+  updatedAt: '2026-11-16T02:15:30.000Z',
+  version: 0,
+};
+
 function renderAt(url: string) {
   return renderWithRouter(createMemoryRouter(routes, { initialEntries: [url] }));
 }
@@ -53,6 +67,45 @@ describe('routes', () => {
       await screen.findByRole('heading', { level: 1, name: 'Add product' }),
     ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/products/new');
+  });
+
+  it('opens the edit form S2 of the product on /products/:productId/edit without signing in (US3)', async () => {
+    const ids: string[] = [];
+    server.use(
+      http.get('*/admin/products/:id', ({ params }) => {
+        ids.push(String(params['id']));
+        return HttpResponse.json(shirt);
+      }),
+    );
+    const router = createMemoryRouter(routes, {
+      initialEntries: [`/products/${shirt.id}/edit`],
+    });
+    renderWithRouter(router);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Edit product' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: /Product name/ })).toHaveValue(shirt.name);
+    expect(ids).toEqual([shirt.id]);
+    expect(router.state.location.pathname).toBe(`/products/${shirt.id}/edit`);
+  });
+
+  it('goes from Edit of a row of the list (S1.7) to the edit form of its product (S2)', async () => {
+    server.use(
+      http.get('*/admin/products', () =>
+        HttpResponse.json({ items: [shirt], totalItems: 1, offset: 0, limit: 20 }),
+      ),
+      http.get('*/admin/products/:id', () => HttpResponse.json(shirt)),
+    );
+    const router = createMemoryRouter(routes, { initialEntries: ['/products'] });
+    const { user } = renderWithRouter(router);
+
+    await user.click(await screen.findByRole('link', { name: `Edit ${shirt.name}` }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Edit product' }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(`/products/${shirt.id}/edit`);
   });
 
   it('has no product detail page of the template', async () => {

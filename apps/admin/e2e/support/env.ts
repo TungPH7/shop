@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 
-import { type APIRequestContext, request } from '@playwright/test';
+import {
+  type APIRequestContext,
+  type Browser,
+  type BrowserContext,
+  request,
+} from '@playwright/test';
 import { parse } from 'yaml';
 
 // Where the E2E tests of admin run (TW5 of docs/specs/SHOP-7/spec.md). On an environment, Development or Staging,
@@ -34,14 +39,27 @@ const USER_URL = process.env['E2E_USER_URL'];
 export const userUrl =
   USER_URL !== undefined && USER_URL !== '' ? USER_URL : `http://localhost:${localUserPort()}`;
 
-/** A request context on the user app. Dispose of it when done. */
-export function userRequest(): Promise<APIRequestContext> {
+/** baseURL and the basic auth of the user app, for a request or a browser context. */
+function userOptions() {
   const username = process.env['E2E_HTTP_USER'];
   const password = process.env['E2E_HTTP_PASSWORD'];
-  return request.newContext({
+  return {
     baseURL: userUrl,
     ...(username && password
       ? { httpCredentials: { username, password, origin: new URL(userUrl).origin } }
       : {}),
-  });
+  };
+}
+
+/** A request context on the user app. Dispose of it when done. */
+export function userRequest(): Promise<APIRequestContext> {
+  return request.newContext(userOptions());
+}
+
+/**
+ * A browser context on the user app, to read its pages as a customer sees them (AC9,
+ * AC11). Close it when done.
+ */
+export function userContext(browser: Browser): Promise<BrowserContext> {
+  return browser.newContext(userOptions());
 }

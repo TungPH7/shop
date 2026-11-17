@@ -371,6 +371,40 @@ textarea.input {
   }
 }
 
+/* Edit mode (US3): the not-found or load error of S2.3 in place of the fields, its
+   button on the left under it. */
+.product-form__message {
+  margin: 0;
+  color: var(--muted);
+}
+
+.product-form__actions--start {
+  justify-content: flex-start;
+  margin-top: 0;
+}
+
+/* The skeleton of S2.3 while the product loads: the title and the subtitle, then each
+   field as a label over its box, as tall as the real ones. */
+.product-form__skeleton-title {
+  width: 40%;
+  height: 36px;
+}
+
+.product-form__skeleton-text {
+  width: 70%;
+  height: 16px;
+}
+
+.product-form__skeleton-label {
+  width: 30%;
+  height: 14px;
+  margin-bottom: var(--space-2);
+}
+
+.product-form__skeleton-input {
+  height: 44px;
+}
+
 /* --- Banner ------------------------------------------------------------------- */
 
 /* Error: role=alert; warning: role=status (S2.5, S2.7). */
@@ -399,6 +433,12 @@ textarea.input {
   --banner-icon: var(--warn-text);
 
   background: var(--warn-tint);
+}
+
+/* A button of the banner, such as Reload of the conflict (S2.5), on its right. */
+.banner__action {
+  flex: none;
+  margin-left: auto;
 }
 
 .banner__icon {

@@ -53,6 +53,7 @@
   "form": {
     "back": "Sản phẩm",
     "addTitle": "Thêm sản phẩm",
+    "editTitle": "Sửa sản phẩm",
     "subtitle": "Khách chỉ thấy sản phẩm ở trạng thái Đang bán.",
     "name": {
       "label": "Tên sản phẩm",
@@ -60,7 +61,8 @@
     },
     "slug": {
       "label": "Đường dẫn (slug)",
-      "hint": "Tự sinh từ tên. Nếu đã có, hệ thống thêm -2, -3…"
+      "hint": "Tự sinh từ tên. Nếu đã có, hệ thống thêm -2, -3…",
+      "changed": "Đường dẫn cũ /products/{{slug}} sẽ không mở được nữa."
     },
     "description": {
       "label": "Mô tả (không bắt buộc)",
@@ -83,9 +85,18 @@
     },
     "cancel": "Hủy",
     "submitAdd": "Thêm sản phẩm",
+    "submitEdit": "Lưu thay đổi",
     "saving": "Đang lưu…",
     "added": "Đã thêm sản phẩm",
+    "saved": "Đã lưu sản phẩm",
     "saveFailed": "Không lưu được. Vui lòng thử lại.",
+    "conflict": "Sản phẩm vừa được sửa ở nơi khác. Tải lại để xem bản mới nhất.",
+    "reload": "Tải lại",
+    "loading": "Đang tải sản phẩm",
+    "loadFailed": "Không tải được sản phẩm.",
+    "retry": "Thử lại",
+    "notFound": "Không tìm thấy sản phẩm này. Có thể nó đã bị xóa.",
+    "backToList": "Về danh sách sản phẩm",
     "errors": {
       "nameRequired": "Nhập tên sản phẩm",
       "nameTooLong": "Tên tối đa 150 ký tự",

@@ -22,7 +22,7 @@ export const paths = {
     path: '/products/new',
     getHref: () => '/products/new',
   },
-  /** S2 in edit mode (US3). Its route comes with SHOP-34; until then the link shows 404. */
+  /** S2 in edit mode (US3). */
   productEdit: {
     path: '/products/:productId/edit',
     getHref: (productId: string) => `/products/${encodeURIComponent(productId)}/edit`,
