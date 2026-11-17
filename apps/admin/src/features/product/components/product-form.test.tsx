@@ -1,3 +1,4 @@
+import { onlineManager } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Route, Routes } from 'react-router';
@@ -15,6 +16,7 @@ import { testI18n } from '@/testing/test-i18n';
 
 afterEach(() => {
   clearAll();
+  onlineManager.setOnline(true);
 });
 
 function product(input: CreateProductInput): AdminProduct {
@@ -367,6 +369,27 @@ describe('ProductForm in add mode', () => {
       expect(bodies).toHaveLength(2);
     },
   );
+
+  it('S2.5 says "Couldn\'t save" at once when the browser is offline, and posts nothing once it is back (NFR19)', async () => {
+    const bodies = fakeApi(() => HttpResponse.error());
+    onlineManager.setOnline(false);
+    const { user, queryClient } = renderForm();
+    await user.type(field.name(), 'Áo');
+    await user.type(field.price(), '450000');
+
+    await user.click(submit());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save. Please try again.");
+    expect(field.name()).toHaveValue('Áo');
+    expect(field.price()).toHaveValue('450.000');
+    expect(submit()).not.toHaveAttribute('aria-disabled');
+    expect(bodies).toHaveLength(1);
+
+    onlineManager.setOnline(true);
+    await queryClient.resumePausedMutations();
+
+    expect(bodies).toHaveLength(1);
+  });
 
   it('shows "Saving…" and locks the button while it saves', async () => {
     let release: () => void = () => undefined;

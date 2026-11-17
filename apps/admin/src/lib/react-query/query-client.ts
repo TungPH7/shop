@@ -35,6 +35,14 @@ export function createQueryClient(options: QueryClientOptions = {}): QueryClient
       },
       mutations: {
         retry: false,
+        // Every write is sent even when the browser says it is offline (NFR19 of
+        // docs/specs/SHOP-7/spec.md). With the default 'online', Query would pause it:
+        // the form or dialog stays locked on "Saving…" instead of showing its error,
+        // and the write goes out by itself once the network is back, an automatic
+        // retry NFR19 forbids. Sent, it fails at once into the error of the screen.
+        // Write hooks never set networkMode themselves (ST-004). Reads keep the
+        // default: a paused GET is harmless and refetches on reconnect.
+        networkMode: 'always',
       },
     },
   });
