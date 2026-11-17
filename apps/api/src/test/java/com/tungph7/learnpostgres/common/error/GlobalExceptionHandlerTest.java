@@ -194,7 +194,43 @@ class GlobalExceptionHandlerTest {
   }
 
   @Test
-  void handleDataIntegrity_returns_409_with_slug_code_when_unique_slug() {
+  void handleDataIntegrity_returns_409_with_slug_code_when_hibernate_names_unique_slug() {
+    DataIntegrityViolationException ex =
+        new DataIntegrityViolationException(
+            "could not execute statement",
+            new ConstraintViolationException(
+                "could not execute statement",
+                new SQLException("ERROR: duplicate key value"),
+                "products_slug_unique"));
+
+    ResponseEntity<ProblemDetail> resp = handler.handleDataIntegrity(ex, request());
+
+    assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(resp.getBody().getProperties()).containsEntry("code", "PRODUCT_SLUG_DUPLICATED");
+  }
+
+  /**
+   * SHOP-59: the code comes from the constraint name of Hibernate, as the log line does, and not
+   * from the words of the driver message.
+   */
+  @Test
+  void handleDataIntegrity_ofAnotherConstraint_ignoresTheWordsOfTheDriver() {
+    DataIntegrityViolationException ex =
+        new DataIntegrityViolationException(
+            "could not execute statement",
+            new ConstraintViolationException(
+                "could not execute statement",
+                new SQLException(
+                    "ERROR: duplicate key value violates unique constraint on slug_history"),
+                "slug_history_unique"));
+
+    ResponseEntity<ProblemDetail> resp = handler.handleDataIntegrity(ex, request());
+
+    assertThat(resp.getBody().getProperties()).containsEntry("code", "DATA_INTEGRITY_VIOLATION");
+  }
+
+  @Test
+  void handleDataIntegrity_ofADriverMessageOnly_returnsTheGenericCode() {
     DataIntegrityViolationException ex =
         new DataIntegrityViolationException(
             "wrapper",
@@ -203,8 +239,7 @@ class GlobalExceptionHandlerTest {
 
     ResponseEntity<ProblemDetail> resp = handler.handleDataIntegrity(ex, request());
 
-    assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
-    assertThat(resp.getBody().getProperties()).containsEntry("code", "PRODUCT_SLUG_DUPLICATED");
+    assertThat(resp.getBody().getProperties()).containsEntry("code", "DATA_INTEGRITY_VIOLATION");
   }
 
   @Test

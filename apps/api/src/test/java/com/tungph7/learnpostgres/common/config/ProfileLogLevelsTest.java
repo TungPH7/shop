@@ -28,8 +28,19 @@ import org.springframework.core.io.ClassPathResource;
  *
  * <p>Nor does any profile log a failed statement with its values (SHOP-51): {@code application.yml}
  * turns {@code org.hibernate.orm.jdbc.error} off, and no profile turns it back on.
+ *
+ * <p>Nor does PgJDBC put the values of a failed statement into its exceptions (SHOP-53, SHOP-59):
+ * {@code application.yml} sets {@code logServerErrorDetail=false} on the datasource, and no profile
+ * turns it back on, neither as a property of the datasource nor as a parameter of its URL. {@code
+ * JdbcServerErrorDetailIntegrationTest} shows the effect, with the profile {@code test} only.
  */
 class ProfileLogLevelsTest {
+
+  /**
+   * The PgJDBC property, its name lower case and without separators, as Spring Boot and PgJDBC may
+   * read it written in several ways.
+   */
+  private static final String SERVER_ERROR_DETAIL = "logservererrordetail";
 
   /** The logger that writes the values bound to SQL, and each of its parents. */
   private static final List<String> BIND_LOGGER_CHAIN =
@@ -103,6 +114,87 @@ class ProfileLogLevelsTest {
 
     assertThat(levelsOfTheBindLoggerChain(properties))
         .containsExactly(Map.entry("logging.level.ROOT", "DEBUG"));
+  }
+
+  @Test
+  void theBaseFileKeepsTheDetailOfServerErrorsOutOfTheDriver() {
+    assertThat(serverErrorDetailSettings(load("application.yml")))
+        .containsExactly(
+            Map.entry(
+                "spring.datasource.hikari.data-source-properties.logServerErrorDetail", "false"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "application.yml",
+        "application-dev.yml",
+        "application-test.yml",
+        "application-staging.yml",
+        "application-prod.yml"
+      })
+  void noProfileTurnsTheDetailOfServerErrorsBackOn(String file) {
+    assertThat(serverErrorDetailSettings(load(file)))
+        .allSatisfy(
+            (setting, value) -> assertThat(value).as(setting).isEqualToIgnoringCase("false"));
+  }
+
+  @Test
+  void theDetailOfServerErrorsInKebabCase_isRead() {
+    Properties properties = new Properties();
+    properties.setProperty(
+        "spring.datasource.hikari.data-source-properties.log-server-error-detail", "true");
+
+    assertThat(serverErrorDetailSettings(properties))
+        .containsExactly(
+            Map.entry(
+                "spring.datasource.hikari.data-source-properties.log-server-error-detail", "true"));
+  }
+
+  @Test
+  void theDetailOfServerErrorsTurnedOnAsAYamlBoolean_isRead() {
+    Properties properties = new Properties();
+    properties.put("spring.datasource.hikari.data-source-properties.logServerErrorDetail", true);
+
+    assertThat(serverErrorDetailSettings(properties))
+        .containsExactly(
+            Map.entry(
+                "spring.datasource.hikari.data-source-properties.logServerErrorDetail", "true"));
+  }
+
+  @Test
+  void theDetailOfServerErrorsAsAParameterOfTheUrl_isRead() {
+    Properties properties = new Properties();
+    properties.setProperty(
+        "spring.datasource.url", "jdbc:postgresql://db:5432/shop?LogServerErrorDetail=True&ssl=1");
+
+    assertThat(serverErrorDetailSettings(properties))
+        .containsExactly(Map.entry("spring.datasource.url", "True"));
+  }
+
+  /**
+   * The values given to {@code logServerErrorDetail}, by property name: a property of that name, in
+   * any case and with any separator, or a parameter of that name in the value of a property, such
+   * as a JDBC URL. Every entry is read: YAML gives an unquoted {@code true} as a {@link Boolean},
+   * which {@link Properties#stringPropertyNames} skips.
+   */
+  private static Map<String, String> serverErrorDetailSettings(Properties properties) {
+    Map<String, String> settings = new TreeMap<>();
+    for (Map.Entry<Object, Object> entry : properties.entrySet()) {
+      String name = String.valueOf(entry.getKey());
+      String value = String.valueOf(entry.getValue());
+      String bareName = name.replaceAll("[-_]", "").toLowerCase(Locale.ROOT);
+      if (bareName.endsWith("." + SERVER_ERROR_DETAIL) || bareName.equals(SERVER_ERROR_DETAIL)) {
+        settings.put(name, value);
+      }
+      int at = value.toLowerCase(Locale.ROOT).indexOf(SERVER_ERROR_DETAIL + "=");
+      if (at >= 0) {
+        String parameter = value.substring(at + SERVER_ERROR_DETAIL.length() + 1);
+        int end = parameter.indexOf('&');
+        settings.put(name, end >= 0 ? parameter.substring(0, end) : parameter);
+      }
+    }
+    return settings;
   }
 
   /**

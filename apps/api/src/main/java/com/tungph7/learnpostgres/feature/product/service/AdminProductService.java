@@ -8,7 +8,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -16,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.tungph7.learnpostgres.common.error.ConflictException;
+import com.tungph7.learnpostgres.common.error.ConstraintViolations;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.logging.CorrelationContext;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
@@ -60,7 +60,6 @@ public class AdminProductService {
   /** The highest suffix of a generated slug. */
   static final int MAX_SLUG_NUMBER = 1000;
 
-  private static final String SLUG_UNIQUE_CONSTRAINT = "products_slug_unique";
   private static final String SLUG_TAKEN = "Product slug already exists.";
   private static final String NO_CORRELATION_ID = "none";
 
@@ -236,14 +235,12 @@ public class AdminProductService {
     return value == null ? null : value.longValueExact();
   }
 
-  /** Whether the insert broke the UNIQUE constraint of the slug, and not another constraint. */
+  /**
+   * Whether the insert broke the UNIQUE constraint of the slug, and not another constraint, read as
+   * {@code GlobalExceptionHandler} reads it.
+   */
   private static boolean isSlugTaken(DataIntegrityViolationException e) {
-    for (Throwable cause = e; cause != null; cause = cause.getCause()) {
-      if (cause instanceof ConstraintViolationException violation) {
-        return SLUG_UNIQUE_CONSTRAINT.equalsIgnoreCase(violation.getConstraintName());
-      }
-    }
-    return false;
+    return ConstraintViolations.isViolationOf(e, ConstraintViolations.PRODUCT_SLUG_UNIQUE);
   }
 
   private static ConflictException slugTaken(Throwable cause) {
