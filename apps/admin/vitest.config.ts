@@ -46,7 +46,8 @@ export default defineConfig({
         // env.ts stays in: the CI of ai-orchestrator needs every file a PR changes in coverage/lcov.info (SHOP-1).
         // So do main.tsx, the root layout and the home and about routes, which SHOP-8 changes, and the paths, the route
         // table and the admin route, which SHOP-17 changes, and the profile route, which SHOP-42 changes, and the add
-        // route of products, which SHOP-20 adds (routes.test.tsx renders it).
+        // route of products, which SHOP-20 adds (routes.test.tsx renders it). And the QueryClient factory, which SHOP-66
+        // changes (query-client.test.ts).
         'src/app/provider.tsx',
         'src/app/router.ts',
         'src/app/configure-auth.ts',
@@ -55,7 +56,6 @@ export default defineConfig({
         'src/app/routes/products/products-route.tsx',
         'src/app/routes/route-error.tsx',
         'src/lib/api/api.ts',
-        'src/lib/react-query/query-client.ts',
         'src/lib/logger/app-logger.ts',
         'src/lib/i18n/i18n.ts',
       ],
