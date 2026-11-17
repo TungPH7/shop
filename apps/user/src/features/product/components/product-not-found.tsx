@@ -1,3 +1,5 @@
+'use client';
+
 import { useTranslations } from 'next-intl';
 
 import { StaticLink } from '~/i18n/static-link';
@@ -9,8 +11,10 @@ import { StaticLink } from '~/i18n/static-link';
  * not-found boundary of the product detail page, for a client navigation. Styles: `.product-not-found` in
  * src/styles/components.css.
  *
- * The link is a StaticLink: it does not read the path, so the view renders anywhere, even in the boundary of a route
- * whose slug is known only at request time (SHOP-41).
+ * A client component: a not-found element renders apart from the layout that calls `setRequestLocale`, so a server
+ * `useTranslations` there falls back to the request headers, and `next build` fails on that runtime data. On the client
+ * it reads the messages of the NextIntlClientProvider of the layout. The link is a StaticLink: it does not read the path,
+ * so the view renders anywhere, even in the boundary of a route whose slug is known only at request time (SHOP-41).
  */
 export function ProductNotFound() {
   const t = useTranslations('ProductNotFound');
