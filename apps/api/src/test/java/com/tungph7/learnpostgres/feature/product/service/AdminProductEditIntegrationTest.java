@@ -311,8 +311,7 @@ class AdminProductEditIntegrationTest extends AbstractContainerBaseTest {
   }
 
   @Test
-  void update_withASlugTakenByAnotherProductInOtherCase_returns409AndWritesNothing()
-      throws Exception {
+  void update_withASlugTakenByAnotherProduct_returns409AndWritesNothing() throws Exception {
     insert("Áo thun basic", "ao-thun-basic", 199_000L, "ACTIVE");
     UUID id = insert("Áo thun cổ tròn", "ao-thun-co-tron", 250_000L, "ACTIVE");
 
