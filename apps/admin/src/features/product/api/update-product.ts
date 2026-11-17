@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { type CreateProductError, fieldErrorsOf } from '@/features/product/api/create-product';
 import { productKeys } from '@/features/product/api/query-keys';
 import { type AdminProduct, adminProductSchema } from '@/features/product/model/product';
-import { type CreateProductInput } from '@/features/product/model/product-form';
+import { type ProductEditInput } from '@/features/product/model/product-form';
 import { api } from '@/lib/api/api';
 import { isApiError } from '@/lib/api/api-error';
 
@@ -12,8 +12,7 @@ import { isApiError } from '@/lib/api/api-error';
 // of one that succeeded and lost its answer would get a false conflict.
 
 /** UpdateProductInput of the API Contract: every field, the slug too, and the version. */
-export interface UpdateProductInput extends CreateProductInput {
-  slug: string;
+export interface UpdateProductInput extends ProductEditInput {
   /** The version the form loaded: another one in the database is a conflict (AC13). */
   version: number;
 }

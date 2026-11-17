@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import { type z } from 'zod';
 
 import { type AdminProduct } from '@/features/product/model/product';
 import {
@@ -294,6 +295,11 @@ describe('productEditSchema', () => {
       status: 'ACTIVE',
       availability: 'IN_STOCK',
     });
+  });
+
+  it('types the slug of its body as a string, which an edit always sends', () => {
+    expectTypeOf<z.output<typeof schema>['slug']>().toEqualTypeOf<string>();
+    expectTypeOf<z.output<typeof productFormSchema>['slug']>().toEqualTypeOf<string | null>();
   });
 
   it('AC12 sends a new slug in the right format', () => {

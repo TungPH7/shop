@@ -142,13 +142,16 @@ const productFieldsSchema = z.object({
 
 type ProductFields = z.output<typeof productFieldsSchema>;
 
+/** The body the form gives, its slug typed as the mode sends it. */
+type ProductBody<Slug extends string | null> = Omit<CreateProductInput, 'slug'> & { slug: Slug };
+
 /**
  * The schema of the form, in add or edit mode: `checksSlug` tells whether the slug is
  * one to check, `slugOf` what the body sends.
  */
-function productSchema(
+function productSchema<Slug extends string | null>(
   checksSlug: (form: ProductFields) => boolean,
-  slugOf: (form: ProductFields) => string | null,
+  slugOf: (form: ProductFields) => Slug,
 ) {
   return (
     productFieldsSchema
@@ -172,7 +175,7 @@ function productSchema(
           issues.every((issue) => !['price', 'compareAtPrice'].includes(String(issue.path?.[0]))),
       })
       .transform(
-        (form): CreateProductInput => ({
+        (form): ProductBody<Slug> => ({
           name: form.name,
           slug: slugOf(form),
           // Kept verbatim; empty or only white space is none, as the api stores it.
@@ -190,7 +193,7 @@ function productSchema(
  * Add mode (US2): only a typed slug is checked; an empty one means "generate it"
  * again, and goes as null.
  */
-export const productFormSchema = productSchema(isTypedSlug, (form) =>
+export const productFormSchema = productSchema(isTypedSlug, (form): string | null =>
   isTypedSlug(form) ? form.slug : null,
 );
 
@@ -207,7 +210,7 @@ export function isSameSlug(a: string, b: string): boolean {
 export function productEditSchema(savedSlug: string) {
   return productSchema(
     (form) => !isSameSlug(form.slug, savedSlug),
-    (form) => form.slug,
+    (form): string => form.slug,
   );
 }
 
@@ -224,6 +227,11 @@ export interface CreateProductInput {
   compareAtPrice: number | null;
   status: ProductStatus;
   availability: ProductAvailability;
+}
+
+/** The fields of an edit (US3): those of an add, the slug always sent. */
+export interface ProductEditInput extends CreateProductInput {
+  slug: string;
 }
 
 /** A new product: Active and In stock (Product Rules), the slug generated. */
