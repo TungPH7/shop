@@ -1,4 +1,4 @@
-import { onlineManager } from '@tanstack/react-query';
+import { focusManager, onlineManager } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router';
@@ -8,7 +8,7 @@ import { ProductEdit } from '@/features/product/components/product-edit';
 import { type AdminProduct } from '@/features/product/model/product';
 import { clearAll, getSnapshot } from '@/lib/notifications/notification-store';
 import { server } from '@/testing/msw/server';
-import { renderWithProviders, screen, waitFor } from '@/testing/render';
+import { act, renderWithProviders, screen, waitFor } from '@/testing/render';
 import { testI18n } from '@/testing/test-i18n';
 
 // S2 of docs/specs/SHOP-7/design.md in edit mode (US3), against fakes of
@@ -17,6 +17,7 @@ import { testI18n } from '@/testing/test-i18n';
 afterEach(async () => {
   clearAll();
   onlineManager.setOnline(true);
+  focusManager.setFocused(undefined);
   await testI18n.changeLanguage('en');
 });
 
@@ -88,6 +89,13 @@ const save = () => screen.getByRole('button', { name: 'Save changes' });
 
 async function loaded() {
   return screen.findByRole('heading', { level: 1, name: 'Edit product' });
+}
+
+/** Gives a refetch the time to start, then checks that none did: one GET, no skeleton. */
+async function expectNoReload(get: { calls: () => number }) {
+  await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+  expect(get.calls()).toBe(1);
+  expect(screen.queryByLabelText('Loading the product')).not.toBeInTheDocument();
 }
 
 describe('ProductEdit', () => {
@@ -311,6 +319,41 @@ describe('ProductEdit', () => {
     fakePut();
     await user.click(save());
     await screen.findByText('The product list');
+  });
+
+  // The form edits the version it opened with (AC13): only Reload loads another one.
+  // Production refetches on focus by default, and every client on reconnect, which would
+  // swap the form for the skeleton and drop what was typed.
+  it('AC13 keeps what was typed when the window gets the focus back, loading nothing', async () => {
+    const get = fakeGet();
+    const { user } = renderEdit();
+    await loaded();
+    await user.clear(field.name());
+    await user.type(field.name(), 'Áo thun đang sửa');
+
+    act(() => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+    });
+
+    await expectNoReload(get);
+    expect(field.name()).toHaveValue('Áo thun đang sửa');
+  });
+
+  it('AC13 keeps what was typed when the network comes back, loading nothing', async () => {
+    const get = fakeGet();
+    const { user } = renderEdit();
+    await loaded();
+    await user.clear(field.name());
+    await user.type(field.name(), 'Áo thun đang sửa');
+
+    act(() => {
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+    });
+
+    await expectNoReload(get);
+    expect(field.name()).toHaveValue('Áo thun đang sửa');
   });
 
   it('AC13 brings the conflict banner into view, the focus staying on Save (S2.5)', async () => {
