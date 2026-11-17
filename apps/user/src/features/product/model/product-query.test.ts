@@ -59,6 +59,33 @@ describe('parseProductQuery', () => {
     expect(parseProductQuery({ q })).toEqual({ q: '', sort: 'newest', page: 1 });
   });
 
+  // JavaScript's trim() and \s do not count U+0085 or U+001C–U+001F as spaces, while the api does: a keyword of them
+  // alone was sent as a search the api refused with 400, an error Try again never left (AC22).
+  test.each(['\u0085', '\u001c', '\u001f', '\u0000', '\u007f', ' \u0085\t\u001e '])(
+    'reads the keyword %j, only control characters and spaces, as no search (AC22)',
+    (q) => {
+      expect(parseProductQuery({ q })).toEqual({ q: '', sort: 'newest', page: 1 });
+    },
+  );
+
+  test('falls back to the newest first for sort=relevance with a keyword of control characters (AC22)', () => {
+    expect(parseProductQuery({ q: '\u001f', sort: 'relevance' })).toEqual({
+      q: '',
+      sort: 'newest',
+      page: 1,
+    });
+  });
+
+  test('reads a control character between two words as a space', () => {
+    expect(parseProductQuery({ q: 'áo\u0085\u001fthun\u0000' }).q).toBe('áo thun');
+  });
+
+  test('cuts the keyword at 100 characters after its control characters became spaces', () => {
+    expect(parseProductQuery({ q: `${'\u001f'.repeat(10)}${'a'.repeat(150)}` }).q).toBe(
+      'a'.repeat(100),
+    );
+  });
+
   test('sorts a search by relevance by default (AC18)', () => {
     expect(parseProductQuery({ q: 'ao' }).sort).toBe('relevance');
   });

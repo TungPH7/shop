@@ -36,9 +36,16 @@ const pageSchema = z
   .pipe(z.number().int().min(1).max(Number.MAX_SAFE_INTEGER))
   .catch(DEFAULT_PAGE);
 
+/**
+ * Spaces as the api reads them, and more: JavaScript's `\s` lacks U+0085 and U+001C–U+001F, which the api strips, so
+ * every control character counts as a space here. A keyword of control characters alone is then no search, never one
+ * the api refuses (AC22).
+ */
+const SPACES = /[\p{Cc}\s]+/gu;
+
 const keywordSchema = z
   .string()
-  .transform((q) => q.trim().replace(/\s+/g, ' ').slice(0, MAX_KEYWORD_LENGTH).trimEnd())
+  .transform((q) => q.replace(SPACES, ' ').trim().slice(0, MAX_KEYWORD_LENGTH).trimEnd())
   .catch('');
 
 const productQuerySchema = z
