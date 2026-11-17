@@ -10,7 +10,7 @@
 // them, and X-Forwarded-For keeps the address of the browser first, with the address of Caddy of the VPS appended, as
 // a proxy appends the one that called it. It needs Docker only, and removes what it made. The job caddy-proxy of
 // .github/workflows/ci.yml runs it on every PR and push (SHOP-57). Run it with: pnpm --filter ./apps/admin run check:caddy
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -36,6 +36,19 @@ const docker = (args, options = {}) =>
     stdio: ['pipe', 'pipe', 'pipe'],
     ...options,
   }).trim();
+
+// The log of a container, for a failed check. Caddy writes its log, and the error that stops it, to stderr, which
+// `docker logs` passes on as its own stderr: both streams are read, so CI shows why Caddy did not start (review of
+// PR #47, SHOP-61).
+function logsOf(name) {
+  const { stdout, stderr, error } = spawnSync('docker', ['logs', name], { encoding: 'utf8' });
+  if (error) return `no log of ${name}: ${error.message}`;
+  const log = [stdout, stderr]
+    .map((text) => (text ?? '').trim())
+    .filter(Boolean)
+    .join('\n');
+  return `--- docker logs ${name} ---\n${log || '(empty)'}`;
+}
 
 // The stub api: it shows the headers the api would read, as Tomcat's RemoteIpValve reads them, as field=value pairs
 // split by |.
@@ -184,12 +197,8 @@ try {
 } catch (error) {
   failed += 1;
   console.error(error.stderr || error.message);
-  try {
-    console.error(docker(['logs', admin]));
-  } catch {
-    // No container to show.
-  }
 } finally {
+  if (failed) console.error(logsOf(admin));
   cleanup();
 }
 

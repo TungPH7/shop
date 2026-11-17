@@ -307,8 +307,90 @@ class StoreProductIntegrationTest extends AbstractContainerBaseTest {
   }
 
   // ============================================================
+  // GET sitemap (SHOP-32)
+  // ============================================================
+
+  @Test
+  void sitemap_listsTheActiveProductsByIdWithTheirLastUpdate_andNoHiddenOne() throws Exception {
+    insert(ACTIVE_ID, "ao-thun-co-tron", "ACTIVE", null, null);
+    insert(HIDDEN_ID, "bao-tay-len", "HIDDEN", null, null);
+    insert(DELETED_ID, "mu-len", "ACTIVE", null, null);
+
+    mockMvc
+        .perform(get("/api/sitemap/products"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[*].slug").value(contains("ao-thun-co-tron", "mu-len")))
+        .andExpect(jsonPath("$.items[0].updatedAt").value("2026-11-16T02:15:30.123Z"))
+        .andExpect(jsonPath("$.totalItems").value(2))
+        .andExpect(jsonPath("$.offset").value(0))
+        .andExpect(jsonPath("$.limit").value(1_000));
+  }
+
+  @Test
+  void sitemap_withAStatusParameter_stillListsOnlyActiveProducts() throws Exception {
+    insert(ACTIVE_ID, "ao-thun-co-tron", "ACTIVE", null, null);
+    insert(HIDDEN_ID, "bao-tay-len", "HIDDEN", null, null);
+
+    mockMvc
+        .perform(get("/api/sitemap/products").param("status", "HIDDEN"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[*].slug").value(contains("ao-thun-co-tron")))
+        .andExpect(jsonPath("$.totalItems").value(1));
+  }
+
+  @Test
+  void sitemap_leavesOutADeletedProduct() throws Exception {
+    insert(ACTIVE_ID, "ao-thun-co-tron", "ACTIVE", null, null);
+    insert(DELETED_ID, "mu-len", "ACTIVE", null, null);
+    mockMvc.perform(delete("/api/admin/products/" + DELETED_ID)).andExpect(status().isNoContent());
+
+    mockMvc
+        .perform(get("/api/sitemap/products"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[*].slug").value(contains("ao-thun-co-tron")))
+        .andExpect(jsonPath("$.totalItems").value(1));
+  }
+
+  @Test
+  void sitemap_withAnInvalidParameter_returns400InvalidParameter() throws Exception {
+    mockMvc
+        .perform(get("/api/sitemap/products").param("limit", "1001"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.parameter").value("limit"));
+  }
+
+  @Test
+  void get_ofAProductWhoseSlugIsSitemap_stillReturnsThatProduct() throws Exception {
+    insert(ACTIVE_ID, "sitemap", "ACTIVE", null, null);
+
+    mockMvc
+        .perform(get("/api/products/sitemap"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.id").value(ACTIVE_ID.toString()))
+        .andExpect(jsonPath("$.slug").value("sitemap"));
+  }
+
+  // ============================================================
   // OpenAPI
   // ============================================================
+
+  @Test
+  void apiDocs_describeTheSitemap() throws Exception {
+    String path = "$.paths['/api/sitemap/products'].get";
+
+    mockMvc
+        .perform(get("/v3/api-docs"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath(path + ".parameters[*].name").value(hasItems("offset", "limit")))
+        .andExpect(
+            jsonPath(path + ".parameters[?(@.name == 'limit')].schema.minimum").value(contains(1)))
+        .andExpect(
+            jsonPath(path + ".parameters[?(@.name == 'limit')].schema.maximum")
+                .value(contains(1_000)))
+        .andExpect(jsonPath(path + ".responses['200']").exists())
+        .andExpect(jsonPath(path + ".responses['400']").exists());
+  }
 
   @Test
   void apiDocs_describeTheList() throws Exception {

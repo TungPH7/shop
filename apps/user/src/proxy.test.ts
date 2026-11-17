@@ -1,13 +1,17 @@
 // @vitest-environment node
 // The Proxy reads env.API_URL, a server variable: node, as client.test.ts. MSW answers the HEAD at the network boundary.
 import { http, HttpResponse } from 'msw';
-import { getRewrittenUrl, isRewrite } from 'next/experimental/testing/server';
+import {
+  getRewrittenUrl,
+  isRewrite,
+  unstable_doesMiddlewareMatch,
+} from 'next/experimental/testing/server';
 import { NextRequest, NextResponse } from 'next/server';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { server } from '~/testing/msw/server';
 
-import proxy from './proxy';
+import proxy, { config } from './proxy';
 
 // The middleware of next-intl is a seam: the test checks the Proxy hands a request to it, not what next-intl then does.
 const { intl } = vi.hoisted(() => ({ intl: vi.fn() }));
@@ -170,4 +174,41 @@ describe('requests the Proxy does not check', () => {
       expect(response).toBe(forwarded);
     },
   );
+});
+
+describe('the paths the Proxy runs on', () => {
+  const runsOn = (url: string) => unstable_doesMiddlewareMatch({ config, url });
+
+  test.each(['/vi/products/ao-thun.', '/en/products/ao-thun.html', '/vi/products/v1.2'])(
+    'runs on the product page %s, though it has a dot, so it answers 404 for a slug that is no product (AC26)',
+    (path) => {
+      expect(runsOn(path)).toBe(true);
+    },
+  );
+
+  test.each(['/vi/products', '/vi/products/ao-thun', '/en', '/vi/about'])(
+    'runs on the page %s',
+    (path) => {
+      expect(runsOn(path)).toBe(true);
+    },
+  );
+
+  test.each([
+    '/favicon.ico',
+    '/robots.txt',
+    '/_next/static/chunks/main.js',
+    '/api/health',
+    '/vi/logo.png',
+  ])('leaves out %s, an asset or a route of its own', (path) => {
+    expect(runsOn(path)).toBe(false);
+  });
+});
+
+describe('a product path with a dot', () => {
+  test('rewrites to S6 without asking the api, since a slug has no dot', async () => {
+    const response = await proxy(pageLoad('/vi/products/ao-thun.'));
+
+    expect(getRewrittenUrl(response)).toBe(`${SITE}/vi/product-not-found`);
+    expect(intl).not.toHaveBeenCalled();
+  });
 });

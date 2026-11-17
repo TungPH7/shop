@@ -113,6 +113,39 @@ class ProductQueryPerformanceIntegrationTest extends AbstractContainerBaseTest {
     assertThat(median).isLessThanOrEqualTo(MAX_MEDIAN_MILLIS);
   }
 
+  /**
+   * NFR2 for the sitemap of the store (SHOP-32): a block of 1,000 {@code ACTIVE} products by id,
+   * the first one and the last one, both statements included.
+   */
+  @Test
+  void findSitemapPage_with10000Products_takesAtMost200MillisecondsAtTheMedianForEachBlock() {
+    insertProducts();
+    Map<String, Long> medians = new LinkedHashMap<>();
+    medians.put("first block", sitemapMedianMillis(0));
+    medians.put("last block", sitemapMedianMillis(8_000));
+    LOG.info(
+        "NFR2, sitemap, median in ms of {} runs with {} products: {}", RUNS, PRODUCTS, medians);
+
+    assertThat(medians)
+        .allSatisfy(
+            (block, millis) -> assertThat(millis).as(block).isLessThanOrEqualTo(MAX_MEDIAN_MILLIS));
+    assertThat(repository.findSitemapPage(0, 1_000).items()).hasSize(1_000);
+    assertThat(repository.findSitemapPage(8_000, 1_000).items()).hasSize(1_000);
+    assertThat(repository.findSitemapPage(0, 1_000).totalItems()).isEqualTo(9_000);
+  }
+
+  private long sitemapMedianMillis(int offset) {
+    repository.findSitemapPage(offset, 1_000); // warm-up: JIT and the buffers of the database
+    long[] nanos = new long[RUNS];
+    for (int i = 0; i < RUNS; i++) {
+      long start = System.nanoTime();
+      repository.findSitemapPage(offset, 1_000);
+      nanos[i] = System.nanoTime() - start;
+    }
+    Arrays.sort(nanos);
+    return nanos[RUNS / 2] / 1_000_000;
+  }
+
   private long medianMillis(Criteria criteria) {
     repository.findPage(criteria); // warm-up: JIT and the buffers of the database
     long[] nanos = new long[RUNS];

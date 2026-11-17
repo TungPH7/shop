@@ -32,7 +32,8 @@ export type ProductInput = {
   status?: 'ACTIVE' | 'HIDDEN';
 };
 
-export type CreatedProduct = { id: string; name: string; slug: string };
+/** `updatedAt` is the last edit the api stored: the `lastmod` of the product in the sitemap (AC28). */
+export type CreatedProduct = { id: string; name: string; slug: string; updatedAt: string };
 
 type AdminProductSummary = { id: string; name: string; createdAt: string };
 
@@ -59,8 +60,8 @@ export async function createProduct(
     data: { ...input, name: `${input.name} E2E ${runId}` },
   });
   expect(response.status(), await response.text()).toBe(201);
-  const { id, name, slug } = (await response.json()) as CreatedProduct;
-  return { id, name, slug };
+  const { id, name, slug, updatedAt } = (await response.json()) as CreatedProduct;
+  return { id, name, slug, updatedAt };
 }
 
 /** Deletes a product; the api answers 204 even when it is already gone. */

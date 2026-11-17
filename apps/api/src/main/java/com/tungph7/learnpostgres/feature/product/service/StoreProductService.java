@@ -12,11 +12,13 @@ import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 import com.tungph7.learnpostgres.feature.product.domain.ProductSort;
 import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
+import com.tungph7.learnpostgres.feature.product.dto.SitemapEntry;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProduct;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProductSummary;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Criteria;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Result;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.SitemapResult;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
 
 /**
@@ -53,6 +55,23 @@ public class StoreProductService {
             new Criteria(null, Set.of(ProductStatus.ACTIVE), ProductSort.NEWEST, offset, limit));
     return new ProductPage<>(
         result.items().stream().map(StoreProductSummary::from).toList(),
+        result.totalItems(),
+        offset,
+        limit);
+  }
+
+  /**
+   * One block of the sitemap: the slug and last update of {@code ACTIVE} products, in the order of
+   * their ids, and their total (SHOP-32). Only {@code ACTIVE} products, whatever the request asks
+   * (NFR9).
+   *
+   * @param offset the products to skip, 0 or more
+   * @param limit the products of the block, 1 to {@value ProductQueryRepository#MAX_SITEMAP_LIMIT}
+   */
+  public ProductPage<SitemapEntry> sitemap(int offset, int limit) {
+    SitemapResult result = queryRepository.findSitemapPage(offset, limit);
+    return new ProductPage<>(
+        result.items().stream().map(SitemapEntry::from).toList(),
         result.totalItems(),
         offset,
         limit);
