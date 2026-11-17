@@ -480,6 +480,25 @@ describe('ProductList', () => {
     expect(screen.getByRole('region', { name: 'Product list' })).toHaveFocus();
   });
 
+  it('gives focus back to the Delete button of the row on a Cancel after an earlier delete (S3.1)', async () => {
+    fakeApi([shirt, jeans]);
+    const { user } = renderWithProviders(<ProductList />, { route: '/products' });
+    await user.click(await screen.findByRole('button', { name: 'Delete Quần jean nam' }));
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    );
+    await waitFor(() => {
+      expect(screen.queryByText('Quần jean nam')).not.toBeInTheDocument();
+    });
+    const shirtDelete = screen.getByRole('button', { name: 'Delete Áo thun cổ tròn' });
+    await user.click(shirtDelete);
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(shirtDelete).toHaveFocus();
+  });
+
   it('speaks Vietnamese, with the same price format', async () => {
     await testI18n.changeLanguage('vi');
     fakeApi([shirt, jeans]);

@@ -26,7 +26,8 @@ const STORE_DELAY_MS = 60_000;
 
 const runId = newRunId();
 let created: E2eProduct[] = [];
-let store: APIRequestContext;
+// Undefined until beforeAll makes it, so that afterAll does not hide a failure of beforeAll.
+let store: APIRequestContext | undefined;
 
 test.beforeAll(async ({ request }) => {
   await deleteStaleE2eProducts(request);
@@ -40,7 +41,7 @@ test.afterEach(async ({ request }) => {
 });
 
 test.afterAll(async () => {
-  await store.dispose();
+  await store?.dispose();
 });
 
 /** The list S1 with only the products of this run. */
@@ -68,6 +69,7 @@ async function failDeletes(page: Page, id: string): Promise<{ count: number }> {
 
 /** The HTTP status of a page load of the product detail page of the user app. */
 async function storeStatus(slug: string): Promise<number> {
+  if (store === undefined) throw new Error('beforeAll made no request context on the user app');
   const response = await store.get(`/vi/products/${slug}`, { maxRedirects: 0 });
   return response.status();
 }
