@@ -38,6 +38,7 @@ import com.tungph7.learnpostgres.common.logging.LoggingProperties;
 import com.tungph7.learnpostgres.common.security.TestSecurityConfig;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
+import com.tungph7.learnpostgres.feature.product.dto.SitemapEntry;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProduct;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProductSummary;
 import com.tungph7.learnpostgres.feature.product.service.StoreProductService;
@@ -61,6 +62,7 @@ class StoreProductControllerWebMvcTest {
 
   private static final String URL = "/api/products/ao-thun-co-tron";
   private static final String LIST_URL = "/api/products";
+  private static final String SITEMAP_URL = "/api/sitemap/products";
   private static final UUID ID = UUID.fromString("019a8f2e-5b7c-7d10-9e3f-1a2b3c4d5e6f");
 
   @Autowired MockMvc mockMvc;
@@ -358,6 +360,141 @@ class StoreProductControllerWebMvcTest {
         .doesNotContain("Exception")
         .doesNotContain("com.tungph7")
         .doesNotContain("StoreProductController");
+  }
+
+  // ============================================================
+  // GET sitemap: 200 (SHOP-32)
+  // ============================================================
+
+  @Test
+  void sitemap_withNoParameter_startsAtTheFirstProductAThousandAtATime() throws Exception {
+    when(service.sitemap(0, 1_000)).thenReturn(new ProductPage<>(List.of(), 0, 0, 1_000));
+
+    mockMvc
+        .perform(get(SITEMAP_URL))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items").isEmpty())
+        .andExpect(jsonPath("$.totalItems").value(0))
+        .andExpect(jsonPath("$.offset").value(0))
+        .andExpect(jsonPath("$.limit").value(1_000));
+
+    verify(service).sitemap(0, 1_000);
+  }
+
+  @Test
+  void sitemap_passesTheOffsetAndTheLimitToTheService() throws Exception {
+    when(service.sitemap(anyInt(), anyInt()))
+        .thenReturn(new ProductPage<>(List.of(), 0, 2_000, 1_000));
+
+    mockMvc
+        .perform(get(SITEMAP_URL).param("offset", "2000").param("limit", "1000"))
+        .andExpect(status().isOk());
+
+    verify(service).sitemap(2_000, 1_000);
+  }
+
+  @Test
+  void sitemap_withTheSmallestLimit_returns200() throws Exception {
+    when(service.sitemap(anyInt(), anyInt())).thenReturn(new ProductPage<>(List.of(), 0, 0, 1));
+
+    mockMvc.perform(get(SITEMAP_URL).param("limit", "1")).andExpect(status().isOk());
+
+    verify(service).sitemap(0, 1);
+  }
+
+  @Test
+  void sitemap_ignoresAStatusParameter() throws Exception {
+    when(service.sitemap(anyInt(), anyInt())).thenReturn(new ProductPage<>(List.of(), 0, 0, 1_000));
+
+    mockMvc.perform(get(SITEMAP_URL).param("status", "HIDDEN")).andExpect(status().isOk());
+
+    verify(service).sitemap(0, 1_000);
+  }
+
+  @Test
+  void sitemap_returnsThePageAsTheApiContractWritesIt() throws Exception {
+    when(service.sitemap(anyInt(), anyInt()))
+        .thenReturn(
+            new ProductPage<>(
+                List.of(new SitemapEntry("ao-thun-co-tron", Instant.parse("2026-11-16T02:15:30Z"))),
+                1_001,
+                1_000,
+                1_000));
+
+    mockMvc
+        .perform(get(SITEMAP_URL).param("offset", "1000"))
+        .andExpect(status().isOk())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+        .andExpect(jsonPath("$.totalItems").value(1_001))
+        .andExpect(jsonPath("$.offset").value(1_000))
+        .andExpect(jsonPath("$.limit").value(1_000))
+        .andExpect(jsonPath("$.items[0].slug").value("ao-thun-co-tron"))
+        .andExpect(jsonPath("$.items[0].updatedAt").value("2026-11-16T02:15:30.000Z"));
+  }
+
+  @Test
+  void sitemap_returnsExactlyTheFieldsOfPageAndSitemapEntry() throws Exception {
+    when(service.sitemap(anyInt(), anyInt()))
+        .thenReturn(
+            new ProductPage<>(
+                List.of(new SitemapEntry("ao-thun-co-tron", Instant.parse("2026-11-16T02:15:30Z"))),
+                1,
+                0,
+                1_000));
+
+    String body =
+        mockMvc
+            .perform(get(SITEMAP_URL))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    JsonNode page = json.readTree(body);
+
+    assertThat(fieldNames(page))
+        .containsExactlyInAnyOrder("items", "totalItems", "offset", "limit");
+    assertThat(fieldNames(page.get("items").get(0))).containsExactlyInAnyOrder("slug", "updatedAt");
+  }
+
+  @Test
+  void sitemap_postIsNotAllowed() throws Exception {
+    mockMvc
+        .perform(post(SITEMAP_URL).contentType(MediaType.APPLICATION_JSON).content("{}"))
+        .andExpect(status().isMethodNotAllowed());
+  }
+
+  // ============================================================
+  // GET sitemap: 400 INVALID_PARAMETER (NFR3)
+  // ============================================================
+
+  static Stream<Arguments> invalidSitemapParameters() {
+    return Stream.of(
+        Arguments.of("offset", "-1", "negative"),
+        Arguments.of("offset", "abc", "not a number"),
+        Arguments.of("offset", "1.5", "a fraction"),
+        Arguments.of("offset", "99999999999", "beyond an int"),
+        Arguments.of("limit", "0", "below 1"),
+        Arguments.of("limit", "1001", "above 1000"),
+        Arguments.of("limit", "-5", "negative"),
+        Arguments.of("limit", "abc", "not a number"));
+  }
+
+  @ParameterizedTest(name = "{0}={1} ({2})")
+  @MethodSource("invalidSitemapParameters")
+  void sitemap_withAnInvalidParameter_returns400NamingIt(String name, String value, String label)
+      throws Exception {
+    mockMvc
+        .perform(get(SITEMAP_URL).param(name, value))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.status").value(400))
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.parameter").value(name))
+        .andExpect(jsonPath("$.instance").value(SITEMAP_URL))
+        .andExpect(jsonPath("$.correlationId").exists())
+        .andExpect(jsonPath("$.timestamp").exists());
+
+    verifyNoInteractions(service);
   }
 
   // ============================================================

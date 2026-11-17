@@ -27,12 +27,15 @@ import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailabil
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 import com.tungph7.learnpostgres.feature.product.domain.ProductSort;
 import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
+import com.tungph7.learnpostgres.feature.product.dto.SitemapEntry;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProduct;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProductSummary;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Criteria;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Result;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Row;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.SitemapResult;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.SitemapRow;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
 
 /**
@@ -183,6 +186,49 @@ class StoreProductServiceTest {
     assertThat(page.totalItems()).isEqualTo(30);
     assertThat(page.offset()).isEqualTo(24);
     assertThat(page.limit()).isEqualTo(24);
+  }
+
+  // ============================================================
+  // sitemap (SHOP-32)
+  // ============================================================
+
+  @Test
+  void sitemap_asksTheRepositoryForTheBlockOfTheRequest() {
+    when(queryRepository.findSitemapPage(2_000, 1_000)).thenReturn(new SitemapResult(List.of(), 0));
+
+    service.sitemap(2_000, 1_000);
+
+    verify(queryRepository).findSitemapPage(2_000, 1_000);
+  }
+
+  @Test
+  void sitemap_returnsTheSlugAndTheLastUpdateCutToMilliseconds_inTheOrderOfTheRepository() {
+    when(queryRepository.findSitemapPage(0, 1_000))
+        .thenReturn(
+            new SitemapResult(
+                List.of(
+                    new SitemapRow("ao-thun-co-tron", Instant.parse("2026-11-16T02:15:30.123456Z")),
+                    new SitemapRow("Ao-Thun-Cu", Instant.parse("2026-11-16T02:15:31Z"))),
+                2));
+
+    ProductPage<SitemapEntry> page = service.sitemap(0, 1_000);
+
+    assertThat(page.items())
+        .containsExactly(
+            new SitemapEntry("ao-thun-co-tron", Instant.parse("2026-11-16T02:15:30.123Z")),
+            new SitemapEntry("Ao-Thun-Cu", Instant.parse("2026-11-16T02:15:31Z")));
+  }
+
+  @Test
+  void sitemap_returnsTheTotalOfTheRepository_andTheOffsetAndLimitOfTheRequest() {
+    when(queryRepository.findSitemapPage(1_000, 500))
+        .thenReturn(new SitemapResult(List.of(), 1_234));
+
+    ProductPage<SitemapEntry> page = service.sitemap(1_000, 500);
+
+    assertThat(page.totalItems()).isEqualTo(1_234);
+    assertThat(page.offset()).isEqualTo(1_000);
+    assertThat(page.limit()).isEqualTo(500);
   }
 
   private static Row row(UUID id, String name, String slug, long price, Long compareAtPrice) {

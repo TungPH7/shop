@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'vitest';
 
-import { breadcrumbLd, itemListLd, organizationLd, webSiteLd } from '~/lib/seo/structured-data';
+import {
+  breadcrumbLd,
+  itemListLd,
+  organizationLd,
+  productLd,
+  webSiteLd,
+} from '~/lib/seo/structured-data';
 
 // Test trên CHUỖI JSON đã serialize = đúng thứ crawler đọc + né type rộng của schema-dts (SchemaValue
 // = T | T[]) khi index mảng. (siteUrl đọc clientEnv.NEXT_PUBLIC_SITE_URL = client var → jsdom OK.)
@@ -46,5 +52,45 @@ describe('structured-data builders → JSON-LD output', () => {
     expect(json).toContain('"item":"https://x/en/products"');
     expect(json).toContain('"position":2');
     expect(json).toContain('"name":"Products"');
+  });
+});
+
+describe('productLd', () => {
+  const shirt = {
+    name: 'Áo thun cổ tròn',
+    description: 'Áo thun cotton 100%.\nCổ tròn, tay ngắn.',
+    url: 'https://x/vi/products/ao-thun-co-tron',
+    price: 200000,
+    inStock: true,
+  };
+
+  test('is a Product with name, description and url (AC27)', () => {
+    const ld = productLd(shirt);
+
+    expect(ld).toMatchObject({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: 'Áo thun cổ tròn',
+      description: 'Áo thun cotton 100%.\nCổ tròn, tay ngắn.',
+      url: 'https://x/vi/products/ao-thun-co-tron',
+    });
+  });
+
+  test('offers the price as an integer of VND, in stock', () => {
+    const json = JSON.stringify(productLd(shirt));
+
+    expect(json).toContain(
+      '"offers":{"@type":"Offer","price":200000,"priceCurrency":"VND","availability":"https://schema.org/InStock"}',
+    );
+  });
+
+  test('offers an out-of-stock product as OutOfStock', () => {
+    const ld = productLd({ ...shirt, inStock: false });
+
+    expect(ld).toMatchObject({ offers: { availability: 'https://schema.org/OutOfStock' } });
+  });
+
+  test('has no image: a product shows a placeholder, not a picture (SPEC, Ảnh giữ chỗ)', () => {
+    expect(productLd(shirt)).not.toHaveProperty('image');
   });
 });
