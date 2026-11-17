@@ -6,6 +6,7 @@ import { type AdminProductSummary } from '@/features/product/model/product';
 import { clearAll, getSnapshot } from '@/lib/notifications/notification-store';
 import { server } from '@/testing/msw/server';
 import { renderWithProviders, screen, waitFor, within } from '@/testing/render';
+import { stubDialog } from '@/testing/stub-dialog';
 import { testI18n } from '@/testing/test-i18n';
 
 // S1 of docs/specs/SHOP-7/design.md against a fake of GET /api/admin/products: it
@@ -14,18 +15,8 @@ import { testI18n } from '@/testing/test-i18n';
 
 const NBSP = String.fromCodePoint(0xa0);
 
-// jsdom has <dialog> but not its modal API, which the dialog S3 calls: the stub only
-// toggles `open` and fires `close`, as in the test of <Dialog>.
-Object.assign(HTMLDialogElement.prototype, {
-  showModal(this: HTMLDialogElement) {
-    this.setAttribute('open', '');
-  },
-  close(this: HTMLDialogElement) {
-    if (!this.hasAttribute('open')) return;
-    this.removeAttribute('open');
-    this.dispatchEvent(new Event('close'));
-  },
-});
+// The dialog S3 needs the modal API of <dialog>, which jsdom lacks.
+stubDialog();
 
 afterEach(() => {
   clearAll();

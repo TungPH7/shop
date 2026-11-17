@@ -6,22 +6,13 @@ import { ProductDeleteDialog } from '@/features/product/components/product-delet
 import { clearAll, getSnapshot } from '@/lib/notifications/notification-store';
 import { server } from '@/testing/msw/server';
 import { fireEvent, renderWithProviders, screen, waitFor } from '@/testing/render';
+import { stubDialog } from '@/testing/stub-dialog';
 import { testI18n } from '@/testing/test-i18n';
 
 // S3 of docs/specs/SHOP-7/design.md against a fake of DELETE /api/admin/products/{id}.
-// jsdom has <dialog> but not its modal API: the stub below only toggles `open` and
-// fires `close`, as in the test of <Dialog>. The real modal, the inert page behind and
-// the focus back on S1.8 are checked in a browser (E2E).
-Object.assign(HTMLDialogElement.prototype, {
-  showModal(this: HTMLDialogElement) {
-    this.setAttribute('open', '');
-  },
-  close(this: HTMLDialogElement) {
-    if (!this.hasAttribute('open')) return;
-    this.removeAttribute('open');
-    this.dispatchEvent(new Event('close'));
-  },
-});
+// jsdom has no modal API of <dialog>: see stubDialog. The real modal, the inert page
+// behind and the focus back on S1.8 are checked in a browser (E2E).
+stubDialog();
 
 const jeans = { id: '019a8f2e-5b7c-7d10-9e3f-000000000002', name: 'Quần jean nam' };
 

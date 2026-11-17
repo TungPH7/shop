@@ -4,23 +4,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Dialog } from '@/components/ui/dialog';
 import { act, fireEvent, renderWithProviders, screen } from '@/testing/render';
+import { stubDialog } from '@/testing/stub-dialog';
 import { testI18n } from '@/testing/test-i18n';
 
-// jsdom has <dialog> but not its modal API, which <Dialog> calls. The stub only toggles
-// `open` and fires `close` like a browser. Esc, the inert page behind and the focus
-// restore are checked in a real browser (E2E, devtools). It lives here, not in
-// testing/setup.ts: Vitest leaves setup files out of coverage, and the CI needs every
-// changed source file in a coverage report. jsdom is per test file, so it stays here.
-Object.assign(HTMLDialogElement.prototype, {
-  showModal(this: HTMLDialogElement) {
-    this.setAttribute('open', '');
-  },
-  close(this: HTMLDialogElement) {
-    if (!this.hasAttribute('open')) return;
-    this.removeAttribute('open');
-    this.dispatchEvent(new Event('close'));
-  },
-});
+stubDialog();
 
 interface HarnessProps {
   onCancel?: () => void;
