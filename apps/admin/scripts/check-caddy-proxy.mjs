@@ -89,14 +89,30 @@ function cleanup() {
   }
 }
 
+// Whether the admin Caddy still runs. Caddy exits at once when it cannot load the Caddyfile; a container that cannot
+// be inspected any more does not run either.
+function adminRunning() {
+  try {
+    return docker(['inspect', '--format', '{{.State.Running}}', admin]) === 'true';
+  } catch {
+    return false;
+  }
+}
+
 // GET /api/... through the admin Caddy from a container on the network, as Caddy of the VPS calls it. The admin Caddy
-// may not listen yet at the first call: try again every half second, up to 20 times.
+// may not listen yet at the first call: try again half a second after a failed call, up to 20 times. Each call starts a
+// client container, which takes seconds, so the 20 calls can take minutes: before each one the script stops at once
+// when the admin Caddy no longer runs, and the log of Caddy then shows why (review of PR #56, SHOP-62).
 async function through(headers) {
   const args = ['run', '--rm', '--network', net, image, 'wget', '-qO-'];
   for (const [name, value] of Object.entries(headers)) args.push('--header', `${name}: ${value}`);
   args.push(`http://${admin}:5173/api/admin/products`);
   let last;
   for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (!adminRunning()) {
+      const after = last ? `, after ${attempt} call(s): ${last.stderr || last.message}` : '';
+      throw new Error(`the admin Caddy is not running${after}`);
+    }
     try {
       return docker(args);
     } catch (error) {
