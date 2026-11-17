@@ -73,8 +73,8 @@ export type ProductFormProps =
 /** The banner of S2.5 over the fields, if any. */
 type Banner = 'saveFailed' | 'conflict' | null;
 
-/** What add mode and edit mode do differently; `Input` is what a save sends. */
-interface FormMode<Input extends CreateProductInput> {
+/** What add mode and edit mode both have; `Input` is what a save sends. */
+interface FormModeBase<Input extends CreateProductInput> {
   /** Checks the fields on save and turns them into `Input`. */
   schema: z.ZodType<Input, ProductFormValues>;
   defaultValues: ProductFormValues;
@@ -88,12 +88,34 @@ interface FormMode<Input extends CreateProductInput> {
   savedSlug: string | null;
   isPending: boolean;
   submit: (input: Input) => Promise<unknown>;
-  errorOf: (error: unknown, input: Input) => CreateProductError | UpdateProductError;
-  /** The product is gone (S2.3): only an edit finds that out. */
-  onMissing?: () => void;
-  /** Reload of the conflict banner (AC13): only an edit conflicts. */
-  onReload?: () => void;
 }
+
+/**
+ * What add mode and edit mode do differently, told apart by `kind`: only an edit can
+ * conflict or find the product gone, so only edit mode has, and must have, Reload and
+ * the not-found state. Add mode has no conflict banner to show.
+ */
+type FormMode<Input extends CreateProductInput> = FormModeBase<Input> &
+  (
+    | {
+        kind: 'add';
+        errorOf: (error: unknown, input: Input) => CreateProductError;
+      }
+    | {
+        kind: 'edit';
+        errorOf: (error: unknown, input: Input) => UpdateProductError;
+        /** The product is gone: the not-found state of S2.3. */
+        onMissing: () => void;
+        /** Reload of the conflict banner (AC13). */
+        onReload: () => void;
+      }
+  );
+
+/** A failure both modes show the same way: under a field, or the general banner. */
+type FieldFailure = Exclude<
+  CreateProductError | UpdateProductError,
+  { kind: 'conflict' | 'notFound' }
+>;
 
 function AlertIcon() {
   return (
@@ -114,6 +136,7 @@ function AddProductForm() {
   return (
     <ProductFormView<CreateProductInput>
       mode={{
+        kind: 'add',
         schema: productFormSchema,
         defaultValues: productFormDefaults,
         titleKey: 'form.addTitle',
@@ -142,6 +165,7 @@ function EditProductForm({
   return (
     <ProductFormView<ProductEditInput>
       mode={{
+        kind: 'edit',
         schema,
         // The slug counts as typed from the start, so it never follows the name.
         defaultValues: productFormValuesOf(product),
@@ -197,7 +221,7 @@ function ProductFormView<Input extends CreateProductInput>({ mode }: { mode: For
     return message === undefined ? undefined : t(`form.errors.${message as FormErrorKey}`);
   }
 
-  function showFailure(failure: CreateProductError | UpdateProductError) {
+  function showFailure(failure: FieldFailure) {
     switch (failure.kind) {
       case 'fields':
         failure.fields.forEach((field, index) => {
@@ -207,12 +231,6 @@ function ProductFormView<Input extends CreateProductInput>({ mode }: { mode: For
       case 'slugTaken':
       case 'slugNotGenerated':
         setError('slug', { type: 'server', message: failure.kind }, { shouldFocus: true });
-        return;
-      case 'conflict':
-        setBanner('conflict');
-        return;
-      case 'notFound':
-        mode.onMissing?.();
         return;
       case 'general':
         setBanner('saveFailed');
@@ -224,7 +242,14 @@ function ProductFormView<Input extends CreateProductInput>({ mode }: { mode: For
     try {
       await mode.submit(input);
     } catch (error) {
-      showFailure(mode.errorOf(error, input));
+      if (mode.kind === 'add') {
+        showFailure(mode.errorOf(error, input));
+        return;
+      }
+      const failure = mode.errorOf(error, input);
+      if (failure.kind === 'conflict') setBanner('conflict');
+      else if (failure.kind === 'notFound') mode.onMissing();
+      else showFailure(failure);
       return;
     }
     notify.success(t(mode.savedKey));
@@ -272,7 +297,7 @@ function ProductFormView<Input extends CreateProductInput>({ mode }: { mode: For
           <div ref={bannerRef} className="banner banner--error" role="alert">
             <AlertIcon />
             <p>{t(banner === 'conflict' ? 'form.conflict' : 'form.saveFailed')}</p>
-            {banner === 'conflict' ? (
+            {banner === 'conflict' && mode.kind === 'edit' ? (
               <button
                 type="button"
                 className="btn btn--secondary btn--sm banner__action"
