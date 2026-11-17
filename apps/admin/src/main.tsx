@@ -16,6 +16,7 @@ import '@/styles/tokens.css';
 import '@/styles/global.css';
 import '@/styles/components.css';
 import '@/styles/list-page.css';
+import '@/styles/form-page.css';
 
 // Wire cross-cutting seams once, before anything renders or fetches (Vercel
 // `advanced-init-once`). Observability first so errors during the rest of

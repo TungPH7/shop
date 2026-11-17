@@ -1,6 +1,6 @@
 /* Base styles of admin: the page, type and focus, from the tokens of tokens.css.
    Order of the imports in main.tsx: fonts, tokens.css, global.css, components.css,
-   list-page.css. */
+   list-page.css, form-page.css. */
 
 *,
 *::before,
