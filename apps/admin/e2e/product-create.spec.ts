@@ -86,9 +86,9 @@ test.describe('US2 add a product', () => {
     await expect(row.getByText('Active', { exact: true })).toBeVisible();
     await expect(row.getByText('In stock', { exact: true })).toBeVisible();
     await expect(row.getByText(`dam-maxi-do-e2e-${runId}`, { exact: true })).toBeVisible();
-    const names = await rowsOf(page).locator('.table__name').allTextContents();
-    expect(names.indexOf(name)).toBeLessThan(names.indexOf(created[0]!.name));
-    // First of the list: among the products of this run, the newest is first.
+    // First of the list: among the products of this run, the newest is first. Not on the
+    // whole first page, where newer products of the tests beside this one may push the
+    // product made before off it (SHOP-71).
     await page.getByRole('searchbox', { name: 'Search by name' }).fill(`e2e ${runId}`);
     await expect(rowsOf(page).locator('.table__name')).toHaveText([name, created[0]!.name]);
   });
