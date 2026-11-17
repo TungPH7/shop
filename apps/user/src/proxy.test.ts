@@ -50,6 +50,17 @@ describe('a page load of the product detail page', () => {
     expect(response).toBe(forwarded);
   });
 
+  test('checks a page load of a browser (Sec-Fetch-Dest: document)', async () => {
+    const calls = headAnswers('khong-co', 404);
+
+    const response = await proxy(
+      pageLoad('/vi/products/khong-co', { 'Sec-Fetch-Dest': 'document' }),
+    );
+
+    expect(calls.count).toBe(1);
+    expect(getRewrittenUrl(response)).toBe(`${SITE}/vi/product-not-found`);
+  });
+
   test.each(['vi', 'en'])(
     'rewrites to /%s/product-not-found when the api answers 404',
     async (locale) => {
@@ -59,6 +70,8 @@ describe('a page load of the product detail page', () => {
 
       expect(isRewrite(response)).toBe(true);
       expect(getRewrittenUrl(response)).toBe(`${SITE}/${locale}/product-not-found`);
+      // The locale header next-intl sets on every request it forwards: the not-found tree reads its locale there.
+      expect(response.headers.get('x-middleware-request-x-next-intl-locale')).toBe(locale);
       expect(intl).not.toHaveBeenCalled();
     },
   );
@@ -125,15 +138,20 @@ describe('a page load of the product detail page', () => {
 });
 
 describe('requests the Proxy does not check', () => {
-  test('a client navigation (header RSC) goes to next-intl without asking the api', async () => {
-    const calls = headAnswers('khong-co', 404);
-    const request = pageLoad('/vi/products/khong-co', { RSC: '1' });
+  // Next strips the Flight headers (RSC, Next-Router-Prefetch) from the request the Proxy sees, so a client navigation
+  // or a prefetch is told apart by the Fetch Metadata of the browser: the router fetches, a page load is a document.
+  test.each(['empty', 'script'])(
+    'a fetch of the browser (Sec-Fetch-Dest: %s), as a client navigation, goes to next-intl without asking the api',
+    async (dest) => {
+      const calls = headAnswers('khong-co', 404);
+      const request = pageLoad('/vi/products/khong-co', { 'Sec-Fetch-Dest': dest });
 
-    const response = await proxy(request);
+      const response = await proxy(request);
 
-    expect(calls.count).toBe(0);
-    expect(response).toBe(forwarded);
-  });
+      expect(calls.count).toBe(0);
+      expect(response).toBe(forwarded);
+    },
+  );
 
   test.each(['/vi/products', '/en', '/', '/vi/products/a/b', '/fr/products/ao-thun', '/vi/about'])(
     '%s goes to next-intl without asking the api',

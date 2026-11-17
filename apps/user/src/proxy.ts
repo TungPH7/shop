@@ -25,6 +25,9 @@ const intl = createMiddleware(routing);
 /** Time limit of the check of a slug (NFR26 of SHOP-7), as every request of the DAL. */
 const CHECK_TIMEOUT_MS = 5000;
 
+/** The request header next-intl sets on every request it forwards (`HEADER_LOCALE_NAME`, not exported). */
+const LOCALE_HEADER = 'X-NEXT-INTL-LOCALE';
+
 /** `/{locale}/products/{slug}`, the product detail page S5; one segment after products, no more. */
 const PRODUCT_PATH = /^\/([^/]+)\/products\/([^/]+)\/?$/;
 
@@ -39,9 +42,11 @@ const PRODUCT_PATH = /^\/([^/]+)\/products\/([^/]+)\/?$/;
  * - any other answer, no answer or past 5 s: 503 with a short page in the language of the path, never a 404 a search
  *   engine would drop (NFR26).
  *
- * A client navigation or a prefetch has the header `RSC`: its status means nothing to a browser, so it goes straight to
- * the page, whose `notFound()` shows the same S6. That also keeps the 24 prefetches of S4 from becoming 24 requests to
- * the api.
+ * A client navigation or a prefetch goes straight to the page, whose `notFound()` shows the same S6: its status means
+ * nothing to a browser, and the 24 prefetches of S4 do not become 24 requests to the api. Next strips the header `RSC`
+ * from the request the Proxy sees (docs of Proxy, "RSC requests and rewrites"), so such a request is told apart by the
+ * Fetch Metadata of the browser: the router fetches (`Sec-Fetch-Dest: empty`), a page load is a `document`. A request
+ * with no Fetch Metadata, as from a crawler or curl, is checked like a page load.
  */
 export default async function proxy(request: NextRequest): Promise<NextResponse> {
   const product = productOf(request);
@@ -51,14 +56,20 @@ export default async function proxy(request: NextRequest): Promise<NextResponse>
   const status = isStoreSlug(slug) ? await checkProduct(slug) : 404;
   if (status === 200) return intl(request);
   if (status === 404) {
-    return NextResponse.rewrite(new URL(`/${locale}/product-not-found`, request.url));
+    // As next-intl forwards every request: the not-found tree reads the locale from this header, not from the layout.
+    const headers = new Headers(request.headers);
+    headers.set(LOCALE_HEADER, locale);
+    return NextResponse.rewrite(new URL(`/${locale}/product-not-found`, request.url), {
+      request: { headers },
+    });
   }
   return unavailable(locale);
 }
 
 /** The locale and the slug of a page load of the product detail page, or null for any other request. */
 function productOf(request: NextRequest): { locale: Locale; slug: string } | null {
-  if (request.headers.has('rsc')) return null;
+  const dest = request.headers.get('sec-fetch-dest');
+  if (dest !== null && dest !== 'document') return null;
   const [, locale = '', segment = ''] = PRODUCT_PATH.exec(request.nextUrl.pathname) ?? [];
   if (!isLocale(locale)) return null;
   return { locale, slug: decodeSegment(segment) };
