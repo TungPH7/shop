@@ -3,7 +3,9 @@
   "actions": {
     "add": "Thêm sản phẩm",
     "edit": "Sửa",
-    "editLabel": "Sửa {{name}}"
+    "editLabel": "Sửa {{name}}",
+    "delete": "Xóa",
+    "deleteLabel": "Xóa {{name}}"
   },
   "filters": {
     "statusLabel": "Lọc theo trạng thái",
@@ -37,6 +39,16 @@
     "empty": "Chưa có sản phẩm nào.",
     "error": "Không tải được danh sách sản phẩm.",
     "retry": "Thử lại"
+  },
+  "delete": {
+    "title": "Xóa “{{name}}”?",
+    "cannotUndo": "Việc xóa không hoàn tác được.",
+    "hideHint": "Nếu chỉ muốn tạm ngừng bán, hãy chọn Ẩn.",
+    "cancel": "Hủy",
+    "confirm": "Xóa",
+    "deleting": "Đang xóa…",
+    "failed": "Không xóa được. Vui lòng thử lại.",
+    "done": "Đã xóa sản phẩm"
   },
   "form": {
     "back": "Sản phẩm",
