@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -169,13 +170,41 @@ class ProductRepositoryDataJpaTest extends AbstractContainerBaseTest {
   }
 
   @Test
-  void findBySlug_matchesCaseInsensitively_dueToCitext() {
+  void findBySlugIgnoringCase_matchesCaseInsensitively_dueToCitext() {
     repository.save(product("Quần jean nam", "quan-jean-nam", 450_000L));
     em.flush();
 
-    assertThat(repository.findBySlug("quan-jean-nam")).isPresent();
-    assertThat(repository.findBySlug("QUAN-JEAN-NAM")).isPresent();
-    assertThat(repository.findBySlug("not-exist")).isEmpty();
+    assertThat(repository.findBySlugIgnoringCase("quan-jean-nam")).isPresent();
+    assertThat(repository.findBySlugIgnoringCase("QUAN-JEAN-NAM")).isPresent();
+    assertThat(repository.findBySlugIgnoringCase("not-exist")).isEmpty();
+  }
+
+  @Test
+  void findBySlugIgnoringCase_canBeServedByTheIndexOfTheUniqueSlug() {
+    // Seq scans off: a plan that still reads the whole table means the condition cannot use the
+    // index, as a text comparison on the citext slug could not.
+    jdbc.sql("SET LOCAL enable_seqscan = off").update();
+    String sql = ProductRepository.BY_SLUG_SQL.replace(":slug", "'Quan-Jean-NAM'");
+
+    String plan = String.join("\n", jdbc.sql("EXPLAIN " + sql).query(String.class).list());
+
+    assertThat(plan)
+        .contains("products_slug_unique")
+        .contains("Index Cond")
+        .doesNotContain("Seq Scan");
+  }
+
+  @Test
+  void existsBySlug_canBeServedByTheIndexOfTheUniqueSlug() {
+    jdbc.sql("SET LOCAL enable_seqscan = off").update();
+    String sql = ProductRepository.EXISTS_BY_SLUG_SQL.replace(":slug", "'Quan-Jean-NAM'");
+
+    String plan = String.join("\n", jdbc.sql("EXPLAIN " + sql).query(String.class).list());
+
+    assertThat(plan)
+        .contains("products_slug_unique")
+        .contains("Index Cond")
+        .doesNotContain("Seq Scan");
   }
 
   @Test
@@ -249,8 +278,14 @@ class ProductRepositoryDataJpaTest extends AbstractContainerBaseTest {
         .doesNotContain("Seq Scan");
   }
 
+  /**
+   * A measure, not a pin of the plan: with seq scans on, the planner chooses, and a hashed read of
+   * the whole table would be fast too. The plan and its time go to the log; the test asserts only
+   * the result, and the median of NFR2 as a wide bound. {@link
+   * #findSlugsAmong_canBeServedByTheIndexOfTheUniqueSlug} pins that the index can serve it.
+   */
   @Test
-  void findSlugsAmong_ofTheCandidatesOfAName_with10000Products_readsThemInTheIndex() {
+  void findSlugsAmong_ofTheCandidatesOfAName_with10000Products_findsTheTakenOnesWithin200Ms() {
     insertProducts(10_000);
     // The 1,000 slugs an add without slug tries (AdminProductService.MAX_SLUG_NUMBER).
     String candidates =
@@ -263,13 +298,21 @@ class ProductRepositoryDataJpaTest extends AbstractContainerBaseTest {
         String.join(
             "\n", jdbc.sql("EXPLAIN (ANALYZE, COSTS OFF) " + sql).query(String.class).list());
     LOG.info("findSlugsAmong, 1,000 candidates, 10,000 products, seq scans on:\n{}", plan);
+    String[] slugs =
+        Stream.concat(
+                Stream.of("AO-THUN"), IntStream.rangeClosed(2, 1_000).mapToObj(n -> "ao-thun-" + n))
+            .toArray(String[]::new);
 
-    assertThat(plan)
-        .contains("products_slug_unique")
-        .contains("Index Cond")
-        .doesNotContain("Seq Scan");
-    assertThat(repository.findSlugsAmong(new String[] {"AO-THUN", "ao-thun-2"}))
-        .containsExactly("ao-thun");
+    repository.findSlugsAmong(slugs); // warm-up: JIT and the buffers of the database
+    long[] nanos = new long[5];
+    for (int i = 0; i < nanos.length; i++) {
+      long start = System.nanoTime();
+      assertThat(repository.findSlugsAmong(slugs)).containsExactly("ao-thun");
+      nanos[i] = System.nanoTime() - start;
+    }
+    Arrays.sort(nanos);
+
+    assertThat(nanos[nanos.length / 2] / 1_000_000).as("median in ms").isLessThanOrEqualTo(200);
   }
 
   // ============================================================

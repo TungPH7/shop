@@ -26,7 +26,7 @@ import com.tungph7.learnpostgres.feature.product.domain.Product;
 @Repository
 public interface ProductRepository extends JpaRepository<Product, UUID> {
 
-  /** The SQL of {@link #findBySlug}, with its one parameter {@code :slug}. */
+  /** The SQL of {@link #findBySlugIgnoringCase}, with its one parameter {@code :slug}. */
   String BY_SLUG_SQL =
       "SELECT * FROM app.products WHERE slug OPERATOR(public.=) CAST(:slug AS public.citext)";
 
@@ -40,13 +40,10 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
       "SELECT slug::text FROM app.products"
           + " WHERE slug OPERATOR(public.=) ANY(CAST(:slugs AS public.citext[]))";
 
-  /** The product with this slug, compared case-insensitively ({@code citext}). */
-  @Query(value = BY_SLUG_SQL, nativeQuery = true)
-  Optional<Product> findBySlug(@Param("slug") String slug);
-
   /**
-   * The product with this slug, compared case-insensitively ({@code citext}): the same query as
-   * {@link #findBySlug}, which the store reads through ({@code StoreProductService}).
+   * The product with this slug, compared case-insensitively ({@code citext}), whatever its status:
+   * the store reads its detail through it ({@code StoreProductService}). An equality on the slug,
+   * read in the index of {@code products_slug_unique} (NFR2).
    */
   @Query(value = BY_SLUG_SQL, nativeQuery = true)
   Optional<Product> findBySlugIgnoringCase(@Param("slug") String slug);
