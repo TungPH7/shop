@@ -93,6 +93,16 @@ for (const [what, slugOf] of cases) {
   }
 }
 
+test('AC26 answers 404 with S6 for a product link pasted with the full stop of a sentence', async ({
+  page,
+}) => {
+  // A path with a dot passed by the Proxy, as an asset does, and showed S6 with 200 (review of PR #51, SHOP-58).
+  const response = await page.goto(`/vi/products/${onSale.slug}.`);
+
+  expect(response?.status()).toBe(404);
+  await expectS6(page, 'vi');
+});
+
 test('AC26 the link of S6 opens the products page S4 with no parameter', async ({ page }) => {
   await page.goto(`/vi/products/${neverExisted}`);
 

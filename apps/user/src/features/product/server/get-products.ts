@@ -51,6 +51,14 @@ async function getStoreProductBlock(offset: number) {
  *   error is reported, since the page does not throw it.
  *
  * Only GET (NFR8).
+ *
+ * The blocks are read one after another, on purpose (review of PR #48). Each block decides whether the next is needed,
+ * by its length and its total, so a page never asks for a block past the catalog; one visitor holds at most one request
+ * to the api at a time, whatever page the URL names (NFR3); and the products read before a failed block are exactly
+ * the ones kept. The cost is at a large catalog with an empty cache: about 105 requests, some 21 s, for `page=999999`
+ * at 10,000 products. Blocks stay in the cache for 25 s, so a later visitor pays nothing, and Load more on one page
+ * reads at most one new block. Reading the blocks after the first in parallel, a few at a time, is the change to make if
+ * the catalog grows that large.
  */
 export async function getStoreProducts(query: ProductQuery): Promise<StoreProductList> {
   const wanted = query.page * PAGE_SIZE;
@@ -76,11 +84,13 @@ export async function getStoreProducts(query: ProductQuery): Promise<StoreProduc
     }
     totalItems = Math.max(block.totalItems, items.length);
 
-    if (block.items.length < BLOCK_SIZE) {
-      // No product past a short block: a larger total would offer a Load more that never ends.
+    // The whole catalog is read: past a short block, or past the total of the api, there is no product. The total is
+    // then the products read, each once: a larger one, from a block read before the catalog moved, would offer a Load
+    // more that never ends.
+    if (block.items.length < BLOCK_SIZE || offset + BLOCK_SIZE >= block.totalItems) {
       return { items: items.slice(0, wanted), totalItems: items.length, complete: true };
     }
-    if (items.length >= wanted || offset + BLOCK_SIZE >= block.totalItems) {
+    if (items.length >= wanted) {
       return { items: items.slice(0, wanted), totalItems, complete: true };
     }
   }

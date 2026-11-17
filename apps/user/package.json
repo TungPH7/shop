@@ -20,7 +20,8 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
-    "e2e:report": "playwright show-report"
+    "e2e:report": "playwright show-report",
+    "check:not-found": "node scripts/check-not-found.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "5.4.0",
