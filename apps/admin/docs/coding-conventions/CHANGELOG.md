@@ -15,6 +15,13 @@ _(Chưa có thay đổi chờ phát hành.)_
 
 ## v1
 
+### [1.3.0] — 2026-11-17
+
+SHOP-66 làm theo NFR19 của SPEC SHOP-7: lệnh ghi của `admin` không tạm dừng khi trình duyệt báo offline (finding Low của `reviewer` ở PR #55). `ST-004` thêm một ràng buộc mới, nên đây là MINOR: cùng PR, `createQueryClient()` đặt `networkMode: 'always'` cho mọi lệnh ghi và các hook ghi thôi tự đặt option này, nên luật mới không xung đột với code hiện có.
+
+**Changed**
+- `ST-004`: mọi lệnh ghi lấy `networkMode: 'always'` từ `defaultOptions.mutations` của QueryClient; hook ghi không đặt lại option này. Minh chứng: `src/lib/react-query/query-client.ts`, `createTestQueryClient()` ở `src/testing/render.tsx`, test `query-client.test.ts`, và các test offline ở `product-form.test.tsx`, `product-edit.test.tsx`, `product-delete-dialog.test.tsx`.
+
 ### [1.2.0] — 2026-11-17
 
 SHOP-37 (US4, xóa sản phẩm) làm theo NFR19 của SPEC SHOP-7 và mục 13 của plan: `admin` không bao giờ tự thử lại lệnh ghi. `API-006` hẹp lại, nên đây là MINOR: không còn code nào thử lại `PUT` hay `DELETE` (`src/lib/api/retry.ts` đổi cùng PR), nên luật mới không xung đột với code hiện có. Kèm một sửa ví dụ của `PS-002` (comment trên SHOP-37 từ finding Low của `reviewer` ở PR #34).

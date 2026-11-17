@@ -1,6 +1,6 @@
 # Coding Conventions — v1
 
-> **Version:** 1.2.0 &nbsp;·&nbsp; **Trạng thái:** ✅ Active &nbsp;·&nbsp; **Cập nhật:** 2026-11-17
+> **Version:** 1.3.0 &nbsp;·&nbsp; **Trạng thái:** ✅ Active &nbsp;·&nbsp; **Cập nhật:** 2026-11-17
 > SSOT quy ước code cho **codebase1 UI** — React 19 + TypeScript + Vite (SPA, không phải Next.js).
 > Chính sách version: xem [../README.md](../README.md).
 

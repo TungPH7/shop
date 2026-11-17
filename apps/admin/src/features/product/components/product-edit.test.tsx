@@ -1,3 +1,4 @@
+import { onlineManager } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router';
@@ -15,6 +16,7 @@ import { testI18n } from '@/testing/test-i18n';
 
 afterEach(async () => {
   clearAll();
+  onlineManager.setOnline(true);
   await testI18n.changeLanguage('en');
 });
 
@@ -437,6 +439,28 @@ describe('ProductEdit', () => {
       expect(bodies).toHaveLength(1);
     },
   );
+
+  it('S2.5 says "Couldn\'t save" at once when the browser is offline, and puts nothing once it is back (NFR19)', async () => {
+    fakeGet();
+    const bodies = fakePut(() => HttpResponse.error());
+    const { user, queryClient } = renderEdit();
+    await loaded();
+    await user.clear(field.name());
+    await user.type(field.name(), 'Áo mới');
+    onlineManager.setOnline(false);
+
+    await user.click(save());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save. Please try again.");
+    expect(field.name()).toHaveValue('Áo mới');
+    expect(save()).not.toHaveAttribute('aria-disabled');
+    expect(bodies).toHaveLength(1);
+
+    onlineManager.setOnline(true);
+    await queryClient.resumePausedMutations();
+
+    expect(bodies).toHaveLength(1);
+  });
 
   it('speaks Vietnamese', async () => {
     await testI18n.changeLanguage('vi');

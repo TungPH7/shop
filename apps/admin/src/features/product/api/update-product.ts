@@ -57,10 +57,6 @@ export function useUpdateProduct() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: updateProduct,
-    // Send it even when the browser says it is offline: by default Query would pause
-    // the PUT until the network is back, with the form locked on "Saving…". Sent, it
-    // fails at once into the error of S2.5 (NFR19).
-    networkMode: 'always',
     // The form shows every error itself (S2.3, S2.5, S2.7): no global toast on top.
     meta: { skipGlobalError: true },
     // The list shows the new name, price and labels. The product itself loads anew

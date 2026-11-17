@@ -14,12 +14,13 @@ import { testI18n } from './test-i18n';
 
 // Fresh, isolated QueryClient per test — retry off (no waiting on failures) and
 // no GC so cache stays put across assertions. Mirrors createQueryClient (folder
-// 08) minus env / global handlers.
+// 08) minus env / global handlers; writes keep its networkMode, so a test of an
+// offline browser sees what the app does (NFR19).
 export function createTestQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: Infinity },
-      mutations: { retry: false },
+      mutations: { retry: false, networkMode: 'always' },
     },
   });
 }

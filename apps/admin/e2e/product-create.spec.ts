@@ -254,6 +254,32 @@ test.describe('US2 add a product', () => {
     expect(slugs.sort()).toEqual([taken, `${taken}-2`]);
   });
 
+  test('S2.5 offline, the save fails at once with "Couldn\'t save", keeps the input and is not sent later (NFR19)', async ({
+    page,
+    context,
+    request,
+  }) => {
+    const posts = postsOf(page);
+    const name = e2eName('Áo khoác ngoại tuyến', runId);
+    await page.goto('/products/new');
+    const fields = form(page);
+    await fields.name.fill(name);
+    await fields.price.fill('450000');
+
+    await context.setOffline(true);
+    await fields.save.click();
+
+    await expect(page.getByRole('alert')).toHaveText("Couldn't save. Please try again.");
+    await expect(fields.save).toHaveText('Add product');
+    await expect(fields.name).toHaveValue(name);
+    await expect(page).toHaveURL(/\/products\/new$/);
+    await context.setOffline(false);
+    // Back online, nothing is sent on its own: no product is added.
+    await page.waitForTimeout(1_000);
+    expect(posts.length).toBeLessThanOrEqual(1);
+    expect(await findProducts(request, `e2e ${runId}`)).toEqual([]);
+  });
+
   for (const colorScheme of ['light', 'dark'] as const) {
     test(`S2 has no WCAG A/AA violation in the ${colorScheme} theme, with and without errors`, async ({
       page,
