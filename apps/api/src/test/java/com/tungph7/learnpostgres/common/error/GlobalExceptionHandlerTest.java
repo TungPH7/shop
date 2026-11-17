@@ -221,7 +221,8 @@ class GlobalExceptionHandlerTest {
 
   /**
    * SHOP-53, NFR12: a NOT NULL or CHECK violation comes with {@code Failing row contains (…)}, the
-   * values of the row, such as the name and the description. The log line names the constraint only.
+   * values of the row, such as the name and the description. The log line names the constraint
+   * only.
    */
   @Test
   @ExtendWith(OutputCaptureExtension.class)

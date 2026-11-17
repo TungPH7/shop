@@ -127,7 +127,6 @@ nếu không thì dừng lần deploy; Flyway rollback riêng V6, database ở l
   ```sql
   ALTER EXTENSION pgcrypto SET SCHEMA public;
   ```
-
 - **`pgcrypto` chưa cài**, thông báo ghi `is in schema "(not installed)"`: Hint của V6 lúc đó
   bảo `ALTER EXTENSION … SET SCHEMA`, lệnh này lỗi vì extension không có. Cài nó vào `public`:
 
