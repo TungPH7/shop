@@ -446,6 +446,24 @@ test.describe('AC18 search by name', () => {
     expect(await namesOfThisRun(page)).toEqual(['Áo thun cổ tròn']);
     await expect(searchField(page)).toHaveValue(ofThisRun('ao'));
   });
+
+  // The page asks the api, and caches, the folded words of the keyword (review of PR #62): "(Áo) THUN!" is the search
+  // "ao thun", while the field keeps what the visitor typed.
+  test('AC18 finds only "Áo thun cổ tròn" for "(Áo) THUN!", whatever the signs around the words, and keeps it as typed', async ({
+    page,
+  }) => {
+    const [shirt] = group;
+    const keyword = ofThisRun('(Áo) THUN!');
+
+    await expect(async () => {
+      await page.goto('/vi/products');
+      await search(page, keyword);
+      await expect(cards(page)).toHaveCount(1, { timeout: 2_000 });
+    }).toPass(CACHE_WAIT);
+
+    expect(await cardNames(page)).toEqual([shirt!.name]);
+    await expect(searchField(page)).toHaveValue(keyword);
+  });
 });
 
 test.describe('AC19 most relevant first', () => {
@@ -600,6 +618,25 @@ test.describe('AC22 search, sort and load more in the URL', () => {
     await expect(sortSelect(page)).toHaveValue('newest');
     await expect(sortSelect(page).getByRole('option', { name: 'Liên quan nhất' })).toHaveCount(0);
   });
+
+  // JavaScript's trim() does not strip U+001F or U+0085, which the api does: such a keyword was a search the api
+  // refused with 400 (review of PR #62).
+  for (const [encoded, name] of [
+    ['%1F', 'U+001F'],
+    ['%C2%85', 'U+0085'],
+  ] as const) {
+    test(`AC22 reads ?q=${encoded}, a keyword of the control character ${name} alone, as no search, without an error`, async ({
+      page,
+    }) => {
+      await page.goto(`/vi/products?q=${encoded}&sort=relevance`);
+
+      await expect(cards(page)).toHaveCount(24);
+      // In the page: the route announcer of Next is an alert of its own, outside it.
+      await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
+      await expect(searchField(page)).toHaveValue('');
+      await expect(sortSelect(page)).toHaveValue('newest');
+    });
+  }
 });
 
 test.describe('AC23 no product', () => {
