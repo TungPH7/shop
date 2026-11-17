@@ -11,14 +11,16 @@ import { routing } from '~/i18n/routing';
 
 /**
  * Proxy — **Next 16** đổi tên `middleware.ts` → `proxy.ts` (next-intl hỗ trợ chính thức:
- * "proxy.ts was called middleware.ts up until Next.js 16", nội dung file y hệt).
+ * "proxy.ts was called middleware.ts up until Next.js 16", nội dung file y hệt). Hai việc:
  *
- * Folder 09 THAY redirect i18n viết tay của folder 08 bằng **middleware của next-intl**
- * (`createMiddleware`) — lo: thương lượng locale theo `Accept-Language`, redirect URL
- * thiếu locale (`/` → `/en`), nhớ lựa chọn qua cookie, sinh alternate-links cho SEO.
+ * 1. Định tuyến ngôn ngữ bằng **middleware của next-intl** (`createMiddleware`, folder 09) — lo:
+ *    thương lượng locale theo `Accept-Language`, redirect URL thiếu locale (`/` → `/en`), nhớ lựa
+ *    chọn qua cookie, sinh alternate-links cho SEO.
+ * 2. 404 thật của trang chi tiết sản phẩm (AC26, `proxy` bên dưới): mỗi lần TẢI trang
+ *    `/{locale}/products/{slug}`, gọi `HEAD /api/products/{slug}` tới api (tối đa 5 s) trước khi render.
  *
- * ⚠️ KHÔNG phải security boundary (CVE-2025-29927): chỉ định tuyến i18n; authz THẬT
- * verify ở DAL (folder 11/15). Node runtime; không DB/logic nặng.
+ * ⚠️ KHÔNG phải security boundary (CVE-2025-29927): authz THẬT verify ở DAL (folder 11/15).
+ * Node runtime; không DB; chỉ một lệnh HEAD có thời hạn, và chỉ cho lần tải trang sản phẩm.
  */
 const intl = createMiddleware(routing);
 
@@ -129,7 +131,11 @@ function unavailable(locale: Locale): NextResponse {
 }
 
 export const config = {
-  // Bỏ qua nội bộ Next + mọi path có dấu chấm (asset: .css/.js/.png/...) → proxy chỉ
-  // chạy trên route trang. (Matcher khuyến nghị của next-intl.)
-  matcher: '/((?!api|_next|_vercel|.*\\..*).*)',
+  matcher: [
+    // Every page, as next-intl recommends: not the internals of Next, and no path with a dot, an asset (.css, .png…).
+    '/((?!api|_next|_vercel|.*\\..*).*)',
+    // The product detail page even with a dot, as `/vi/products/ao-thun.` pasted with the full stop of a sentence:
+    // without it, such a path skipped the Proxy and showed S6 with 200 instead of 404 (AC26, review of PR #51).
+    '/(en|vi)/products/:slug',
+  ],
 };
