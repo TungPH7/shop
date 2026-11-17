@@ -1,3 +1,4 @@
+import { onlineManager } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,6 +27,7 @@ const jeans = { id: '019a8f2e-5b7c-7d10-9e3f-000000000002', name: 'Quần jean n
 
 afterEach(() => {
   clearAll();
+  onlineManager.setOnline(true);
 });
 
 /** Records the id of each DELETE, answered by `answer`. */
@@ -164,6 +166,20 @@ describe('ProductDeleteDialog', () => {
     expect(deleted).toHaveLength(1);
     expect(onDeleted).not.toHaveBeenCalled();
     expect(toasts()).toEqual([]);
+  });
+
+  it('shows the error of S3.6 at once when the browser is offline, rather than wait locked for the network', async () => {
+    fakeDelete(() => HttpResponse.error());
+    onlineManager.setOnline(false);
+    const { user, onCancel } = renderDialog();
+
+    await user.click(screen.getByRole('button', { name: 'Delete' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      "Couldn't delete. Please try again.",
+    );
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onCancel).toHaveBeenCalledOnce();
   });
 
   it('shows the error of S3.6 on a 5xx', async () => {

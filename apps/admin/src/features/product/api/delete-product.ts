@@ -16,6 +16,10 @@ export function useDeleteProduct() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: deleteProduct,
+    // Send it even when the browser says it is offline: by default Query would pause
+    // the delete until the network is back, with the dialog locked on "Deleting…" and
+    // no way to cancel. Sent, it fails at once into the error of S3.6.
+    networkMode: 'always',
     // The dialog shows the error itself (S3.6): no global toast on top.
     meta: { skipGlobalError: true },
     // Every page of the list, as the deleted product may shift the next ones.
