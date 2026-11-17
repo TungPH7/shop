@@ -41,10 +41,18 @@ describe('useProductFilters', () => {
     ['a negative page', '?page=-2', { status: 'all', page: 1 }],
     ['a page that is not a whole number', '?page=2.5', { status: 'all', page: 1 }],
     ['a page that is not a number', '?page=two', { status: 'all', page: 1 }],
+    ['a page whose offset would not fit an int of the API', '?page=107374184', { page: 1 }],
+    ['a page past the largest safe number', '?page=99999999999999999999', { page: 1 }],
   ])('uses the default for %s (S1.11)', (_, search, expected) => {
     const { result } = renderFilters(search);
 
     expect(result.current.filters).toMatchObject(expected);
+  });
+
+  it('reads the last page whose offset fits an int of the API', () => {
+    const { result } = renderFilters('?page=107374183');
+
+    expect(result.current.filters.page).toBe(107_374_183);
   });
 
   it('sets the status and goes back to page 1', async () => {

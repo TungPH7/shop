@@ -71,6 +71,24 @@ describe('getProducts', () => {
     expect(page.items).toHaveLength(5);
   });
 
+  it('sends the offset of the last page whose offset fits an int of the API', async () => {
+    const requests = listApi(0);
+
+    await getProducts({ q: '', status: 'all', page: 107_374_183 });
+
+    expect(requests[0]?.get('offset')).toBe('2147483640');
+  });
+
+  it('asks for page 1, as for a wrong page (S1.11), when the offset would not fit an int of the API', async () => {
+    const requests = listApi(3);
+
+    const page = await getProducts({ q: '', status: 'all', page: 107_374_184 });
+
+    expect(requests.map((params) => params.get('offset'))).toEqual(['0']);
+    expect(page.offset).toBe(0);
+    expect(page.items).toHaveLength(3);
+  });
+
   it('sends the keyword without its surrounding spaces', async () => {
     const requests = listApi(1);
 

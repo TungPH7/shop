@@ -16,10 +16,24 @@ export interface CreatedProduct {
 
 const createdBodySchema = z.object({ id: z.string().min(1) });
 
+// The one segment after /admin/products/, of a path or a whole URL, before any query
+// or fragment.
+const LOCATION_ID = /\/admin\/products\/([^/?#]+)\/?(?:[?#].*)?$/;
+
+/**
+ * The id of `Location: /api/admin/products/{id}`, or null when the header has none. A
+ * header the admin cannot read gives no id: it never turns a saved product into a
+ * failed save.
+ */
 function idOfLocation(location: unknown): string | null {
   if (typeof location !== 'string') return null;
-  const id = location.split('/').filter(Boolean).at(-1);
-  return id === undefined ? null : decodeURIComponent(id);
+  const segment = LOCATION_ID.exec(location)?.[1];
+  if (segment === undefined) return null;
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
 }
 
 /**
