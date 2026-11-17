@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router';
 
 import { type UpdateProductInput } from '@/features/product/api/update-product';
@@ -312,21 +312,28 @@ describe('ProductEdit', () => {
   });
 
   it('AC13 brings the conflict banner into view, the focus staying on Save (S2.5)', async () => {
-    // jsdom lays nothing out, and has no scrollIntoView: record which element asks.
+    // jsdom lays nothing out: record which element asks to be scrolled to, and put the
+    // no-op of the test setup back afterwards, for the tests that follow.
     const scrolled: Element[] = [];
-    Element.prototype.scrollIntoView = function (this: Element) {
-      scrolled.push(this);
-    };
-    fakeGet();
-    fakePut(() => problem(409, 'OPTIMISTIC_LOCK_CONFLICT'));
-    const { user } = renderEdit();
-    await loaded();
+    const scrollIntoView = vi
+      .spyOn(Element.prototype, 'scrollIntoView')
+      .mockImplementation(function (this: Element) {
+        scrolled.push(this);
+      });
+    try {
+      fakeGet();
+      fakePut(() => problem(409, 'OPTIMISTIC_LOCK_CONFLICT'));
+      const { user } = renderEdit();
+      await loaded();
 
-    await user.click(save());
+      await user.click(save());
 
-    const banner = await screen.findByRole('alert');
-    expect(scrolled).toEqual([banner]);
-    expect(save()).toHaveFocus();
+      const banner = await screen.findByRole('alert');
+      expect(scrolled).toEqual([banner]);
+      expect(save()).toHaveFocus();
+    } finally {
+      scrollIntoView.mockRestore();
+    }
   });
 
   it('AC13 sends the version of the reload after Reload', async () => {
