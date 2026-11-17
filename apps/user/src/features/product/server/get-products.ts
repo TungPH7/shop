@@ -25,7 +25,10 @@ const storeProductPageSchema = pageSchema(storeProductSummarySchema);
 export type StoreProductList = {
   /** The first `page × 24` products on sale that match the search, in the order of the query, each once. */
   items: StoreProductSummary[];
-  /** How many products on sale match the search, for "Viewed 24 of 30 products" (S4.9). */
+  /**
+   * How many products on sale match the search, for "Viewed 24 of 30 products" (S4.9): the total of the api, or, once
+   * the whole catalog is read, the number of different products read.
+   */
   totalItems: number;
   /** `false`: a block after the first failed, and `items` holds only the whole loads of 24 read before it. */
   complete: boolean;

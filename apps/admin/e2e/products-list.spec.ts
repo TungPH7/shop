@@ -143,6 +143,9 @@ test.describe('US1 admin product list', () => {
     }
 
     await filter.getByRole('button', { name: 'All' }).click();
+    // Under All, among the products of this run: on the whole first page, newer products
+    // of the tests beside this one may push these off it (SHOP-71).
+    await search(page, `e2e ${runId}`);
 
     await expect(rowOf(page, active.name)).toBeVisible();
     await expect(rowOf(page, hidden.name)).toBeVisible();

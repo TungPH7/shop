@@ -6,10 +6,13 @@ import {
   createProduct,
   deleteProduct,
   deleteStaleProducts,
-  runId,
+  newRunId,
   type CreatedProduct,
   type ProductInput,
 } from './support/products';
+
+// The run id of this file only, in the names (so the slugs) of its products: see newRunId.
+const runId = newRunId();
 
 // S4, the products page of the store (SHOP-25: AC16, AC17, AC21; SHOP-28: AC18–AC20, AC22, AC23; NFR3), on the real
 // api: each group of tests reads products it creates through the admin API and deletes when done (NFR23). The tests of
@@ -17,7 +20,7 @@ import {
 //
 // Other files create products at the same time, and the catalog is cached for up to 25 s on the server (NFR7): a test
 // reloads until the page shows what it expects, for up to 60 s, as the plan's Testing Strategy does. A test that counts
-// products, or needs exactly its own in an order, searches `e2e <runId>`: every product of this run, and only those,
+// products, or needs exactly its own in an order, searches `e2e <runId>`: every product of this file, and only those,
 // has those two words in its name (plan of SHOP-7, Architecture Decisions 16). The order of relevance (AC19) depends on
 // the words of the keyword, so its test searches without them and checks the order of its own products among the
 // others.
@@ -59,11 +62,14 @@ const COPY = {
 type Locale = keyof typeof COPY;
 
 let api: APIRequestContext;
+/** The admin of the catalog the pages of the project read, set once in beforeAll. */
+let catalogAdmin: string;
 
 // The admin of the catalog the pages of the project read: the one started here for user-local, whose tests run on the
 // apps started here; that of the environment otherwise (QA of SHOP-28).
 test.beforeAll(async ({}, testInfo) => {
-  api = await adminApi(adminUrlFor(testInfo.project.use.baseURL));
+  catalogAdmin = adminUrlFor(testInfo.project.use.baseURL);
+  api = await adminApi(catalogAdmin);
   await deleteStaleProducts(api);
 });
 
@@ -75,7 +81,7 @@ test.afterAll(async () => {
 function productsOfGroup(inputs: () => ProductInput[]) {
   const created: CreatedProduct[] = [];
   test.beforeAll(async () => {
-    for (const input of inputs()) created.push(await createProduct(api, input));
+    for (const input of inputs()) created.push(await createProduct(api, runId, input));
   });
   test.afterAll(async () => {
     for (const product of created) await deleteProduct(api, product.id);
@@ -679,7 +685,7 @@ test.describe('AC23 no product', () => {
       const { totalItems } = (await response.json()) as { totalItems: number };
       // The test hides and deletes no product it did not create (NFR23), so it needs a catalog with none on sale.
       // The local database, or tests running beside this one, may hold some.
-      const onSale = `${totalItems} product(s) on sale in the catalog of ${adminUrlFor(baseURL)}, which ${baseURL} reads`;
+      const onSale = `${totalItems} product(s) on sale in the catalog of ${catalogAdmin}, which ${baseURL} reads`;
       // The policy job reads the reason on the line of the skip itself.
       test.skip(totalItems > 0, `reason: ${onSale}; AC23 needs none`);
 

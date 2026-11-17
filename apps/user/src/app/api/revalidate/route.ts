@@ -10,11 +10,29 @@ import { NextResponse } from 'next/server';
  *  - Muốn "read-your-own-writes" (thấy MỚI ngay) → `updateTag` trong **Server Action** (folder 12).
  *
  * Đặt ở `app/api/*` (NGOÀI `[locale]`) → proxy matcher loại `/api` nên KHÔNG bị localize.
- * ⚠️ PROD: route công khai như này phải được BẢO VỆ (secret header / auth) — folder 15 (security).
  * ⚠️ Mutation THẬT nên đi qua Server Action (folder 12); đây chỉ minh hoạ `revalidateTag`
  *    chạy được trong Route Handler (đúng docs Next 16).
+ *
+ * The route has no session, and the Proxy skips `/api`, so it guards itself: it answers only a POST whose Origin is
+ * this site, as the browser sends it from the demo page (SHOP-39). A Route Handler that changes state checks its caller
+ * the same way, or with a session.
  */
-export function POST() {
+export function POST(request: Request) {
+  if (!isFromThisSite(request)) {
+    return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+  }
   revalidateTag('caching-demo', 'max');
   return NextResponse.json({ revalidated: true, tag: 'caching-demo' });
+}
+
+/** Whether the Origin of the request names the host it was sent to; the proxy in front keeps the Host header. */
+function isFromThisSite(request: Request): boolean {
+  const origin = request.headers.get('origin');
+  const host = request.headers.get('host');
+  if (origin === null || host === null) return false;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
 }

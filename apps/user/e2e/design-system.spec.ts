@@ -7,10 +7,12 @@ test.describe('design system: font', () => {
     page,
     baseURL,
   }) => {
-    const fonts: { url: string; bytes: number }[] = [];
-    page.on('response', async (response) => {
+    // The listener keeps the promise of each body, so the count below waits for every font, even one whose body is
+    // still on its way when the network goes idle.
+    const pending: Promise<{ url: string; bytes: number }>[] = [];
+    page.on('response', (response) => {
       if (response.request().resourceType() !== 'font') return;
-      fonts.push({ url: response.url(), bytes: (await response.body()).length });
+      pending.push(response.body().then((body) => ({ url: response.url(), bytes: body.length })));
     });
 
     await page.goto('/vi/about');
@@ -34,6 +36,7 @@ test.describe('design system: font', () => {
     }
 
     await page.waitForLoadState('networkidle');
+    const fonts = await Promise.all(pending);
     expect(fonts.length).toBeGreaterThan(0);
     const origin = new URL(baseURL ?? page.url()).origin;
     for (const font of fonts) {

@@ -3,11 +3,16 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 
 import {
   adminApi,
+  adminUrlFor,
   createProduct,
   deleteProduct,
   deleteStaleProducts,
+  newRunId,
   type CreatedProduct,
 } from './support/products';
+
+// The run id of this file only, in the names (so the slugs) of its products: see newRunId.
+const runId = newRunId();
 
 // a11y E2E — quét WCAG bằng axe-core trong TRÌNH DUYỆT THẬT. Bổ trợ (KHÔNG thay) `jsx-a11y` lúc lint:
 // lint bắt lỗi TĨNH trong JSX; axe bắt lỗi ĐỘNG cần DOM/CSS thật (contrast, thứ tự heading, tên khả truy
@@ -64,12 +69,12 @@ test.describe('accessibility (axe, WCAG A/AA)', () => {
     let api: APIRequestContext;
     const created: CreatedProduct[] = [];
 
-    test.beforeAll(async () => {
-      api = await adminApi();
+    test.beforeAll(async ({}, testInfo) => {
+      api = await adminApi(adminUrlFor(testInfo.project.use.baseURL));
       await deleteStaleProducts(api);
-      created.push(await createProduct(api, { name: 'Áo khoác gió', price: 450000 }));
+      created.push(await createProduct(api, runId, { name: 'Áo khoác gió', price: 450000 }));
       created.push(
-        await createProduct(api, {
+        await createProduct(api, runId, {
           name: 'Áo thun cổ tròn',
           price: 1250000,
           compareAtPrice: 1500000,

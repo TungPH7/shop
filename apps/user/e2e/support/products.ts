@@ -16,8 +16,8 @@ const OFFSET = Number(process.env.AO_PORT_OFFSET ?? 0) || 0;
 /** The admin app Playwright starts here, on its port moved by the offset of the run. */
 export const localAdminUrl = `http://localhost:${5173 + OFFSET}`;
 
-/** The admin app: its /api reaches the api. */
-export const adminUrl = process.env.E2E_ADMIN_URL || localAdminUrl;
+/** The admin app of the environment: its /api reaches the api. */
+const adminUrl = process.env.E2E_ADMIN_URL || localAdminUrl;
 
 /**
  * The admin app whose api the page at `baseURL` reads: the one started here for a page started here, such as in the
@@ -29,8 +29,15 @@ export function adminUrlFor(baseURL: string | undefined): string {
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
-/** Six random characters of this run, in the name of each of its products. */
-export const runId = Array.from({ length: 6 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('');
+/**
+ * Six random characters, in the name of each product of a spec file. Each file makes its own, at its top: a module is
+ * loaded once per worker, so a run id of this module would be the same for every file a worker runs, and two files
+ * naming a product alike would make the same slug. S5 of the second one would then show the page of the first, still in
+ * the catalog cache for 10 s (NFR7), as AC27 OutOfStock in vi did after product-detail.spec.ts in one worker.
+ */
+export function newRunId(): string {
+  return Array.from({ length: 6 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('');
+}
 
 /** The label of an E2E product, at the end of its name so a name still starts with its words. */
 const E2E_LABEL = /\bE2E [a-z0-9]{6}$/;
@@ -54,8 +61,11 @@ type AdminProductSummary = { id: string; name: string; createdAt: string };
 
 type AdminProductPage = { items: AdminProductSummary[]; totalItems: number };
 
-/** A request context on an admin app, that of the environment by default. Dispose of it when done. */
-export function adminApi(url: string = adminUrl): Promise<APIRequestContext> {
+/**
+ * A request context on the admin app at `url`. There is no default: a spec passes `adminUrlFor` of the baseURL of its
+ * project, so it never asks the admin of another environment than the page it opens. Dispose of it when done.
+ */
+export function adminApi(url: string): Promise<APIRequestContext> {
   const username = process.env.E2E_HTTP_USER;
   const password = process.env.E2E_HTTP_PASSWORD;
   return request.newContext({
@@ -67,9 +77,10 @@ export function adminApi(url: string = adminUrl): Promise<APIRequestContext> {
   });
 }
 
-/** Creates a product on sale, named `<name> E2E <runId>`; the api makes its slug from that name. */
+/** Creates a product on sale, named `<name> E2E <runId>` with the run id of its file; the api makes its slug from it. */
 export async function createProduct(
   api: APIRequestContext,
+  runId: string,
   input: ProductInput,
 ): Promise<CreatedProduct> {
   const response = await api.post('/api/admin/products', {

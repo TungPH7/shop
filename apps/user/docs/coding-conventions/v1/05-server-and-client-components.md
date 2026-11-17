@@ -59,14 +59,16 @@ Lỡ import từ Client Component → **build fail**, thay vì âm thầm rò se
 
 Đây là app **BFF**. Trình duyệt chỉ được nói chuyện với chính origin của mình.
 
-| Luồng                                                  | Hợp lệ?                                                                                  |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| RSC → DAL (`features/*/server`) → `lib/http` → backend | ✅ mặc định                                                                              |
-| Client → Server Action → DAL → backend                 | ✅ cho mutation                                                                          |
-| Client → Route Handler `/api/*` → DAL → backend        | ✅ khi client cần gọi `fetch` (vd `/api/revalidate`); đọc dữ liệu hiển thị thì xem §10.4 |
-| Client → `fetch('https://backend...')`                 | ❌ cấm                                                                                   |
+| Luồng                                                  | Hợp lệ?                                                                                                              |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| RSC → DAL (`features/*/server`) → `lib/http` → backend | ✅ mặc định                                                                                                          |
+| Client → Server Action → DAL → backend                 | ✅ cho mutation                                                                                                      |
+| Client → Route Handler `/api/*` → DAL → backend        | ✅ khi client cần gọi `fetch` (vd `/api/revalidate`), và route tự kiểm người gọi; đọc dữ liệu hiển thị thì xem §10.4 |
+| Client → `fetch('https://backend...')`                 | ❌ cấm                                                                                                               |
 
 Lợi ích kèm theo: CSP giữ được `connect-src 'self'` (→ §14).
+
+**[MUST]** Route Handler đổi trạng thái (POST, PUT, DELETE) tự kiểm người gọi, vì `proxy.ts` bỏ qua `/api`: kiểm phiên, hoặc kiểm header `Origin` khớp host khi route không có phiên. Minh chứng: `src/app/api/revalidate/route.ts` trả 403 cho một POST không có `Origin` của chính site.
 
 ## 5.6 Truyền dữ liệu qua ranh giới — `[MUST]`
 

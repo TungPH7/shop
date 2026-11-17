@@ -93,18 +93,21 @@ async function loaded() {
 
 /**
  * Fires `event`, then checks that nothing loads again. On focus or on reconnect the
- * QueryClient first awaits resumePausedMutations, then refetches: awaiting the same
- * call after it is the point where a refetch would already be fetching, so no fixed
- * wait is needed (TE-012).
+ * QueryClient first awaits resumePausedMutations, then hands the event to its query
+ * cache (`onFocus` or `onOnline`), which starts any refetch at once: once that call
+ * is seen, a refetch would already be fetching, so no fixed wait and no count of
+ * microtasks is needed (TE-012).
  */
 async function expectNoReloadOn(
   event: () => void,
   queryClient: QueryClient,
   get: { calls: () => number },
+  handler: 'onFocus' | 'onOnline',
 ) {
-  await act(async () => {
-    event();
-    await queryClient.resumePausedMutations();
+  const handled = vi.spyOn(queryClient.getQueryCache(), handler);
+  act(event);
+  await waitFor(() => {
+    expect(handled).toHaveBeenCalledOnce();
   });
 
   expect(queryClient.isFetching()).toBe(0);
@@ -352,6 +355,7 @@ describe('ProductEdit', () => {
       },
       queryClient,
       get,
+      'onFocus',
     );
     expect(field.name()).toHaveValue('Áo thun đang sửa');
   });
@@ -370,6 +374,7 @@ describe('ProductEdit', () => {
       },
       queryClient,
       get,
+      'onOnline',
     );
     expect(field.name()).toHaveValue('Áo thun đang sửa');
   });

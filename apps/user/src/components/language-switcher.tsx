@@ -4,13 +4,7 @@ import { useLocale, useTranslations } from 'next-intl';
 
 import { locales } from '~/config/i18n';
 import { getPathname } from '~/i18n/navigation';
-
-/** The path of the address bar without its locale prefix (localePrefix 'always'): '/en/about' → '/about', '/en' → '/'. */
-function pathWithoutLocale(pathname: string, locale: string): string {
-  const prefix = `/${locale}`;
-  if (pathname === prefix) return '/';
-  return pathname.startsWith(`${prefix}/`) ? pathname.slice(prefix.length) : pathname;
-}
+import { pathWithoutLocale } from '~/i18n/routing';
 
 /**
  * Đổi ngôn ngữ: hai nút VI và EN trong viên tiện ích của thanh điều hướng S4.1 (SHOP-11), class `.nav-btn` của

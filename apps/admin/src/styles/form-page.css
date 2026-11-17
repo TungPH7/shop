@@ -3,7 +3,7 @@
    states of S2.3 in edit mode and its skeleton. Built only from the tokens of
    tokens.css, on the shared classes of components.css (.card, .skeleton, .btn), so
    main.tsx loads it after components.css. Each class is listed in
-   docs/design-system/admin.md.
+   docs/design-system/admin.md. */
 
 /* --- Form page, S2 -------------------------------------------------------------- */
 

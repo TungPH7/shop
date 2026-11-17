@@ -1,6 +1,6 @@
 /**
  * The main navigation of user, S4.1 of docs/specs/SHOP-7/design.md: the three pages every visitor can reach. `key` is
- * the message of the `Nav` namespace; `href` has no locale, the Link of next-intl adds it.
+ * the message of the `Nav` namespace; `href` has no locale, StaticLink adds it through getPathname (SHOP-41).
  */
 export const NAV_ITEMS = [
   { key: 'home', href: '/' },

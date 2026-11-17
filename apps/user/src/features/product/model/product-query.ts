@@ -43,8 +43,8 @@ const pageSchema = z
  *
  * One difference with `ProductSearchTerms.of` of the api, on purpose: a run of control characters that are not spaces
  * there, such as U+0001, is one space here before the cut at 100, where the api keeps each one and counts it. So a
- * keyword holding them keeps a few more of its characters here than the api would keep of it. The page never sends this keyword: it asks the api
- * its folded words (`foldKeyword`), so this cut is the one that decides the search.
+ * keyword holding them keeps a few more of its characters here than the api would keep of it. The page never sends
+ * this keyword: it asks the api its folded words (`foldKeyword`), so this cut is the one that decides the search.
  */
 const SPACES = /[\p{Cc}\s]+/gu;
 
