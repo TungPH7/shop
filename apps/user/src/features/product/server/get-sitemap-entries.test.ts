@@ -78,13 +78,14 @@ describe('getSitemapEntries', () => {
   });
 
   test('stops at a block shorter than asked, even when the total says more', async () => {
-    // A product deleted between two reads: the total of the first block is one too many.
-    const asked = serve(catalog(1500), 1501);
+    // Products hidden since the total was counted: the total says a second block, the first block says there is none.
+    // Only the length of the block stops the read here, not the total.
+    const asked = serve(catalog(500), 1501);
 
     const entries = await getSitemapEntries();
 
-    expect(asked).toHaveLength(2);
-    expect(entries).toHaveLength(1500);
+    expect(asked).toEqual([{ offset: 0, limit: 1000 }]);
+    expect(entries).toEqual(catalog(500));
   });
 
   test('is empty when no product is on sale', async () => {
