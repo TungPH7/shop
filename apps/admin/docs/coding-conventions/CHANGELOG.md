@@ -15,6 +15,14 @@ _(Chưa có thay đổi chờ phát hành.)_
 
 ## v1
 
+### [1.3.1] — 2026-11-17
+
+SHOP-67 sửa các finding Medium và Low của `reviewer` ở PR #59 (SHOP-34) và hai Low ở PR #63 (SHOP-66). Bản này chỉ sửa luật cho khớp code đang có, không thêm ràng buộc nào với code, nên là PATCH.
+
+**Fixed**
+- Bảng file của mục 15.3 ở `15-ui-and-accessibility.md`: thêm `src/styles/form-page.css`, các class của trang form sản phẩm (S2) tách khỏi `components.css`. Minh chứng: `src/main.tsx` nạp nó sau `list-page.css`.
+- `ST-004`, `TE-010` và mục 12 của `docs/conventions.md`: `retry: false` và `networkMode: 'always'` của lệnh ghi là hằng `MUTATION_DEFAULTS` của `src/lib/react-query/query-client.ts`, mà `createQueryClient()` và `createTestQueryClient()` cùng dùng. Test so sánh hai factory ở `query-client.test.ts` bỏ đi vì không còn gì để so.
+
 ### [1.3.0] — 2026-11-17
 
 SHOP-66 làm theo NFR19 của SPEC SHOP-7: lệnh ghi của `admin` không tạm dừng khi trình duyệt báo offline (finding Low của `reviewer` ở PR #55). `ST-004` thêm một ràng buộc mới, nên đây là MINOR: cùng PR, `createQueryClient()` đặt `networkMode: 'always'` cho mọi lệnh ghi và các hook ghi thôi tự đặt option này, nên luật mới không xung đột với code hiện có.

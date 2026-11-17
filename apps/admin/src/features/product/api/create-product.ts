@@ -84,25 +84,28 @@ const validationProblemSchema = z.object({
   errors: z.array(z.object({ field: z.string() })),
 });
 
+/**
+ * The fields of the form a 400 of the api names, in their order on the form, so the
+ * first is the one to focus (S2.6); none for any other error. Shared by an add and an
+ * edit, which each read their own 409.
+ */
+export function fieldErrorsOf(error: unknown): ProductFormField[] {
+  if (!isApiError(error) || error.kind !== 'http' || error.status !== 400) return [];
+  const problem = validationProblemSchema.safeParse(error.details);
+  const named = new Set(problem.success ? problem.data.errors.map((item) => item.field) : []);
+  return PRODUCT_FORM_FIELDS.filter((field) => named.has(field));
+}
+
 /** Branches on the status and the code of the error, never on its message. */
 export function createProductErrorOf(
   error: unknown,
   input: Pick<CreateProductInput, 'slug'>,
 ): CreateProductError {
-  if (!isApiError(error) || error.kind !== 'http') return { kind: 'general' };
-
-  if (error.status === 409 && error.code === 'PRODUCT_SLUG_DUPLICATED') {
+  if (isApiError(error) && error.status === 409 && error.code === 'PRODUCT_SLUG_DUPLICATED') {
     return input.slug === null ? { kind: 'slugNotGenerated' } : { kind: 'slugTaken' };
   }
-
-  if (error.status === 400) {
-    const problem = validationProblemSchema.safeParse(error.details);
-    const named = new Set(problem.success ? problem.data.errors.map((item) => item.field) : []);
-    const fields = PRODUCT_FORM_FIELDS.filter((field) => named.has(field));
-    if (fields.length > 0) return { kind: 'fields', fields };
-  }
-
-  return { kind: 'general' };
+  const fields = fieldErrorsOf(error);
+  return fields.length > 0 ? { kind: 'fields', fields } : { kind: 'general' };
 }
 
 export function useCreateProduct() {

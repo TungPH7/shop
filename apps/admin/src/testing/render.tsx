@@ -7,6 +7,7 @@ import { NuqsTestingAdapter } from 'nuqs/adapters/testing';
 import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter, RouterProvider } from 'react-router';
 
+import { MUTATION_DEFAULTS } from '@/lib/react-query/query-client';
 import { type AppStore, makeStore, type RootState } from '@/stores/store';
 import { StoreProvider } from '@/stores/store-provider';
 
@@ -14,13 +15,13 @@ import { testI18n } from './test-i18n';
 
 // Fresh, isolated QueryClient per test — retry off (no waiting on failures) and
 // no GC so cache stays put across assertions. Mirrors createQueryClient (folder
-// 08) minus env / global handlers; writes keep its networkMode, so a test of an
-// offline browser sees what the app does (NFR19).
+// 08) minus env / global handlers; writes take the same MUTATION_DEFAULTS, so a
+// test of an offline browser sees what the app does (NFR19).
 export function createTestQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: Infinity },
-      mutations: { retry: false, networkMode: 'always' },
+      mutations: { ...MUTATION_DEFAULTS },
     },
   });
 }

@@ -1,4 +1,4 @@
-import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
+import { type DefaultOptions, MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
 
 import { handleMutationError, handleQueryError } from './global-error-handlers';
 
@@ -6,6 +6,23 @@ import { handleMutationError, handleQueryError } from './global-error-handlers';
 // re-mounting a screen within the window serves cache instead of refetching.
 const STALE_TIME_MS = 60_000; // 1 minute
 const GC_TIME_MS = 5 * 60_000; // 5 minutes before unused cache is collected
+
+/**
+ * What every write does, in the app and in the QueryClient of the tests
+ * (createTestQueryClient), so a test of an offline browser sees what the app does.
+ */
+export const MUTATION_DEFAULTS = {
+  // Never retried: a write that succeeded and lost its answer would be made twice.
+  retry: false,
+  // Every write is sent even when the browser says it is offline (NFR19 of
+  // docs/specs/SHOP-7/spec.md). With the default 'online', Query would pause it:
+  // the form or dialog stays locked on "Saving…" instead of showing its error,
+  // and the write goes out by itself once the network is back, an automatic
+  // retry NFR19 forbids. Sent, it fails at once into the error of the screen.
+  // Write hooks never set networkMode themselves (ST-004). Reads keep the
+  // default: a paused GET is harmless and refetches on reconnect.
+  networkMode: 'always',
+} as const satisfies DefaultOptions['mutations'];
 
 export interface QueryClientOptions {
   /** Refetch on window focus — noisy while developing, useful in production. */
@@ -33,17 +50,7 @@ export function createQueryClient(options: QueryClientOptions = {}): QueryClient
         refetchOnWindowFocus: options.refetchOnWindowFocus ?? false,
         refetchOnReconnect: true,
       },
-      mutations: {
-        retry: false,
-        // Every write is sent even when the browser says it is offline (NFR19 of
-        // docs/specs/SHOP-7/spec.md). With the default 'online', Query would pause it:
-        // the form or dialog stays locked on "Saving…" instead of showing its error,
-        // and the write goes out by itself once the network is back, an automatic
-        // retry NFR19 forbids. Sent, it fails at once into the error of the screen.
-        // Write hooks never set networkMode themselves (ST-004). Reads keep the
-        // default: a paused GET is harmless and refetches on reconnect.
-        networkMode: 'always',
-      },
+      mutations: { ...MUTATION_DEFAULTS },
     },
   });
 }

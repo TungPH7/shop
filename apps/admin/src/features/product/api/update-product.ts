@@ -1,12 +1,9 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import {
-  createProductErrorOf,
-  type CreateProductError,
-} from '@/features/product/api/create-product';
+import { type CreateProductError, fieldErrorsOf } from '@/features/product/api/create-product';
 import { productKeys } from '@/features/product/api/query-keys';
 import { type AdminProduct, adminProductSchema } from '@/features/product/model/product';
-import { type CreateProductInput } from '@/features/product/model/product-form';
+import { type ProductEditInput } from '@/features/product/model/product-form';
 import { api } from '@/lib/api/api';
 import { isApiError } from '@/lib/api/api-error';
 
@@ -15,8 +12,7 @@ import { isApiError } from '@/lib/api/api-error';
 // of one that succeeded and lost its answer would get a false conflict.
 
 /** UpdateProductInput of the API Contract: every field, the slug too, and the version. */
-export interface UpdateProductInput extends CreateProductInput {
-  slug: string;
+export interface UpdateProductInput extends ProductEditInput {
   /** The version the form loaded: another one in the database is a conflict (AC13). */
   version: number;
 }
@@ -46,11 +42,14 @@ export function updateProductErrorOf(error: unknown): UpdateProductError {
     if (error.status === 409 && error.code === 'OPTIMISTIC_LOCK_CONFLICT') {
       return { kind: 'conflict' };
     }
+    // An edit always sends a slug, so a taken one is always the one typed.
+    if (error.status === 409 && error.code === 'PRODUCT_SLUG_DUPLICATED') {
+      return { kind: 'slugTaken' };
+    }
     if (error.status === 404) return { kind: 'notFound' };
   }
-  // An edit always sends a slug, so a taken one is never one the api generated.
-  const failure = createProductErrorOf(error, { slug: '' });
-  return failure.kind === 'slugNotGenerated' ? { kind: 'slugTaken' } : failure;
+  const fields = fieldErrorsOf(error);
+  return fields.length > 0 ? { kind: 'fields', fields } : { kind: 'general' };
 }
 
 export function useUpdateProduct() {

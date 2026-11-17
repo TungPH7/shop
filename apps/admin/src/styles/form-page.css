@@ -1,0 +1,100 @@
+/* The form page of a product, S2 of docs/specs/SHOP-7/design.md, in add mode (US2)
+   and edit mode (US3): the column and the back link, the card of the form, then the
+   states of S2.3 in edit mode and its skeleton. Built only from the tokens of
+   tokens.css, on the shared classes of components.css (.card, .skeleton, .btn), so
+   main.tsx loads it after components.css. Each class is listed in
+   docs/design-system/admin.md.
+
+/* --- Form page, S2 -------------------------------------------------------------- */
+
+/* The back link (S2.2) over the card of the form (S2.4): at most 640 px, centred. In
+   the card, the title (S2.3), the banner (S2.5), the name, slug and description on
+   full rows, the prices and the two choices side by side, then the buttons on the
+   right (S2.13, S2.14). One column under 640 px. */
+.form-page {
+  max-width: 640px;
+  margin-inline: auto;
+}
+
+.form-page__back {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-4);
+  font: var(--fw-semibold) var(--fs-md) / 19.6px var(--font);
+  text-decoration: none;
+}
+
+.form-page__back:hover {
+  text-decoration: underline;
+}
+
+.product-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+.product-form__header > h1 {
+  margin-bottom: var(--space-1);
+}
+
+.product-form__subtitle {
+  margin: 0;
+  color: var(--muted);
+}
+
+.product-form__pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+
+.product-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: flex-end;
+  margin-top: var(--space-2);
+}
+
+@media (width < 640px) {
+  .product-form__pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Edit mode (US3): the not-found or load error of S2.3 in place of the fields, its
+   button on the left under it. */
+.product-form__message {
+  margin: 0;
+  color: var(--muted);
+}
+
+.product-form__actions--start {
+  justify-content: flex-start;
+  margin-top: 0;
+}
+
+/* The skeleton of S2.3 while the product loads: the title and the subtitle, then each
+   field as a label over its box, as tall as the real ones. */
+.product-form__skeleton-title {
+  width: 40%;
+  height: 36px;
+}
+
+.product-form__skeleton-text {
+  width: 70%;
+  height: 16px;
+}
+
+.product-form__skeleton-label {
+  width: 30%;
+  height: 14px;
+  margin-bottom: var(--space-2);
+}
+
+.product-form__skeleton-input {
+  height: 44px;
+}
