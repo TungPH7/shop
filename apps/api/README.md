@@ -115,6 +115,29 @@ database `${POSTGRES_DB}`:
 > "baseline" (`baseline-on-migrate: true`, `baseline-version: 0`) nên migration `V1__init.sql` chạy
 > tiếp ngay trên state đã có sẵn.
 
+### 4.1. Deploy dừng ở `V6__assert_pgcrypto_in_public`
+
+`app.gen_uuid_v7()` gọi `public.gen_random_bytes()` của `pgcrypto` (V5). V6 kiểm hàm đó có thật,
+nếu không thì dừng lần deploy; Flyway rollback riêng V6, database ở lại V5 và bản cũ vẫn chạy.
+Đọc thông báo lỗi rồi sửa database bằng role có quyền tạo extension, sau đó deploy lại:
+
+- **`pgcrypto` nằm ở schema khác**, thông báo ghi `is in schema "<tên>", not "public"`: chuyển
+  nó về `public`, như Hint của lỗi:
+
+  ```sql
+  ALTER EXTENSION pgcrypto SET SCHEMA public;
+  ```
+
+- **`pgcrypto` chưa cài**, thông báo ghi `is in schema "(not installed)"`: Hint của V6 lúc đó
+  bảo `ALTER EXTENSION … SET SCHEMA`, lệnh này lỗi vì extension không có. Cài nó vào `public`:
+
+  ```sql
+  CREATE EXTENSION pgcrypto SCHEMA public;
+  ```
+
+Không sửa file V6 để đổi thông báo: V6 đã chạy trên các môi trường, và Flyway kiểm checksum của
+nó (SHOP-53).
+
 ---
 
 ## 5. Chạy source code

@@ -19,9 +19,11 @@ class V6AssertPgcryptoMigrationTest extends AbstractContainerBaseTest {
   @Test
   void v6_passes_and_writes_its_line_in_the_migration_log_when_pgcrypto_is_in_public() {
     try (MigrationDatabase db = MigrationDatabase.create(POSTGRES)) {
-      db.flyway().migrate();
+      // Stops at V6, so a later migration does not change what this test checks.
+      db.flyway(MigrationDatabase.V6).migrate();
 
-      assertThat(db.flyway().info().current().getVersion().getVersion()).isEqualTo("6");
+      assertThat(db.flyway().info().current().getVersion().getVersion())
+          .isEqualTo(MigrationDatabase.V6);
       assertThat(
               db.jdbc()
                   .sql("SELECT count(*) FROM app._app_migration_log WHERE migration_name = ?")
@@ -38,7 +40,7 @@ class V6AssertPgcryptoMigrationTest extends AbstractContainerBaseTest {
       db.jdbc().sql("CREATE SCHEMA extensions").update();
       db.jdbc().sql("ALTER EXTENSION pgcrypto SET SCHEMA extensions").update();
 
-      assertThatThrownBy(() -> db.flyway().migrate())
+      assertThatThrownBy(() -> db.flyway(MigrationDatabase.V6).migrate())
           .isInstanceOf(FlywayException.class)
           .hasMessageContaining("pgcrypto")
           .hasMessageContaining("extensions")
