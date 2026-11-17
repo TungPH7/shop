@@ -155,7 +155,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `button-shadow` tối | Ước lượng | Khớp: `rgba(255,255,255,.28) 0 1px 0 inset, rgba(0,0,0,.12) 0 -1px 0 inset, accent 65% 0 6px 16px -6px` | Như bảng |
 | Ô "well" | Không có số | Khối "Downloads, 30 days" của trang Apps: nền well, đệm 12 14, bo 18 | Số đo |
 
-`admin` (SHOP-8) dùng các ước lượng. `docs/design-system/admin.md` ghi rằng các giá trị "ước lượng" của nó chưa đối chiếu. Các số đo ở bảng trên áp cho `admin` ở SHOP-9.
+`admin` (SHOP-8) dùng các ước lượng. `docs/design-system/admin.md` ghi rằng các giá trị "ước lượng" của nó chưa đối chiếu: các số đo ở bảng trên chưa áp cho `admin`, và chưa có item nào nhận việc đó.
 
 ## Classes
 
