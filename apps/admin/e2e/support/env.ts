@@ -34,19 +34,25 @@ function localUserPort(): number {
   return port + OFFSET;
 }
 
-// An empty E2E_USER_URL, as a CI variable left blank, counts as none.
-const USER_URL = process.env['E2E_USER_URL'];
-export const userUrl =
-  USER_URL !== undefined && USER_URL !== '' ? USER_URL : `http://localhost:${localUserPort()}`;
+/**
+ * The URL of the user app. Read on each call, not on import, so that a spec that only
+ * needs `isLocal` never reads project.yaml. An empty E2E_USER_URL, as a CI variable left
+ * blank, counts as none.
+ */
+function userUrl(): string {
+  const url = process.env['E2E_USER_URL'];
+  return url !== undefined && url !== '' ? url : `http://localhost:${localUserPort()}`;
+}
 
 /** baseURL and the basic auth of the user app, for a request or a browser context. */
 function userOptions() {
+  const baseURL = userUrl();
   const username = process.env['E2E_HTTP_USER'];
   const password = process.env['E2E_HTTP_PASSWORD'];
   return {
-    baseURL: userUrl,
+    baseURL,
     ...(username && password
-      ? { httpCredentials: { username, password, origin: new URL(userUrl).origin } }
+      ? { httpCredentials: { username, password, origin: new URL(baseURL).origin } }
       : {}),
   };
 }
