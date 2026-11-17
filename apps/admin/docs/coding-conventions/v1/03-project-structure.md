@@ -61,8 +61,10 @@ interface ProductDetailProps { product: Product; actions?: ReactNode }
 ```tsx
 // app/routes/products/product-detail-route.tsx  ← chỉ tầng app biết cả hai
 const { hasModule } = usePermission();
-<ProductDetail product={product} actions={hasModule('product') ? <DeleteButton /> : null} />
+<ProductDetail product={product} actions={hasModule('product') ? <EditLink /> : null} />
 ```
+
+Ví dụ trên chỉ áp dụng khi app đã có đăng nhập. Tới Epic đăng nhập, các trang sản phẩm của `admin` nằm ngoài `ProtectedRoute`, `useProfile()` không có dữ liệu nên `hasModule` luôn `false`: chặn một nút theo quyền sẽ ẩn nó với mọi người. Ở đó tầng `app` không chặn gì, và nút Xóa của dòng (S1.8, SHOP-37) luôn hiện.
 ❌ `features/product/...` import `features/auth/hooks/use-permission`
 
 **Enforce:** `import-x/no-restricted-paths` — **thêm feature mới phải thêm một zone cross-feature cho nó** trong `eslint.config.js`.

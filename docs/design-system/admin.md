@@ -1,6 +1,6 @@
 # Design system: admin
 
-> **App:** `apps/admin` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-16, SHOP-8, SHOP-9, SHOP-19 và SHOP-20
+> **App:** `apps/admin` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-17, SHOP-8, SHOP-9, SHOP-19, SHOP-20 và SHOP-37
 
 Design system của `admin` là CSS variables và CSS thường, không có Tailwind hay thư viện UI (NFR13). Mỗi màn hình dùng token và class dưới đây, không tự đặt màu, cỡ chữ hay khoảng cách.
 
@@ -154,6 +154,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.search`, `.search__icon`, `.search__input` | Ô tìm (S1.5) | Viên thuốc cao 44, kính lúp 16 px bên trái (`aria-hidden`), chữ cách trái 40 |
 | `.table-wrap`, `.table`, `.table__num`, `.table__actions` | Bảng (S1.6) | Đặt trong `.card`. Tiêu đề cột 12/600 `--muted`, đệm 10 12; dòng cao 64, đệm 12, kẻ `--line`, hover `--surface-2`; cột giá và thao tác căn phải. `.table-wrap` cuộn ngang: cho nó `tabindex="0"` và nhãn |
 | `.table__product`, `.table__product-text`, `.table__name`, `.table__sub` | Ô Sản phẩm của bảng (S1.6) | Ô giữ chỗ 40, cách 12, rồi tên 14/600 `--text` và slug 12,5 `--hint` bên dưới (SHOP-19); ở `list-page.css` |
+| `.table__row-actions` | Nút của dòng (S1.7, S1.8) | Sửa rồi Xóa, cách nhau 8, trong ô `.table__actions` (SHOP-37); ở `list-page.css` |
 | `.table__message` | Dòng thông báo thay thân bảng (S1.9, S1.10, lỗi của S1.6) | Một ô trải hết các cột, căn giữa, đệm 28 12; chữ `--muted`, nút hay liên kết bên dưới (SHOP-19); ở `list-page.css` |
 | `.table__skeleton-tile`, `.table__skeleton-text`, `.table__skeleton-cell` | Khung xương của bảng (S1.6) | Đi cùng `.skeleton`: ô 40 bo `--r-thumb`, dòng chữ, ô 60% (SHOP-19); ở `list-page.css` |
 | `.page-header` | Hàng tiêu đề của trang danh sách (S1.2, S1.3) | h1 bên trái, nút chính bên phải, cách bảng lọc 24 (SHOP-19); ở `list-page.css` |
@@ -230,7 +231,7 @@ Một kiểu vẽ, hai hành vi. Cả hai được điều khiển: nơi gọi g
 - `<dialog>` gốc mở bằng `showModal()`: phần phía sau inert. `role="alertdialog"`, `aria-modal`, tên là `title` (h2), mô tả là nội dung.
 - Focus đầu ở nút Hủy. Tab và Shift+Tab xoay vòng trong hộp thoại (một `<dialog>` trần để focus ra thanh của trình duyệt).
 - Esc (sự kiện `cancel`), nút Hủy và nút Đóng tròn đều gọi `onCancel`; nơi gọi đóng bằng `open={false}`. Trình duyệt tự đóng thì cũng coi như Hủy.
-- Đóng: focus về phần tử có focus lúc mở (nút S1.8 của dòng). Nếu phần tử đó không còn, như dòng của sản phẩm vừa xóa, nơi gọi chuyển focus.
+- Đóng: focus về phần tử có focus lúc mở (nút S1.8 của dòng). Nếu phần tử đó không còn, như dòng của sản phẩm vừa xóa, nơi gọi chuyển focus. Ở S1, `ProductList` đưa focus vào vùng cuộn của bảng ("Danh sách sản phẩm") sau khi xóa (SHOP-37).
 - `action` là nút làm việc đó, như nút Xóa `.btn--danger` của S3. `isBusy`: Hủy, Đóng và Esc không làm gì, và hai nút khóa bằng `aria-disabled` để focus không rơi khỏi hộp thoại; nơi gọi khóa `action` cùng cách và đổi chữ ("Đang xóa…"). `error` hiện trên hàng nút, `role="alert"`.
 - Toast mở lúc hộp thoại đang mở nằm dưới màn che, vì hộp thoại ở top layer; lỗi của S3 vì vậy hiện trong hộp thoại.
 
