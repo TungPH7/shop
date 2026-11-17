@@ -177,14 +177,14 @@ describe('metaDescriptionOf', () => {
 
   test('never cuts a decomposed Vietnamese letter (NFD) from its marks', () => {
     // ệ as e, U+0323 and U+0302: three code points, one letter, which is the 160th.
-    const letter = 'ệ';
+    const letter = 'e\u0323\u0302';
     const description = `${'a'.repeat(159)}${letter}bc`;
 
     expect(metaDescriptionOf(description)).toBe(`${'a'.repeat(159)}${letter}`);
   });
 
   test('never cuts an emoji joined with ZWJ, nor a flag', () => {
-    const family = '👨‍👩‍👧';
+    const family = '👨\u200d👩\u200d👧';
     const flag = '🇻🇳';
 
     expect(metaDescriptionOf(`${'a'.repeat(159)}${family}b`)).toBe(`${'a'.repeat(159)}${family}`);
