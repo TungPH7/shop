@@ -90,7 +90,7 @@ export function createApiClient(options: ApiClientOptions) {
     async (error: AxiosError) => {
       const config = error.config as RetryableConfig | undefined;
 
-      // 1) Transient failure (network/timeout/5xx/429) on an idempotent method.
+      // 1) Transient failure (network/timeout/5xx/429) on a read method (GET, HEAD, OPTIONS).
       if (config && isRetryableError(error, config.method)) {
         const attempt = config._retryCount ?? 0;
         if (attempt < MAX_RETRIES) {

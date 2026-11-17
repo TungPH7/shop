@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, type Ref } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
@@ -13,9 +13,9 @@ import {
 } from '@/features/product/model/product';
 
 // The product table of S1.6, in its glass card: Product (tile, name, slug), Price,
-// Status, Availability, Actions. The body is the rows, the skeleton or a message
-// (S1.9, the error state); the header stays. Under 1024 px the table scrolls
-// sideways inside its labelled, focusable region.
+// Status, Availability, Actions (Edit S1.7, Delete S1.8). The body is the rows, the
+// skeleton or a message (S1.9, the error state); the header stays. Under 1024 px the
+// table scrolls sideways inside its labelled, focusable region.
 
 const COLUMNS = 5;
 const SKELETON_ROWS = 6;
@@ -34,13 +34,16 @@ interface ProductTableProps {
   /** True while the rows are loading or about to change. */
   isBusy: boolean;
   children: ReactNode;
+  /** The focusable region of the table, where focus goes after a delete (S3). */
+  ref?: Ref<HTMLDivElement>;
 }
 
-export function ProductTable({ isBusy, children }: ProductTableProps) {
+export function ProductTable({ isBusy, children, ref }: ProductTableProps) {
   const { t } = useTranslation('product');
 
   return (
     <div
+      ref={ref}
       className="table-wrap"
       role="region"
       aria-label={t('table.label')}
@@ -69,7 +72,13 @@ export function ProductTable({ isBusy, children }: ProductTableProps) {
   );
 }
 
-export function ProductRows({ products }: { products: readonly AdminProductSummary[] }) {
+interface ProductRowsProps {
+  products: readonly AdminProductSummary[];
+  /** Delete of a row (S1.8): opens S3 for its product. */
+  onDelete: (product: AdminProductSummary) => void;
+}
+
+export function ProductRows({ products, onDelete }: ProductRowsProps) {
   const { t } = useTranslation('product');
 
   return products.map((product) => (
@@ -93,13 +102,25 @@ export function ProductRows({ products }: { products: readonly AdminProductSumma
         </span>
       </td>
       <td className="table__actions">
-        <Link
-          className="btn btn--secondary btn--sm"
-          to={paths.productEdit.getHref(product.id)}
-          aria-label={t('actions.editLabel', { name: product.name })}
-        >
-          {t('actions.edit')}
-        </Link>
+        <div className="table__row-actions">
+          <Link
+            className="btn btn--secondary btn--sm"
+            to={paths.productEdit.getHref(product.id)}
+            aria-label={t('actions.editLabel', { name: product.name })}
+          >
+            {t('actions.edit')}
+          </Link>
+          <button
+            type="button"
+            className="btn btn--secondary btn--sm btn--bad-text"
+            aria-label={t('actions.deleteLabel', { name: product.name })}
+            onClick={() => {
+              onDelete(product);
+            }}
+          >
+            {t('actions.delete')}
+          </button>
+        </div>
       </td>
     </tr>
   ));

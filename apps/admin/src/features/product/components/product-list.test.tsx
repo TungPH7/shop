@@ -1,16 +1,26 @@
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { ProductList } from '@/features/product/components/product-list';
 import { type AdminProductSummary } from '@/features/product/model/product';
+import { clearAll, getSnapshot } from '@/lib/notifications/notification-store';
 import { server } from '@/testing/msw/server';
 import { renderWithProviders, screen, waitFor, within } from '@/testing/render';
+import { stubDialog } from '@/testing/stub-dialog';
 import { testI18n } from '@/testing/test-i18n';
 
 // S1 of docs/specs/SHOP-7/design.md against a fake of GET /api/admin/products: it
 // filters like the API (keyword, upper-case status) and pages by offset and limit.
+// DELETE /api/admin/products/{id} removes the product from the same fake.
 
 const NBSP = String.fromCodePoint(0xa0);
+
+// The dialog S3 needs the modal API of <dialog>, which jsdom lacks.
+stubDialog();
+
+afterEach(() => {
+  clearAll();
+});
 
 function product(overrides: Partial<AdminProductSummary> & { name: string }): AdminProductSummary {
   return {
@@ -67,6 +77,11 @@ function matches(name: string, q: string): boolean {
 function fakeApi(products: AdminProductSummary[]) {
   const requests: URLSearchParams[] = [];
   server.use(
+    http.delete('*/admin/products/:id', ({ params }) => {
+      const index = products.findIndex((item) => item.id === params['id']);
+      if (index >= 0) products.splice(index, 1);
+      return new HttpResponse(null, { status: 204 });
+    }),
     http.get('*/admin/products', ({ request }) => {
       const params = new URL(request.url).searchParams;
       requests.push(params);
@@ -416,6 +431,55 @@ describe('ProductList', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('gives each row a Delete button named after its product (S1.8)', async () => {
+    fakeApi([shirt, jeans]);
+    renderWithProviders(<ProductList />, { route: '/products' });
+
+    const jeansRow = await screen.findByRole('row', { name: /Quần jean nam/ });
+    const button = within(jeansRow).getByRole('button', { name: 'Delete Quần jean nam' });
+    expect(button).toHaveTextContent('Delete');
+    expect(button).toHaveClass('btn--bad-text');
+    expect(screen.getByRole('button', { name: 'Delete Áo thun cổ tròn' })).toBeInTheDocument();
+  });
+
+  it('AC14 opens S3 for the product of the row, and Cancel leaves the product and focuses its Delete button', async () => {
+    const products = [shirt, jeans];
+    fakeApi(products);
+    const { user } = renderWithProviders(<ProductList />, { route: '/products' });
+    const button = await screen.findByRole('button', { name: 'Delete Quần jean nam' });
+
+    await user.click(button);
+
+    expect(
+      screen.getByRole('alertdialog', { name: 'Delete “Quần jean nam”?' }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(screen.getByRole('row', { name: /Quần jean nam/ })).toBeInTheDocument();
+    expect(products).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Delete Quần jean nam' })).toHaveFocus();
+  });
+
+  it('AC15 deletes the product, reloads the list without it, says "Product deleted" and focuses the table', async () => {
+    fakeApi([shirt, jeans]);
+    const { user } = renderWithProviders(<ProductList />, { route: '/products' });
+    await user.click(await screen.findByRole('button', { name: 'Delete Quần jean nam' }));
+
+    await user.click(
+      within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    });
+    expect(screen.queryByText('Quần jean nam')).not.toBeInTheDocument();
+    expect(screen.getByText('Áo thun cổ tròn')).toBeInTheDocument();
+    expect(screen.getByText('1 product')).toBeInTheDocument();
+    expect(getSnapshot().map(({ message }) => message)).toEqual(['Product deleted']);
+    expect(screen.getByRole('region', { name: 'Product list' })).toHaveFocus();
+  });
+
   it('speaks Vietnamese, with the same price format', async () => {
     await testI18n.changeLanguage('vi');
     fakeApi([shirt, jeans]);
@@ -428,6 +492,7 @@ describe('ProductList', () => {
     expect(within(shirtRow).getByText('Còn hàng')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('2 sản phẩm');
     expect(screen.getByRole('link', { name: 'Sửa Áo thun cổ tròn' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Xóa Quần jean nam' })).toHaveTextContent('Xóa');
     expect(screen.getByRole('searchbox', { name: 'Tìm theo tên' })).toHaveAttribute(
       'placeholder',
       'Tìm theo tên sản phẩm…',

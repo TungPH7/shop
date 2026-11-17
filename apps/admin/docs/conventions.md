@@ -113,7 +113,7 @@ pnpm format:check # Prettier kiểm tra (dùng trong CI)
 - **Bề mặt:** gọi `api.get/post/put/patch/delete<T>()` → trả **thẳng `T`** (data), **không** leak `AxiosResponse` ra feature.
 - **Lỗi:** mọi lỗi **chuẩn hoá về `ApiError`** (`kind` ∈ network/timeout/canceled/validation/http/unknown + `status`/`code`/`details`) qua `normalizeError`; bắt bằng `isApiError`. **KHÔNG** hiển thị UI/toast trong interceptor (transport thuần; caller/Query/ErrorBoundary quyết cách hiện).
 - **Auth (DI seam):** gắn `Bearer` token + refresh qua `configureApiAuth()` (`auth-bridge`); `lib/api` **KHÔNG** import auth/redux (giữ layering + tránh cycle). **401 → single-flight refresh → retry một lần**; fail → `onUnauthorized()`. Auth thật = folder 10 cắm vào seam.
-- **Retry:** chỉ **idempotent** (GET/HEAD/OPTIONS/PUT/DELETE), statuses 408/429/5xx, **exp backoff + full jitter**, tôn trọng `Retry-After`; `MAX_RETRIES=2`. (Tự viết — minh bạch, không dep; `axios-retry` là lựa chọn thay thế.)
+- **Retry:** chỉ **request đọc** (GET/HEAD/OPTIONS; không bao giờ lệnh ghi, NFR19 của SHOP-7), statuses 408/429/5xx, **exp backoff + full jitter**, tôn trọng `Retry-After`; `MAX_RETRIES=2`. (Tự viết — minh bạch, không dep; `axios-retry` là lựa chọn thay thế.)
 - **Validate tại biên (type-at-boundary):** truyền **Zod `schema`** vào request → trả `T` đã validate; sai shape → `ApiError(kind:'validation')`.
 - **Model schema-first:** Zod schema là nguồn sự thật, `type = z.infer<...>`. Data access đặt ở **`features/<x>/api/*`** (service theo resource): fetch + validate, trả domain type. Folder 08 bọc bằng TanStack Query.
 

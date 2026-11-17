@@ -15,6 +15,16 @@ _(Chưa có thay đổi chờ phát hành.)_
 
 ## v1
 
+### [1.2.0] — 2026-11-17
+
+SHOP-37 (US4, xóa sản phẩm) làm theo NFR19 của SPEC SHOP-7 và mục 13 của plan: `admin` không bao giờ tự thử lại lệnh ghi. `API-006` hẹp lại, nên đây là MINOR: không còn code nào thử lại `PUT` hay `DELETE` (`src/lib/api/retry.ts` đổi cùng PR), nên luật mới không xung đột với code hiện có. Kèm một sửa ví dụ của `PS-002` (comment trên SHOP-37 từ finding Low của `reviewer` ở PR #34).
+
+**Changed**
+- `API-006`: chỉ thử lại `GET`, `HEAD`, `OPTIONS`; không bao giờ `POST`, `PUT`, `PATCH`, `DELETE`. Minh chứng: `READ_METHODS` ở `src/lib/api/retry.ts`, test `never retries a write` ở `retry.test.ts` và `does NOT retry a DELETE…` ở `api-client.test.ts`. Dòng Retry của `docs/conventions.md` sửa theo.
+
+**Fixed**
+- Ví dụ ✅ của `PS-002` ở `03-project-structure.md`: thôi ẩn `<DeleteButton />` theo `hasModule('product')`, và ghi rõ ví dụ chặn theo quyền chỉ áp dụng sau Epic đăng nhập, vì trước đó `hasModule` luôn `false` và nút Xóa S1.8 phải hiện với mọi người.
+
 ### [1.1.2] — 2026-11-17
 
 SHOP-52 tách CSS của trang danh sách sản phẩm khỏi `components.css` (finding Low của `reviewer` ở PR #38). Bản này chỉ thêm file đó vào bảng của mục 15.3, không thêm ràng buộc nào với code, nên là PATCH.

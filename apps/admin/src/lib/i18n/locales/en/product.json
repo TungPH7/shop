@@ -3,7 +3,9 @@
   "actions": {
     "add": "Add product",
     "edit": "Edit",
-    "editLabel": "Edit {{name}}"
+    "editLabel": "Edit {{name}}",
+    "delete": "Delete",
+    "deleteLabel": "Delete {{name}}"
   },
   "filters": {
     "statusLabel": "Filter by status",
@@ -38,6 +40,16 @@
     "empty": "No products yet.",
     "error": "Couldn't load the products.",
     "retry": "Try again"
+  },
+  "delete": {
+    "title": "Delete “{{name}}”?",
+    "cannotUndo": "This can't be undone.",
+    "hideHint": "To stop selling it for now, set its status to Hidden instead.",
+    "cancel": "Cancel",
+    "confirm": "Delete",
+    "deleting": "Deleting…",
+    "failed": "Couldn't delete. Please try again.",
+    "done": "Product deleted"
   },
   "form": {
     "back": "Products",
