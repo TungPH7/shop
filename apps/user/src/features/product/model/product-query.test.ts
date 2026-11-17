@@ -2,6 +2,8 @@ import { describe, expect, test } from 'vitest';
 
 import {
   apiSortOf,
+  chosenSortOf,
+  foldKeyword,
   nextProductsHref,
   PAGE_SIZE,
   parseProductQuery,
@@ -57,6 +59,33 @@ describe('parseProductQuery', () => {
 
   test.each(['', '   '])('reads the keyword %j as no search', (q) => {
     expect(parseProductQuery({ q })).toEqual({ q: '', sort: 'newest', page: 1 });
+  });
+
+  // JavaScript's trim() and \s do not count U+0085 or U+001C–U+001F as spaces, while the api does: a keyword of them
+  // alone was sent as a search the api refused with 400, an error Try again never left (AC22).
+  test.each(['\u0085', '\u001c', '\u001f', '\u0000', '\u007f', ' \u0085\t\u001e '])(
+    'reads the keyword %j, only control characters and spaces, as no search (AC22)',
+    (q) => {
+      expect(parseProductQuery({ q })).toEqual({ q: '', sort: 'newest', page: 1 });
+    },
+  );
+
+  test('falls back to the newest first for sort=relevance with a keyword of control characters (AC22)', () => {
+    expect(parseProductQuery({ q: '\u001f', sort: 'relevance' })).toEqual({
+      q: '',
+      sort: 'newest',
+      page: 1,
+    });
+  });
+
+  test('reads a control character between two words as a space', () => {
+    expect(parseProductQuery({ q: 'áo\u0085\u001fthun\u0000' }).q).toBe('áo thun');
+  });
+
+  test('cuts the keyword at 100 characters after its control characters became spaces', () => {
+    expect(parseProductQuery({ q: `${'\u001f'.repeat(10)}${'a'.repeat(150)}` }).q).toBe(
+      'a'.repeat(100),
+    );
   });
 
   test('sorts a search by relevance by default (AC18)', () => {
@@ -140,6 +169,50 @@ describe('searchHref', () => {
     expect(searchHref({ q: '', sort: 'newest', page: 1 }, '  ÁO   THUN ')).toBe(
       '/products?q=%C3%81O+THUN',
     );
+  });
+});
+
+describe('foldKeyword', () => {
+  // The cases of ProductSearchTermsTest of the api, which folds as app.search_fold does (ADR-0002).
+  test.each([
+    ['Áo thun cổ tròn', 'ao thun co tron'],
+    ['ĐẦM Maxi đỏ 2026', 'dam maxi do 2026'],
+    ['Quần jean (Nam) – Slim', 'quan jean nam slim'],
+    ['  Bao   tay len  ', 'bao tay len'],
+    ["100% cotton_x\\y'z", '100 cotton x y z'],
+    ['jean-nam/2026', 'jean nam 2026'],
+  ])('folds %j as the api does: %j', (q, folded) => {
+    expect(foldKeyword(q)).toBe(folded);
+  });
+
+  test.each(['A', 'a', 'á', 'Á', 'a!', '!a', 'ả', '(a)', 'a a'])(
+    'folds the variant %j of one search into the same words',
+    (q) => {
+      expect(foldKeyword(q)).toBe('a');
+    },
+  );
+
+  test('keeps each word once, in the order of its first time', () => {
+    expect(foldKeyword('thun Áo THUN ao co')).toBe('thun ao co');
+  });
+
+  test.each(['%', '_', '\\', "'", '!!!', '%%__', '–', '"\';--'])(
+    'folds %j, a keyword with no word, into no word',
+    (q) => {
+      expect(foldKeyword(q)).toBe('');
+    },
+  );
+});
+
+describe('chosenSortOf', () => {
+  test('gives no sort when the query has the default sort of its keyword', () => {
+    expect(chosenSortOf({ q: '', sort: 'newest', page: 1 })).toBeNull();
+    expect(chosenSortOf({ q: 'ao', sort: 'relevance', page: 2 })).toBeNull();
+  });
+
+  test('gives the sort the visitor chose, one other than the default of the keyword', () => {
+    expect(chosenSortOf({ q: '', sort: 'price-asc', page: 1 })).toBe('price-asc');
+    expect(chosenSortOf({ q: 'ao', sort: 'newest', page: 1 })).toBe('newest');
   });
 });
 

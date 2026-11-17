@@ -9,6 +9,7 @@ import {
 } from '~/features/product/model/product';
 import {
   apiSortOf,
+  foldKeyword,
   PAGE_SIZE,
   type ProductQuery,
   type ProductSort,
@@ -31,20 +32,22 @@ export type StoreProductList = {
 };
 
 /**
- * One block of 96 products on sale from `offset`: `GET /api/products` (plan of SHOP-7, API Contract), with the keyword
- * `q` when there is one and the order `sort`, always named so the api never picks a default of its own.
+ * One block of 96 products on sale from `offset`: `GET /api/products` (plan of SHOP-7, API Contract), with the words
+ * `terms` of the keyword when there is one (`foldKeyword`) and the order `sort`, always named so the api never picks a
+ * default of its own.
  *
  * `cacheLife('catalog')`: data at most 25 s old on the server, a dynamic hole outside the prerender (Architecture
- * Decisions 8). The cache holds a block, not a page, of one keyword and one order: the first four loads of 24 share the
- * first block, so Load more on them is served from the cache and the products already shown stay where they are. A
- * throw is not cached.
+ * Decisions 8). The cache holds a block, not a page, of one search and one order: the first four loads of 24 share the
+ * first block, so Load more on them is served from the cache and the products already shown stay where they are. Its
+ * key is the folded words, never the keyword as typed: `A`, `á` and `a!`, one search at the api, are one entry here
+ * too (review of PR #62). A throw is not cached.
  */
-async function getStoreProductBlock(q: string, sort: ProductSort, offset: number) {
+async function getStoreProductBlock(terms: string, sort: ProductSort, offset: number) {
   'use cache';
   cacheLife('catalog');
 
   const params = new URLSearchParams();
-  if (q !== '') params.set('q', q);
+  if (terms !== '') params.set('q', terms);
   params.set('sort', apiSortOf(sort));
   params.set('offset', String(offset));
   params.set('limit', String(BLOCK_SIZE));
@@ -55,6 +58,7 @@ async function getStoreProductBlock(q: string, sort: ProductSort, offset: number
  * The products of S4 for `query`: `page × 24` products on sale that match its keyword, in its order, read in blocks of
  * 96 (Architecture Decisions 10).
  *
+ * - A keyword with no word, such as `%` or `!!!`, matches no product, as at the api (NFR10): the api is not asked.
  * - A product read twice, because the catalog moved between two blocks, is kept once (NFR18).
  * - Reading stops at the number of products on sale, so `page=999999` reads the catalog once and no further (NFR3); and
  *   at a block shorter than asked, past which there is no product.
@@ -69,11 +73,17 @@ async function getStoreProductBlock(q: string, sort: ProductSort, offset: number
  * by its length and its total, so a page never asks for a block past the catalog; one visitor holds at most one request
  * to the api at a time, whatever page the URL names (NFR3); and the products read before a failed block are exactly
  * the ones kept. The cost is at a large catalog with an empty cache: about 105 requests, some 21 s, for `page=999999`
- * at 10,000 products. Blocks stay in the cache for 25 s, so a later visitor pays nothing, and Load more on one page
- * reads at most one new block. Reading the blocks after the first in parallel, a few at a time, is the change to make if
- * the catalog grows that large.
+ * at 10,000 products, or at as many products as a search matches. Blocks stay in the cache for 25 s under the order and
+ * the folded words of the search, so within that time a later visitor of the same search, however its keyword is
+ * written, pays nothing, and Load more on one page reads at most one new block. A search with other words, or the same
+ * search after 25 s, pays again: the cache does not bound how often a visitor makes the api read a whole search, a
+ * rate limit on `?q=` at the proxy would. Reading the blocks after the first in parallel, a few at a time, is the change
+ * to make if the catalog grows that large.
  */
 export async function getStoreProducts(query: ProductQuery): Promise<StoreProductList> {
+  const terms = foldKeyword(query.q);
+  if (query.q !== '' && terms === '') return { items: [], totalItems: 0, complete: true };
+
   const wanted = query.page * PAGE_SIZE;
   const items: StoreProductSummary[] = [];
   const seen = new Set<string>();
@@ -82,7 +92,7 @@ export async function getStoreProducts(query: ProductQuery): Promise<StoreProduc
   for (let offset = 0; ; offset += BLOCK_SIZE) {
     let block: Awaited<ReturnType<typeof getStoreProductBlock>>;
     try {
-      block = await getStoreProductBlock(query.q, query.sort, offset);
+      block = await getStoreProductBlock(terms, query.sort, offset);
     } catch (error) {
       if (offset === 0) throw error;
       captureError(error, { feature: 'product-list', offset });

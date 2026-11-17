@@ -36,9 +36,16 @@ const pageSchema = z
   .pipe(z.number().int().min(1).max(Number.MAX_SAFE_INTEGER))
   .catch(DEFAULT_PAGE);
 
+/**
+ * Spaces as the api reads them, and more: JavaScript's `\s` lacks U+0085 and U+001C–U+001F, which the api strips, so
+ * every control character counts as a space here. A keyword of control characters alone is then no search, never one
+ * the api refuses (AC22).
+ */
+const SPACES = /[\p{Cc}\s]+/gu;
+
 const keywordSchema = z
   .string()
-  .transform((q) => q.trim().replace(/\s+/g, ' ').slice(0, MAX_KEYWORD_LENGTH).trimEnd())
+  .transform((q) => q.replace(SPACES, ' ').trim().slice(0, MAX_KEYWORD_LENGTH).trimEnd())
   .catch('');
 
 const productQuerySchema = z
@@ -83,6 +90,29 @@ export function apiSortOf(sort: ProductSort): (typeof API_SORTS)[ProductSort] {
   return API_SORTS[sort];
 }
 
+const COMBINING_MARKS = /[̀-ͯ]/g;
+const NOT_LETTER_OR_DIGIT = /[^a-z0-9]+/g;
+
+/**
+ * The words of the keyword `q` as the api searches them (ADR-0002, `ProductSearchTerms`): folded as
+ * `ProductSearchTerms.fold` and `app.search_fold` fold, step for step (NFD, no combining mark U+0300–U+036F, `đ` and
+ * `Đ` to `d`, lower case, each run of characters other than a–z and 0–9 one space), each word once in the order of
+ * its first time, joined by one space. Empty when `q` has no word, as `%` or `!!!`, which matches no product.
+ *
+ * `A`, `á` and `a!` are one search at the api, and so one search here: what the page asks the api and caches. The
+ * field and S4.7 show the keyword as typed.
+ */
+export function foldKeyword(q: string): string {
+  const folded = q
+    .normalize('NFD')
+    .replace(COMBINING_MARKS, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase()
+    .replace(NOT_LETTER_OR_DIGIT, ' ')
+    .trim();
+  return folded === '' ? '' : [...new Set(folded.split(' '))].join(' ');
+}
+
 /** The path of S4 for `query`, without its locale and without the defaults: for a link or the router. */
 export function productsHref({ q, sort, page }: ProductQuery): string {
   const params = new URLSearchParams();
@@ -100,8 +130,15 @@ export function productsHref({ q, sort, page }: ProductQuery): string {
  * of the new one: relevance for a search. The search form sends the same fields without JavaScript (ProductFilters).
  */
 export function searchHref(query: ProductQuery, typed: string): string {
-  const chosen = query.sort === defaultSort(query.q) ? undefined : query.sort;
-  return productsHref(parseProductQuery({ q: typed, sort: chosen }));
+  return productsHref(parseProductQuery({ q: typed, sort: chosenSortOf(query) ?? undefined }));
+}
+
+/**
+ * The sort the visitor chose in `query`, or null when it is the default of its keyword: the one sort a new search
+ * keeps (S4.3), in the URL and in the hidden field of the search form.
+ */
+export function chosenSortOf(query: ProductQuery): ProductSort | null {
+  return query.sort === defaultSort(query.q) ? null : query.sort;
 }
 
 /** Where the sort S4.4 goes with `sort`: the first 24 products of the same search in that order. */

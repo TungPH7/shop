@@ -174,7 +174,7 @@ describe('getStoreProducts', () => {
     ['price-desc', 'PRICE_DESC'],
     ['newest', 'NEWEST'],
   ] as const)(
-    'asks every block of a search sorted by %s with the keyword and %s (AC18, AC20, AC22)',
+    'asks every block of a search sorted by %s with the folded keyword and %s (AC18, AC20, AC22)',
     async (sort, apiSort) => {
       const asked: Record<string, string>[] = [];
       server.use(
@@ -194,10 +194,43 @@ describe('getStoreProducts', () => {
       const result = await getStoreProducts({ q: 'áo thun & 100%', sort, page: 5 });
 
       expect(asked).toEqual([
-        { q: 'áo thun & 100%', sort: apiSort, offset: '0', limit: '96' },
-        { q: 'áo thun & 100%', sort: apiSort, offset: '96', limit: '96' },
+        { q: 'ao thun 100', sort: apiSort, offset: '0', limit: '96' },
+        { q: 'ao thun 100', sort: apiSort, offset: '96', limit: '96' },
       ]);
       expect(result.items).toHaveLength(120);
+    },
+  );
+
+  // The arguments of the cached block are the cache key, and they are exactly what the api is asked: one request for
+  // every variant means one cache entry, so a new variant of a keyword cannot make the api read the products again.
+  test.each(['A', 'á', 'a!', ' Ả ', '(a) A'])(
+    'asks the api the same block for %j as for the other variants of one search (cache key)',
+    async (q) => {
+      const asked: Record<string, string>[] = [];
+      server.use(
+        http.get(URL_, ({ request }) => {
+          asked.push(Object.fromEntries(new URL(request.url).searchParams));
+          return HttpResponse.json({ items: catalog(3), totalItems: 3, offset: 0, limit: 96 });
+        }),
+      );
+
+      await getStoreProducts({ q, sort: 'relevance', page: 1 });
+
+      expect(asked).toEqual([{ q: 'a', sort: 'RELEVANCE', offset: '0', limit: '96' }]);
+    },
+  );
+
+  test.each(['%', '!!!', '–'])(
+    'returns no product without asking the api for %j, a keyword with no word (NFR10)',
+    async (q) => {
+      const asked = serve(catalog(30));
+
+      await expect(getStoreProducts({ q, sort: 'relevance', page: 999999 })).resolves.toEqual({
+        items: [],
+        totalItems: 0,
+        complete: true,
+      });
+      expect(asked).toEqual([]);
     },
   );
 
