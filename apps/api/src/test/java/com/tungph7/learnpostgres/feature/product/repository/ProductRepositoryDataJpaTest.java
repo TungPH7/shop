@@ -287,21 +287,20 @@ class ProductRepositoryDataJpaTest extends AbstractContainerBaseTest {
   @Test
   void findSlugsAmong_ofTheCandidatesOfAName_with10000Products_findsTheTakenOnesWithin200Ms() {
     insertProducts(10_000);
-    // The 1,000 slugs an add without slug tries (AdminProductService.MAX_SLUG_NUMBER).
-    String candidates =
+    // The 1,000 slugs an add without slug tries (AdminProductService.MAX_SLUG_NUMBER), the first
+    // in upper case: citext compares them ignoring case.
+    String[] slugs =
         Stream.concat(
-                Stream.of("ao-thun"), IntStream.rangeClosed(2, 1_000).mapToObj(n -> "ao-thun-" + n))
-            .collect(Collectors.joining(",", "'{", "}'::text"));
-    String sql = ProductRepository.SLUGS_AMONG_SQL.replace(":slugs", candidates);
+                Stream.of("AO-THUN"), IntStream.rangeClosed(2, 1_000).mapToObj(n -> "ao-thun-" + n))
+            .toArray(String[]::new);
+    String sql =
+        ProductRepository.SLUGS_AMONG_SQL.replace(
+            ":slugs", Arrays.stream(slugs).collect(Collectors.joining(",", "'{", "}'::text")));
 
     String plan =
         String.join(
             "\n", jdbc.sql("EXPLAIN (ANALYZE, COSTS OFF) " + sql).query(String.class).list());
     LOG.info("findSlugsAmong, 1,000 candidates, 10,000 products, seq scans on:\n{}", plan);
-    String[] slugs =
-        Stream.concat(
-                Stream.of("AO-THUN"), IntStream.rangeClosed(2, 1_000).mapToObj(n -> "ao-thun-" + n))
-            .toArray(String[]::new);
 
     repository.findSlugsAmong(slugs); // warm-up: JIT and the buffers of the database
     long[] nanos = new long[5];
