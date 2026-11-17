@@ -91,6 +91,18 @@ function rowOf(page: Page, name: string): Locator {
     .filter({ has: page.getByText(name, { exact: true }) });
 }
 
+/**
+ * The row of the product in S1, where a save goes back to, among the products of this
+ * run only: the list opens on its first page, newest first, and the tests running beside
+ * this one make newer products that push an older one off that page (SHOP-71).
+ */
+async function savedRowOf(page: Page, name: string): Promise<Locator> {
+  const keyword = `e2e ${runId}`;
+  await page.getByRole('searchbox', { name: 'Search by name' }).fill(keyword);
+  await expect(page).toHaveURL((url) => url.searchParams.get('q') === keyword);
+  return rowOf(page, name);
+}
+
 async function expectSaved(page: Page) {
   await expect(page.getByRole('status').filter({ hasText: 'Product saved' })).toBeVisible();
   await expect(page).toHaveURL(/\/products$/);
@@ -145,7 +157,7 @@ test.describe('US3 edit a product', () => {
     await fields.save.click();
 
     await expectSaved(page);
-    const row = rowOf(page, newName);
+    const row = await savedRowOf(page, newName);
     await expect(row.getByRole('cell').nth(1)).toHaveText(/^200\.000\s₫$/);
     await expect(row.getByText(shirt.slug, { exact: true })).toBeVisible();
     const [saved] = await findProducts(request, `e2e ${runId}`);
@@ -193,7 +205,8 @@ test.describe('US3 edit a product', () => {
     await form(page).save.click();
 
     await expectSaved(page);
-    await expect(rowOf(page, shirt.name).getByText('Hidden', { exact: true })).toBeVisible();
+    const row = await savedRowOf(page, shirt.name);
+    await expect(row.getByText('Hidden', { exact: true })).toBeVisible();
     await expect
       .poll(() => storeStatus(shirt.slug), { timeout: leftOf(hiddenAt), intervals: [2_000] })
       .toBe(404);
@@ -230,7 +243,8 @@ test.describe('US3 edit a product', () => {
     await form(page).save.click();
 
     await expectSaved(page);
-    await expect(rowOf(page, shirt.name).getByText('Out of stock', { exact: true })).toBeVisible();
+    const row = await savedRowOf(page, shirt.name);
+    await expect(row.getByText('Out of stock', { exact: true })).toBeVisible();
     const storePage = await storeBrowser.newPage();
     const card = storePage.getByRole('main').getByRole('link').filter({ hasText: shirt.name });
     await expect
@@ -281,7 +295,8 @@ test.describe('US3 edit a product', () => {
     await fields.save.click();
 
     await expectSaved(page);
-    await expect(rowOf(page, shirt.name).getByText(newSlug, { exact: true })).toBeVisible();
+    const row = await savedRowOf(page, shirt.name);
+    await expect(row.getByText(newSlug, { exact: true })).toBeVisible();
     await expect
       .poll(() => storeStatus(newSlug), { timeout: leftOf(savedAt), intervals: [2_000] })
       .toBe(200);
