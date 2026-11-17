@@ -1,7 +1,11 @@
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { createProduct, createProductErrorOf } from '@/features/product/api/create-product';
+import {
+  createProduct,
+  createProductErrorOf,
+  fieldErrorsOf,
+} from '@/features/product/api/create-product';
 import { type AdminProduct } from '@/features/product/model/product';
 import { type CreateProductInput } from '@/features/product/model/product-form';
 import { ApiError, isApiError } from '@/lib/api/api-error';
@@ -237,5 +241,37 @@ describe('createProductErrorOf', () => {
     expect(
       createProductErrorOf(new ApiError({ kind: 'timeout', message: 'timed out' }), input),
     ).toEqual({ kind: 'general' });
+  });
+});
+
+describe('fieldErrorsOf', () => {
+  function badRequest(fields: string[], status = 400): ApiError {
+    return new ApiError({
+      kind: 'http',
+      message: 'Bad Request',
+      status,
+      code: 'VALIDATION_FAILED',
+      details: { errors: fields.map((field) => ({ field, message: '…' })) },
+    });
+  }
+
+  it('lists the fields of the form a 400 names, in their order on the form', () => {
+    expect(fieldErrorsOf(badRequest(['price', 'version', 'name', 'price']))).toEqual([
+      'name',
+      'price',
+    ]);
+  });
+
+  it('lists none for a 400 that names no field of the form, or has no list of errors', () => {
+    expect(fieldErrorsOf(badRequest(['status']))).toEqual([]);
+    expect(
+      fieldErrorsOf(new ApiError({ kind: 'http', message: 'Bad Request', status: 400 })),
+    ).toEqual([]);
+  });
+
+  it('lists none for an error that is no 400', () => {
+    expect(fieldErrorsOf(badRequest(['name'], 422))).toEqual([]);
+    expect(fieldErrorsOf(new ApiError({ kind: 'network', message: 'offline' }))).toEqual([]);
+    expect(fieldErrorsOf(new Error('boom'))).toEqual([]);
   });
 });
