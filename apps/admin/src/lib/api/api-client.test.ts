@@ -75,4 +75,28 @@ describe('createApiClient (integration via MSW)', () => {
     await expect(api.post('/things', {})).rejects.toMatchObject({ kind: 'http', status: 500 });
     expect(calls).toBe(1); // no retry for POST
   });
+
+  it('does NOT retry a DELETE whose answer was lost to a network error (NFR19)', async () => {
+    let calls = 0;
+    server.use(
+      http.delete(`${BASE}/things/1`, () => {
+        calls += 1;
+        return HttpResponse.error();
+      }),
+    );
+    await expect(api.delete('/things/1')).rejects.toMatchObject({ kind: 'network' });
+    expect(calls).toBe(1); // a write is never sent twice
+  });
+
+  it('does NOT retry a PUT on 503 (NFR19)', async () => {
+    let calls = 0;
+    server.use(
+      http.put(`${BASE}/things/1`, () => {
+        calls += 1;
+        return new HttpResponse(null, { status: 503 });
+      }),
+    );
+    await expect(api.put('/things/1', {})).rejects.toMatchObject({ kind: 'http', status: 503 });
+    expect(calls).toBe(1);
+  });
 });

@@ -39,9 +39,11 @@ if (isApiError(error) && error.status === 404) return <NotFound />;
 
 ## 8.3 Retry & auth
 
-### API-006 [MUST] Chỉ retry request idempotent
+### API-006 [MUST] Chỉ retry request đọc
 
-Retry cho `GET` / `HEAD` / `OPTIONS` / `PUT` / `DELETE` với status 408 / 429 / 5xx. **Không** retry `POST`. Dùng exponential backoff + full jitter, tôn trọng `Retry-After`, có giới hạn số lần.
+Retry cho `GET` / `HEAD` / `OPTIONS` với status 408 / 429 / 5xx hay lỗi mạng. **Không** retry lệnh ghi: `POST`, `PUT`, `PATCH`, `DELETE`. Dùng exponential backoff + full jitter, tôn trọng `Retry-After`, có giới hạn số lần.
+
+Lý do (NFR19 của SPEC SHOP-7): `PUT` và `DELETE` idempotent, nhưng lần retry của một lệnh đã thành công mà mất phản hồi nhận lỗi giả, `409` vì `version` đã đổi hay `404` vì sản phẩm đã xóa, nên màn hình báo thất bại cho một lệnh đã chạy. Lệnh ghi lỗi mạng thì màn hình hiện lỗi, và người dùng tự bấm lại.
 
 ### API-007 [MUST] Tầng api là nơi retry **duy nhất**
 
