@@ -20,6 +20,11 @@ describe('isCurrentPath', () => {
     expect(isCurrentPath('/products/ao-thun-co-tron', '/products')).toBe(true);
   });
 
+  it('marks Products on S6, the page the Proxy serves for a product that is not there', () => {
+    expect(isCurrentPath('/product-not-found', '/products')).toBe(true);
+    expect(isCurrentPath('/product-not-found', '/about')).toBe(false);
+  });
+
   it('does not mark a section whose name only starts the same way', () => {
     expect(isCurrentPath('/products-archive', '/products')).toBe(false);
   });

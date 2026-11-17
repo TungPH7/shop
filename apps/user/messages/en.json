@@ -147,6 +147,15 @@
     "outOfStock": "Out of stock",
     "description": "Description"
   },
+  "ProductNotFound": {
+    "title": "Product not found",
+    "description": "This product doesn't exist or is no longer available.",
+    "viewAll": "View all products"
+  },
+  "ProductUnavailable": {
+    "title": "We couldn't load this product right now",
+    "description": "The store is having a problem. Please reload the page in a few minutes."
+  },
   "ErrorDemo": {
     "title": "Error handling demo",
     "intro": "Each link triggers a different failure so you can see which boundary catches it (folder 17).",
