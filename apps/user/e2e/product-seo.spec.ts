@@ -5,6 +5,7 @@ import vi from '../messages/vi.json';
 
 import {
   adminApi,
+  adminUrlFor,
   createProduct,
   deleteProduct,
   deleteStaleProducts,
@@ -33,8 +34,8 @@ let hidden: CreatedProduct;
 /** What beforeAll created, deleted in afterAll even when beforeAll stops half-way. */
 const created: CreatedProduct[] = [];
 
-test.beforeAll(async () => {
-  api = await adminApi();
+test.beforeAll(async ({}, testInfo) => {
+  api = await adminApi(adminUrlFor(testInfo.project.use.baseURL));
   await deleteStaleProducts(api);
   const create = async (input: ProductInput) => {
     const product = await createProduct(api, input);
@@ -126,7 +127,12 @@ test('AC27 keeps the first 160 characters of a long description in the meta desc
 
   await expect(page.locator('meta[name="description"]')).toHaveAttribute(
     'content',
-    Array.from(LONG_DESCRIPTION).slice(0, 160).join('').trimEnd(),
+    // Graphemes, as the rule counts: a letter with its marks is one, however it is encoded.
+    Array.from(new Intl.Segmenter('vi', { granularity: 'grapheme' }).segment(LONG_DESCRIPTION))
+      .slice(0, 160)
+      .map(({ segment }) => segment)
+      .join('')
+      .trimEnd(),
   );
 });
 
