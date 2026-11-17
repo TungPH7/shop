@@ -120,7 +120,7 @@ pnpm format:check # Prettier kiểm tra (dùng trong CI)
 ## 12. Server state (TanStack Query — enforce: review)
 
 - **Seam #1:** server state (data API) qua **TanStack Query**, tách hẳn client state (Redux — §13/folder 09). **KHÔNG** nhồi data API vào Redux store.
-- **QueryClient:** `createQueryClient` (factory, env-free) + `queryClient` (singleton) ở `src/lib/react-query/`. Defaults: `staleTime` 60s, `gcTime` 5m, **`retry: false`** (API layer §11 là nguồn retry duy nhất — tránh nhân đôi), `refetchOnWindowFocus: !DEV`, `refetchOnReconnect: true`, mutations `retry:false`.
+- **QueryClient:** `createQueryClient` (factory, env-free) + `queryClient` (singleton) ở `src/lib/react-query/`. Defaults: `staleTime` 60s, `gcTime` 5m, **`retry: false`** (API layer §11 là nguồn retry duy nhất — tránh nhân đôi), `refetchOnWindowFocus: !DEV`, `refetchOnReconnect: true`, mutations `retry: false` và `networkMode: 'always'` (NFR19, ST-004), lấy từ hằng `MUTATION_DEFAULTS`.
 - **Provider:** `QueryClientProvider` bọc `RouterProvider` trong `AppProvider`.
 - **Devtools:** `@tanstack/react-query-devtools` là **`devDependencies`**, render **lazy + chỉ `import.meta.env.DEV`** → tree-shaken khỏi prod (Vercel `bundle-dynamic-imports`).
 - **Query keys:** factory phân cấp ở `features/<x>/api/query-keys.ts` (`all`/`lists()`/`detail(id)`, `as const`) → invalidate chính xác theo cấp, không drift.
