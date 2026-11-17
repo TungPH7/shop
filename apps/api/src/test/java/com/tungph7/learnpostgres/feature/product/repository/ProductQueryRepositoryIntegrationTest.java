@@ -468,6 +468,21 @@ UPDATE app.products
   }
 
   @Test
+  void findSitemapPage_ordersByIdNotByInsertOrder_acrossTwoBlocks() {
+    UUID largeV4 = UUID.fromString("f47ac10b-58cc-4372-a567-0e02b2c3d479");
+    UUID smallV4 = UUID.fromString("0b7e8a3c-1d2f-4a5b-8c6d-7e8f9a0b1c2d");
+    String large = slugOf(insert(largeV4, "Áo cũ v0.2", 250_000L, minutes(1)));
+    String v7 = slugOf(insert("Áo thun cổ tròn", 250_000L, minutes(2)));
+    String small = slugOf(insert(smallV4, "Quần cũ v0.2", 450_000L, minutes(3)));
+
+    SitemapResult first = repository.findSitemapPage(0, 2);
+    SitemapResult second = repository.findSitemapPage(2, 2);
+
+    assertThat(first.items()).extracting(SitemapRow::slug).containsExactly(v7, small);
+    assertThat(second.items()).extracting(SitemapRow::slug).containsExactly(large);
+  }
+
+  @Test
   void findSitemapPage_withAnOffsetPastTheEnd_returnsNoRowButTheTotal() {
     insert("Áo thun cổ tròn", 250_000L, minutes(1));
 
@@ -544,8 +559,18 @@ UPDATE app.products
    * insert, as UUIDv7 do, so {@code id DESC} puts the last insert first.
    */
   private UUID insert(String name, long priceVnd, ProductStatus status, Instant createdAt) {
+    UUID id = new UUID(0x019a_0000_0000_7000L, 0x8000_0000_0000_0000L | (sequence + 1));
+    return insert(id, name, priceVnd, status, createdAt);
+  }
+
+  /** Inserts an {@code ACTIVE} product with a chosen id, such as a UUIDv4 from before v0.3.0. */
+  private UUID insert(UUID id, String name, long priceVnd, Instant createdAt) {
+    return insert(id, name, priceVnd, ProductStatus.ACTIVE, createdAt);
+  }
+
+  private UUID insert(
+      UUID id, String name, long priceVnd, ProductStatus status, Instant createdAt) {
     sequence++;
-    UUID id = new UUID(0x019a_0000_0000_7000L, 0x8000_0000_0000_0000L | sequence);
     jdbc.sql(
             """
             INSERT INTO app.products
