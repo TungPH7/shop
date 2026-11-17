@@ -61,10 +61,11 @@ export default defineConfig({
         // changes in coverage/lcov.info (SHOP-1). The root layout stays in for the same reason: its generateMetadata and
         // generateStaticParams are plain functions, tested in layout.test.tsx (SHOP-10). global-error.tsx stays in too:
         // a client component, rendered in global-error.test.tsx (SHOP-10). So do the error boundary of [locale], rendered
-        // in error.test.tsx, and the pages of the catalog under products/, from page.test.tsx (SHOP-18).
+        // in error.test.tsx, and the pages of the catalog under products/, from page.test.tsx (SHOP-18). sitemap.ts stays in
+        // as well: it reads the products on sale, tested in sitemap.test.ts (SHOP-33).
         'src/app/*locale*/!(products)/**/*',
         'src/app/*locale*/!(layout|error).{ts,tsx}',
-        'src/app/!(global-error).{ts,tsx}',
+        'src/app/!(global-error|sitemap).{ts,tsx}',
         'src/instrumentation.ts', // boot glue (nhánh E2E cover) — không unit-worthy
         'src/proxy.ts', // middleware next-intl — E2E cover (curl/Playwright)
       ],
