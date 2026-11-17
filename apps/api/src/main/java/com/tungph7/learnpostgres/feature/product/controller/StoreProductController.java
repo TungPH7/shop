@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
+import com.tungph7.learnpostgres.feature.product.dto.SitemapEntry;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProduct;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProductSummary;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
@@ -26,17 +27,23 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
- * The store API of products, {@code /api/products} and {@code /api/products/{slug}} (ADR-0003):
- * called only by the server of {@code user}, with {@code GET} and {@code HEAD} (NFR8). It shows
- * only {@code ACTIVE} products and takes no status parameter (NFR9). The API Contract is in the
- * plan of SHOP-7.
+ * The store API of products, {@code /api/products}, {@code /api/products/{slug}} and {@code
+ * /api/sitemap/products} (ADR-0003): called only by the server of {@code user}, with {@code GET}
+ * and {@code HEAD} (NFR8). It shows only {@code ACTIVE} products and takes no status parameter
+ * (NFR9). The API Contract is in the plan of SHOP-7.
  */
 @RestController
-@RequestMapping(StoreProductController.BASE_PATH)
 @Tag(name = "Store products", description = "The products shoppers see, for the user app")
 public class StoreProductController {
 
   static final String BASE_PATH = "/api/products";
+  static final String DETAIL_PATH = BASE_PATH + "/{slug}";
+
+  /**
+   * Outside {@link #BASE_PATH}, so that a product whose slug is {@code sitemap} keeps its page
+   * (ADR-0003).
+   */
+  static final String SITEMAP_PATH = "/api/sitemap/products";
 
   private static final String SLUG_DESCRIPTION = "Slug of the product, compared ignoring case";
   private static final String NOT_FOUND_DESCRIPTION =
@@ -53,7 +60,7 @@ public class StoreProductController {
    * One page of the {@code ACTIVE} products, newest first. An invalid parameter is a 400 {@code
    * INVALID_PARAMETER} that names it (NFR3); an unknown one, such as {@code status}, is ignored.
    */
-  @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
+  @GetMapping(path = BASE_PATH, produces = MediaType.APPLICATION_JSON_VALUE)
   @Operation(
       summary = "List the products of the store",
       description =
@@ -81,8 +88,42 @@ public class StoreProductController {
     return service.list(offset, limit);
   }
 
+  /**
+   * One block of the sitemap: the slug and last update of {@code ACTIVE} products, in the order of
+   * their ids (SHOP-32). {@code user} reads every block for its {@code sitemap.xml} (AC28). An
+   * invalid parameter is a 400 {@code INVALID_PARAMETER} that names it (NFR3); an unknown one, such
+   * as {@code status}, is ignored (NFR9).
+   */
+  @GetMapping(path = SITEMAP_PATH, produces = MediaType.APPLICATION_JSON_VALUE)
+  @Operation(
+      summary = "List the products of the sitemap",
+      description =
+          "The slug and last update of the ACTIVE products, in the order of their ids, so that a"
+              + " product added between two blocks goes to the last one. A status parameter is"
+              + " ignored. An invalid offset or limit is a 400 INVALID_PARAMETER naming it.")
+  @ApiResponse(responseCode = "200", description = "OK")
+  @ApiResponse(
+      responseCode = "400",
+      description = "INVALID_PARAMETER: a parameter of the wrong type or out of range",
+      content =
+          @Content(
+              mediaType = "application/problem+json",
+              schema = @Schema(ref = "#/components/schemas/ProblemDetail")))
+  public ProductPage<SitemapEntry> sitemap(
+      @Parameter(description = "Products to skip, 0 or more")
+          @RequestParam(name = "offset", defaultValue = "0")
+          @Min(0)
+          int offset,
+      @Parameter(description = "Products of the block, 1 to 1000")
+          @RequestParam(name = "limit", defaultValue = "1000")
+          @Min(1)
+          @Max(ProductQueryRepository.MAX_SITEMAP_LIMIT)
+          int limit) {
+    return service.sitemap(offset, limit);
+  }
+
   /** The {@code ACTIVE} product with this slug; any other is a 404 {@code PRODUCT_NOT_FOUND}. */
-  @GetMapping(path = "/{slug}", produces = MediaType.APPLICATION_JSON_VALUE)
+  @GetMapping(path = DETAIL_PATH, produces = MediaType.APPLICATION_JSON_VALUE)
   @Operation(
       summary = "Get a product of the store",
       description =
@@ -115,7 +156,7 @@ public class StoreProductController {
    * <p>The 404 is built here rather than thrown: a thrown {@code PRODUCT_NOT_FOUND} would write the
    * Problem body of the GET, and a {@code HEAD} response has none.
    */
-  @RequestMapping(path = "/{slug}", method = RequestMethod.HEAD)
+  @RequestMapping(path = DETAIL_PATH, method = RequestMethod.HEAD)
   @Operation(
       summary = "Check that a product of the store exists",
       description = "As the GET of the same path, with no body: 200 or 404 PRODUCT_NOT_FOUND.")

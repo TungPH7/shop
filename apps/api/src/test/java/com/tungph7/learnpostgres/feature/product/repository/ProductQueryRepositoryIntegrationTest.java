@@ -1,6 +1,7 @@
 package com.tungph7.learnpostgres.feature.product.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
@@ -36,6 +37,8 @@ import com.tungph7.learnpostgres.feature.product.domain.ProductSort;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Criteria;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Result;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Row;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.SitemapResult;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.SitemapRow;
 
 /**
  * The list queries of {@link ProductQueryRepository} on schema V4 (Testcontainers PostgreSQL 17).
@@ -413,8 +416,104 @@ UPDATE app.products
   }
 
   // ============================================================
+  // Sitemap (SHOP-32): ACTIVE only, by id, two statements
+  // ============================================================
+
+  @Test
+  void findSitemapPage_listsOnlyActiveProducts_inTheOrderOfTheirIds() {
+    UUID first = insert("Áo thun cổ tròn", 250_000L, minutes(3));
+    insert("Bao tay len", 90_000L, ProductStatus.HIDDEN, minutes(2));
+    UUID third = insert("Quần jean nam", 450_000L, minutes(1));
+
+    SitemapResult result = repository.findSitemapPage(0, 1_000);
+
+    assertThat(result.items())
+        .extracting(SitemapRow::slug)
+        .containsExactly(slugOf(first), slugOf(third));
+    assertThat(result.totalItems()).isEqualTo(2);
+  }
+
+  @Test
+  void findSitemapPage_readsTheSlugAsSavedAndTheLastUpdate() {
+    UUID id = insert("Áo thun cổ tròn", 250_000L, minutes(7));
+    jdbc.sql("UPDATE app.products SET slug = 'Ao-Thun-Cu' WHERE id = :id").param("id", id).update();
+    Instant updatedAt =
+        jdbc.sql("SELECT updated_at FROM app.products WHERE id = :id")
+            .param("id", id)
+            .query(Timestamp.class)
+            .single()
+            .toInstant();
+
+    SitemapResult result = repository.findSitemapPage(0, 1_000);
+
+    assertThat(result.items()).containsExactly(new SitemapRow("Ao-Thun-Cu", updatedAt));
+  }
+
+  @Test
+  void findSitemapPage_pagesThroughEveryActiveProductWithoutRepeatOrGap() {
+    List<String> active = new ArrayList<>();
+    for (int i = 1; i <= 25; i++) {
+      active.add(slugOf(insert("Áo thun " + i, 100_000L, minutes(1))));
+      insert("Ẩn " + i, 100_000L, ProductStatus.HIDDEN, minutes(1));
+    }
+
+    List<String> slugs = new ArrayList<>();
+    for (int offset = 0; offset < 25; offset += 10) {
+      SitemapResult page = repository.findSitemapPage(offset, 10);
+      assertThat(page.totalItems()).isEqualTo(25);
+      page.items().forEach(row -> slugs.add(row.slug()));
+    }
+
+    assertThat(slugs).containsExactlyElementsOf(active);
+  }
+
+  @Test
+  void findSitemapPage_withAnOffsetPastTheEnd_returnsNoRowButTheTotal() {
+    insert("Áo thun cổ tròn", 250_000L, minutes(1));
+
+    SitemapResult result = repository.findSitemapPage(1_000, 1_000);
+
+    assertThat(result.items()).isEmpty();
+    assertThat(result.totalItems()).isEqualTo(1);
+  }
+
+  @Test
+  void findSitemapPage_runsExactlyTwoStatements_aPageAndATotal() {
+    for (int i = 1; i <= 30; i++) {
+      insert("Áo thun " + i, 100_000L, minutes(i));
+    }
+    AtomicInteger statements = new AtomicInteger();
+    ProductQueryRepository counted = countingRepository(statements);
+
+    SitemapResult result = counted.findSitemapPage(0, 1_000);
+
+    assertThat(result.items()).hasSize(30);
+    assertThat(statements).hasValue(2);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, -1, 1_001})
+  void findSitemapPage_withALimitOutOfRange_fails(int limit) {
+    assertThatThrownBy(() -> repository.findSitemapPage(0, limit))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void findSitemapPage_withANegativeOffset_fails() {
+    assertThatThrownBy(() -> repository.findSitemapPage(-1, 1_000))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  // ============================================================
   // Helpers
   // ============================================================
+
+  private String slugOf(UUID id) {
+    return jdbc.sql("SELECT slug::text FROM app.products WHERE id = :id")
+        .param("id", id)
+        .query(String.class)
+        .single();
+  }
 
   private Result search(String q, ProductSort sort) {
     return repository.findPage(new Criteria(terms(q), EVERY_STATUS, sort, 0, 24));
