@@ -2,6 +2,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 
 import {
   adminApi,
+  adminUrlFor,
   createProduct,
   deleteProduct,
   deleteStaleProducts,
@@ -59,8 +60,10 @@ type Locale = keyof typeof COPY;
 
 let api: APIRequestContext;
 
-test.beforeAll(async () => {
-  api = await adminApi();
+// The admin of the catalog the pages of the project read: the one started here for user-local, whose tests run on the
+// apps started here; that of the environment otherwise (QA of SHOP-28).
+test.beforeAll(async ({}, testInfo) => {
+  api = await adminApi(adminUrlFor(testInfo.project.use.baseURL));
   await deleteStaleProducts(api);
 });
 
@@ -662,11 +665,13 @@ test.describe('AC23 no product', () => {
     });
   }
 
-  // Development always has products on sale: only the apps started here can have none (SPEC, Testing Strategy).
+  // The test runs on the apps started here (SPEC, Testing Strategy), even on an environment: it counts the products on
+  // sale through `api`, the admin started here, whose api the page reads, never through the admin of the environment,
+  // whose catalog says nothing of this one (QA of SHOP-28).
   test(
     'AC23 says "Chưa có sản phẩm nào." when no product is on sale',
     { tag: '@local' },
-    async ({ page }) => {
+    async ({ page, baseURL }) => {
       const response = await api.get('/api/admin/products', {
         params: { status: 'ACTIVE', offset: 0, limit: 1 },
       });
@@ -674,7 +679,10 @@ test.describe('AC23 no product', () => {
       const { totalItems } = (await response.json()) as { totalItems: number };
       // The test hides and deletes no product it did not create (NFR23), so it needs a catalog with none on sale.
       // The local database, or tests running beside this one, may hold some.
-      test.skip(totalItems > 0, `reason: ${totalItems} local product(s) on sale; AC23 needs none`);
+      test.skip(
+        totalItems > 0,
+        `reason: ${totalItems} product(s) on sale in the catalog of ${adminUrlFor(baseURL)}, which ${baseURL} reads; AC23 needs none`,
+      );
 
       await expect(async () => {
         await page.goto('/vi/products');
