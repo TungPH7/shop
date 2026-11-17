@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs';
+
 import { type APIRequestContext, request } from '@playwright/test';
+import { parse } from 'yaml';
 
 // Where the E2E tests of admin run (TW5 of docs/specs/SHOP-7/spec.md). On an environment, Development or Staging,
 // Playwright points baseURL at its URL; here, at the app it starts on localhost. A test that only works against the
@@ -12,10 +15,24 @@ export const isLocal = (url?: string): boolean => url?.startsWith('http://localh
 // the run. Basic auth goes to its origin only, as playwright.config.ts does.
 const OFFSET = Number(process.env['AO_PORT_OFFSET'] ?? 0) || 0;
 
+/**
+ * The port of the user app here: its default in .ai-orchestrator/project.yaml, where
+ * playwright.config.ts reads it to start the app, moved by the offset of the run.
+ */
+function localUserPort(): number {
+  const project = new URL('../../../../.ai-orchestrator/project.yaml', import.meta.url);
+  const config = parse(readFileSync(project, 'utf8')) as {
+    apps?: { user?: { port?: { default?: number } } };
+  };
+  const port = config.apps?.user?.port?.default;
+  if (port === undefined) throw new Error(`${project.pathname} names no port for the user app`);
+  return port + OFFSET;
+}
+
 // An empty E2E_USER_URL, as a CI variable left blank, counts as none.
 const USER_URL = process.env['E2E_USER_URL'];
 export const userUrl =
-  USER_URL !== undefined && USER_URL !== '' ? USER_URL : `http://localhost:${3000 + OFFSET}`;
+  USER_URL !== undefined && USER_URL !== '' ? USER_URL : `http://localhost:${localUserPort()}`;
 
 /** A request context on the user app. Dispose of it when done. */
 export function userRequest(): Promise<APIRequestContext> {
