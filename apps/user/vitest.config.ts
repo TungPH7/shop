@@ -61,12 +61,12 @@ export default defineConfig({
         // changes in coverage/lcov.info (SHOP-1). The root layout stays in for the same reason: its generateMetadata and
         // generateStaticParams are plain functions, tested in layout.test.tsx (SHOP-10). global-error.tsx stays in too:
         // a client component, rendered in global-error.test.tsx (SHOP-10). So do the error boundary of [locale], rendered
-        // in error.test.tsx, and the pages of the catalog under products/, from page.test.tsx (SHOP-18).
-        'src/app/*locale*/!(products)/**/*',
+        // in error.test.tsx, and the pages of the catalog under products/, from page.test.tsx (SHOP-18), and product-not-found/,
+        // where the Proxy rewrites a product the api does not have (SHOP-24).
+        'src/app/*locale*/!(products|product-not-found)/**/*',
         'src/app/*locale*/!(layout|error).{ts,tsx}',
         'src/app/!(global-error).{ts,tsx}',
         'src/instrumentation.ts', // boot glue (nhánh E2E cover) — không unit-worthy
-        'src/proxy.ts', // middleware next-intl — E2E cover (curl/Playwright)
       ],
       // ⭐ Ngưỡng = SÀN chống-tụt (ratchet), đặt DƯỚI baseline đo thực (folder 25; folder 05 hoãn tới
       // đây). Server-first có unit-% THẤP hơn SPA sibling BẢN CHẤT: nhiều logic nằm ở async RSC do E2E
