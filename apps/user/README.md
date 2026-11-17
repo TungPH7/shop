@@ -15,10 +15,10 @@ NFR13): token, font Be Vietnam Pro và class dùng chung ở `src/styles/`, mô 
 [docs/design-system/user.md](../../docs/design-system/user.md). Lớp UI adapter của lộ trình cũ (UI contract
 `@ui`, shadcn/Antd, Storybook) không làm nữa.
 
-|                 |                                                                                                          |
-| --------------- | -------------------------------------------------------------------------------------------------------- |
-| **Nhánh chính** | `main` · nhánh phát triển hiện tại `base-1/core-and-ui-agnostic`                                         |
-| **Đọc tiếp**    | [Quy ước codebase](docs/conventions.md) · [Tài liệu "vì sao" từng bước](study-guide-impl/build-project/) |
+|                 |                                                                  |
+| --------------- | ---------------------------------------------------------------- |
+| **Nhánh chính** | `main` · nhánh phát triển hiện tại `base-1/core-and-ui-agnostic` |
+| **Đọc tiếp**    | [Quy ước codebase](docs/coding-conventions/)                     |
 
 ---
 
@@ -267,8 +267,7 @@ Trong output của `build`, ký hiệu `◐` cạnh mỗi route nghĩa là route
 phần động stream sau) — đây là tiêu chí phải giữ khi thêm tính năng mới.
 
 > ⚠️ Deploy thật **bắt buộc Node runtime** (Vercel / self-host `next start` / Docker `output: 'standalone'`).
-> `cacheComponents` + PPR **không** hỗ trợ static export và edge runtime. Chi tiết:
-> [`study-guide-impl/build-project/25-ci-cd/04-cd-reference.md`](study-guide-impl/build-project/25-ci-cd/).
+> `cacheComponents` + PPR **không** hỗ trợ static export và edge runtime.
 
 ---
 
@@ -298,7 +297,6 @@ src/
 e2e/                      # Playwright specs
 messages/                 # en.json · vi.json (i18n)
 docs/coding-conventions/  # LUẬT của codebase (SSOT); docs/conventions.md chỉ là nhật ký build
-study-guide-impl/          # tài liệu "vì sao" cho từng bước 00–25
 ```
 
 **Quy tắc phụ thuộc — một chiều, được ESLint chặn tự động:**
@@ -317,8 +315,8 @@ Cần dùng chung cho 2 feature → **nâng lên `shared`** hoặc **ghép ở `
 
 ## 8. Quy ước quan trọng
 
-Bản đầy đủ (25 mục, có giải thích "vì sao") ở **[`docs/conventions.md`](docs/conventions.md)**. Bảy điều
-cần nhớ ngay:
+Luật đầy đủ, có giải thích "vì sao", ở **[`docs/coding-conventions/`](docs/coding-conventions/)**. Bảy điều cần
+nhớ ngay:
 
 - **Server Component là mặc định** — `"use client"` là ngoại lệ, đặt càng sâu (leaf) càng tốt.
 - **Import qua alias `~/...`** (→ `src/`), không bao giờ `../../../`. **Không có barrel file** (`index.ts` bị cấm).
@@ -452,13 +450,11 @@ công khai (Home, About, Products, Caching, Error demo) **vẫn chạy đầy đ
 
 README này cố tình **ngắn**. Chi tiết nằm ở:
 
-| Tài liệu                                                                                                   | Nội dung                                                                         |
-| ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| [`docs/conventions.md`](docs/conventions.md)                                                               | **Luật của codebase** (25 mục) + cách enforce bằng máy. Đọc trước khi viết code. |
-| [`study-guide-impl/build-project/00-overview/`](study-guide-impl/build-project/00-overview/)               | Triết lý, mô hình server-first, 7 seam kiến trúc, chiến lược phase               |
-| [`study-guide-impl/build-project/23-feature-example/`](study-guide-impl/build-project/23-feature-example/) | **Công thức thêm feature mới** + ma trận truy vết + Definition of Done           |
-| [`study-guide-impl/build-project/<01–25>/`](study-guide-impl/build-project/)                               | "Vì sao" của từng quyết định, theo đúng thứ tự đã build                          |
-| [`.env.example`](.env.example)                                                                             | Template env — liệt kê mọi biến kèm giải thích                                   |
+| Tài liệu                                               | Nội dung                                                                       |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| [`docs/coding-conventions/`](docs/coding-conventions/) | **Luật của codebase** (SSOT) + cách enforce bằng máy. Đọc trước khi viết code. |
+| [`docs/conventions.md`](docs/conventions.md)           | Nhật ký build, không phải luật                                                 |
+| [`.env.example`](.env.example)                         | Template env — liệt kê mọi biến kèm giải thích                                 |
 
 **Lộ trình tiếp theo:** các màn hình của Epic SHOP-7 (danh mục sản phẩm), dựng trên design system CSS thường
 ([docs/design-system/user.md](../../docs/design-system/user.md)). Lớp UI adapter của Phase 1.2 cũ (UI contract
