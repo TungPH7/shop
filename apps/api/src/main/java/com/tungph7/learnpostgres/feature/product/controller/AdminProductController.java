@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -23,6 +24,7 @@ import com.tungph7.learnpostgres.feature.product.dto.AdminProductSummary;
 import com.tungph7.learnpostgres.feature.product.dto.CreateProductRequest;
 import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
 import com.tungph7.learnpostgres.feature.product.dto.ProductStatusFilter;
+import com.tungph7.learnpostgres.feature.product.dto.UpdateProductRequest;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
 import com.tungph7.learnpostgres.feature.product.service.AdminProductService;
 
@@ -114,6 +116,77 @@ public class AdminProductController {
           @Max(ProductQueryRepository.MAX_LIMIT)
           int limit) {
     return service.list(q, status, offset, limit);
+  }
+
+  /**
+   * One product, whatever its status, for the edit form: 200, or 404 when no product has the id.
+   */
+  @GetMapping(path = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
+  @Operation(
+      summary = "Get a product",
+      description =
+          "Returns the product of every status, hidden too, with the version to send back.")
+  @ApiResponse(responseCode = "200", description = "OK")
+  @ApiResponse(
+      responseCode = "400",
+      description = "INVALID_PARAMETER: the id is not a UUID",
+      content =
+          @Content(
+              mediaType = "application/problem+json",
+              schema = @Schema(ref = "#/components/schemas/ProblemDetail")))
+  @ApiResponse(
+      responseCode = "404",
+      description = "PRODUCT_NOT_FOUND: no product has this id",
+      content =
+          @Content(
+              mediaType = "application/problem+json",
+              schema = @Schema(ref = "#/components/schemas/ProblemDetail")))
+  public AdminProduct get(@PathVariable("id") UUID id) {
+    return service.get(id);
+  }
+
+  /**
+   * Edits a product with every field: 200 with the product and its new version. The checks and
+   * their order are those of {@link AdminProductService#update}.
+   */
+  @PutMapping(path = "/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
+  @Operation(
+      summary = "Edit a product",
+      description =
+          "Checks every field against the Product Rules; the price is always 1-999999999. A slug"
+              + " equal to the stored one, ignoring case, is kept without checking its format; a"
+              + " changed slug must have the format (400 on the field slug) and be free (409"
+              + " PRODUCT_SLUG_DUPLICATED). A version other than the stored one is a 409"
+              + " OPTIMISTIC_LOCK_CONFLICT, and nothing is written.")
+  @ApiResponse(responseCode = "200", description = "OK, with the new version")
+  @ApiResponse(
+      responseCode = "400",
+      description =
+          "VALIDATION_FAILED with errors, one per invalid field; INVALID_PARAMETER when the id is"
+              + " not a UUID",
+      content =
+          @Content(
+              mediaType = "application/problem+json",
+              schema = @Schema(ref = "#/components/schemas/ProblemDetail")))
+  @ApiResponse(
+      responseCode = "404",
+      description = "PRODUCT_NOT_FOUND: no product has this id",
+      content =
+          @Content(
+              mediaType = "application/problem+json",
+              schema = @Schema(ref = "#/components/schemas/ProblemDetail")))
+  @ApiResponse(
+      responseCode = "409",
+      description =
+          "OPTIMISTIC_LOCK_CONFLICT: the product was edited since the version sent was read;"
+              + " PRODUCT_SLUG_DUPLICATED: another product has the new slug",
+      content =
+          @Content(
+              mediaType = "application/problem+json",
+              schema = @Schema(ref = "#/components/schemas/ProblemDetail")))
+  public AdminProduct update(
+      @PathVariable("id") UUID id, @Valid @RequestBody UpdateProductRequest request) {
+    return service.update(id, request);
   }
 
   /**
