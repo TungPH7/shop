@@ -1,9 +1,10 @@
 'use client';
 
 import {
+  useEffect,
   useId,
   useOptimistic,
-  useState,
+  useRef,
   useTransition,
   type ChangeEvent,
   type FormEvent,
@@ -35,6 +36,7 @@ import { getPathname, useRouter } from '~/i18n/navigation';
  * - The sort is a native `<select>` with a visible label, applied as soon as it changes, without scrolling. Relevance
  *   is an option only while searching (AC20). While the new products are on their way, the select shows the choice.
  * - The field shows the keyword of the URL (AC18), and follows it when the URL changes, as after Clear search (S4.8).
+ *   It is not controlled, so words typed before React takes over the page are kept, not reset by the hydration.
  */
 export function ProductFilters({ query }: { query: ProductQuery }) {
   const t = useTranslations('Products');
@@ -43,19 +45,22 @@ export function ProductFilters({ query }: { query: ProductQuery }) {
   const id = useId();
   const [, startTransition] = useTransition();
   const [sort, showSort] = useOptimistic(query.sort);
-  const [keyword, setKeyword] = useState(query.q);
-  const [keywordOfUrl, setKeywordOfUrl] = useState(query.q);
-  if (keywordOfUrl !== query.q) {
-    setKeywordOfUrl(query.q);
-    setKeyword(query.q);
-  }
+  const field = useRef<HTMLInputElement>(null);
+  const keywordShown = useRef(query.q);
+
+  useEffect(() => {
+    if (keywordShown.current === query.q) return;
+    keywordShown.current = query.q;
+    if (field.current) field.current.value = query.q;
+  }, [query.q]);
 
   // A sort the visitor chose: in the URL, so in the form; the default of the search is not.
   const chosenSort = parseProductQuery({ q: query.q }).sort === query.sort ? null : query.sort;
 
   const search = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    startTransition(() => router.push(searchHref(query, keyword)));
+    const typed = new FormData(event.currentTarget).get('q');
+    startTransition(() => router.push(searchHref(query, typeof typed === 'string' ? typed : '')));
   };
 
   const changeSort = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -84,8 +89,8 @@ export function ProductFilters({ query }: { query: ProductQuery }) {
           className="input search__input"
           type="search"
           name="q"
-          value={keyword}
-          onChange={(event) => setKeyword(event.target.value)}
+          ref={field}
+          defaultValue={query.q}
           placeholder={t('searchPlaceholder')}
           maxLength={MAX_KEYWORD_LENGTH}
           enterKeyHint="search"
