@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
-import { PAGE_SIZE, parseProductQuery, productsHref } from './product-query';
+import { nextProductsHref, PAGE_SIZE, parseProductQuery, productsHref } from './product-query';
 
 describe('parseProductQuery', () => {
   test('defaults page to 1 when the URL has none', () => {
@@ -38,6 +38,24 @@ describe('productsHref', () => {
 
   test('writes any other page', () => {
     expect(productsHref({ page: 2 })).toBe('/products?page=2');
+  });
+});
+
+describe('nextProductsHref', () => {
+  test('asks for the page after the one shown while products are left', () => {
+    expect(nextProductsHref({ page: 1 }, { shown: 24, totalItems: 30, complete: true })).toBe(
+      '/products?page=2',
+    );
+  });
+
+  test('offers nothing once every product is shown', () => {
+    expect(nextProductsHref({ page: 2 }, { shown: 30, totalItems: 30, complete: true })).toBeNull();
+  });
+
+  test('asks again for the page of the URL after a block failed', () => {
+    expect(nextProductsHref({ page: 5 }, { shown: 96, totalItems: 300, complete: false })).toBe(
+      '/products?page=5',
+    );
   });
 });
 

@@ -721,6 +721,27 @@ select.input option {
   }
 }
 
+/* --- Product not found S6 (src/features/product/components/product-not-found.tsx, SHOP-24) ----- */
+
+/* One glass card in the middle of the page, the same layout on a phone: the title, the line, then the link to S4. */
+.product-not-found__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: flex-start;
+  max-width: 36rem;
+  margin: 0 auto;
+}
+
+.product-not-found__card h1,
+.product-not-found__card p {
+  margin: 0;
+}
+
+.product-not-found__card p {
+  color: var(--muted-foreground);
+}
+
 /* --- Products page S4 (SHOP-25) --------------------------------------------- */
 
 /* Wider than the 48rem of other pages: the frame's width, for up to 4 columns. */
@@ -760,6 +781,15 @@ select.input option {
   display: grid;
 }
 
+/* While the products load (S4.5, loading): 8 skeleton cards, in a list that reaches past the bottom of the screen, as
+   the 24 cards of the first load do. Under a shorter list the footer showed, and the products then pushed it down: a
+   layout shift of 0.05 to 0.11 on wide screens (CLS of NFR4, QA of SHOP-25). lvh, the largest viewport, so the footer
+   stays below it with or without the address bar of a phone; the rows keep their size at the top. */
+.product-grid[aria-busy='true'] {
+  align-content: start;
+  min-height: 100lvh;
+}
+
 /* S4.6: a glass card that is one link. The stock badge comes last in the markup, for the order a screen reader reads,
    and sits over the top left of the tile. Hover lifts the card 2px and lights its edge. */
 .product-card {
@@ -774,7 +804,8 @@ select.input option {
     box-shadow var(--dur-fast) var(--ease);
 }
 
-.product-card:hover {
+/* Only the link: the skeleton cards share .product-card for their size, and do not move. */
+a.product-card:hover {
   box-shadow:
     var(--card-shadow),
     inset 0 0 0 1px var(--border-strong);

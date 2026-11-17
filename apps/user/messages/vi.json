@@ -147,6 +147,15 @@
     "outOfStock": "Hết hàng",
     "description": "Mô tả"
   },
+  "ProductNotFound": {
+    "title": "Không tìm thấy sản phẩm",
+    "description": "Sản phẩm này không tồn tại hoặc không còn được bán.",
+    "viewAll": "Xem tất cả sản phẩm"
+  },
+  "ProductUnavailable": {
+    "title": "Tạm thời không tải được sản phẩm",
+    "description": "Cửa hàng đang gặp sự cố. Vui lòng tải lại trang sau ít phút."
+  },
   "ErrorDemo": {
     "title": "Demo xử lý lỗi",
     "intro": "Mỗi liên kết kích hoạt một loại lỗi khác nhau để thấy ranh giới nào bắt nó (folder 17).",

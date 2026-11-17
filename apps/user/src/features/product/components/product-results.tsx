@@ -3,7 +3,7 @@ import { getTranslations } from 'next-intl/server';
 
 import { LoadMoreButton } from '~/features/product/components/load-more-button';
 import { ProductCard } from '~/features/product/components/product-card';
-import { PAGE_SIZE, parseProductQuery, productsHref } from '~/features/product/model/product-query';
+import { nextProductsHref, parseProductQuery } from '~/features/product/model/product-query';
 import { getStoreProducts } from '~/features/product/server/get-products';
 
 /** The id of the grid, for Load more to move the focus to the first new card. */
@@ -41,13 +41,7 @@ export async function ProductResults({
     );
   }
 
-  // After a failed block, Load more asks again for the page of the URL; otherwise for the page after the one shown.
-  const shownPage = Math.ceil(items.length / PAGE_SIZE);
-  const nextHref = !complete
-    ? productsHref(query)
-    : items.length < totalItems
-      ? productsHref({ ...query, page: shownPage + 1 })
-      : null;
+  const nextHref = nextProductsHref(query, { shown: items.length, totalItems, complete });
 
   return (
     <>

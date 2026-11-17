@@ -119,16 +119,17 @@ database `${POSTGRES_DB}`:
 
 `app.gen_uuid_v7()` gọi `public.gen_random_bytes()` của `pgcrypto` (V5). V6 kiểm hàm đó có thật,
 nếu không thì dừng lần deploy; Flyway rollback riêng V6, database ở lại V5 và bản cũ vẫn chạy.
-Đọc thông báo lỗi rồi sửa database bằng role có quyền tạo extension, sau đó deploy lại:
+Log deploy chỉ có thông báo chính của lỗi, không có Hint (xem 4.2); thông báo đó đủ để biết
+`pgcrypto` đang ở đâu. Sửa database bằng role có quyền tạo extension, sau đó deploy lại:
 
 - **`pgcrypto` nằm ở schema khác**, thông báo ghi `is in schema "<tên>", not "public"`: chuyển
-  nó về `public`, như Hint của lỗi:
+  nó về `public`:
 
   ```sql
   ALTER EXTENSION pgcrypto SET SCHEMA public;
   ```
-- **`pgcrypto` chưa cài**, thông báo ghi `is in schema "(not installed)"`: Hint của V6 lúc đó
-  bảo `ALTER EXTENSION … SET SCHEMA`, lệnh này lỗi vì extension không có. Cài nó vào `public`:
+- **`pgcrypto` chưa cài**, thông báo ghi `is in schema "(not installed)"`: `ALTER EXTENSION … SET
+  SCHEMA` lỗi vì extension không có. Cài nó vào `public`:
 
   ```sql
   CREATE EXTENSION pgcrypto SCHEMA public;
@@ -136,6 +137,24 @@ nếu không thì dừng lần deploy; Flyway rollback riêng V6, database ở l
 
 Không sửa file V6 để đổi thông báo: V6 đã chạy trên các môi trường, và Flyway kiểm checksum của
 nó (SHOP-53).
+
+### 4.2. Log của một migration lỗi không có phần chi tiết
+
+`application.yml` đặt `logServerErrorDetail: false` cho driver PostgreSQL ở mọi profile (NFR12,
+SHOP-53; `ProfileLogLevelsTest` chặn profile nào bật lại). Driver khi đó chỉ giữ thông báo chính
+của lỗi, như tên constraint hay tên schema, và bỏ Detail, Hint, Where cùng các giá trị của câu
+lệnh, vì các phần đó có thể chứa dữ liệu của một dòng (`Failing row contains (…)`).
+
+Hệ quả cho vận hành: **mọi migration lỗi lúc deploy giờ chỉ để lại thông báo chính trong log của
+app**, không còn Detail hay Hint. Khi cần phần chi tiết, xem nó ở phía database, đừng bật lại
+`logServerErrorDetail` cho app:
+
+- **Log của PostgreSQL** ghi lỗi kèm `DETAIL` và `HINT` (mặc định `log_min_messages = warning`,
+  `log_error_verbosity = default`). Với compose của repo: `docker compose logs postgres`; với
+  database được quản lý, xem log của nhà cung cấp.
+- **Chạy lại câu lệnh lỗi bằng tay** với `psql`, bằng role của migration: `psql` in đủ `ERROR`,
+  `DETAIL` và `HINT`. Bọc trong `BEGIN; … ROLLBACK;` để không đổi gì database; với V6, chỉ cần khối
+  `DO $$ … $$` ở mục 1 của file, khối này không ghi gì.
 
 ---
 

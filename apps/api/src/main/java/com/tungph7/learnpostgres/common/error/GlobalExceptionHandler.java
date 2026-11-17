@@ -3,13 +3,11 @@ package com.tungph7.learnpostgres.common.error;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
 import jakarta.servlet.http.HttpServletRequest;
 
-import org.hibernate.exception.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.MessageSourceResolvable;
@@ -287,17 +285,19 @@ public class GlobalExceptionHandler {
    * <p>The log line names the constraint only (NFR12, SHOP-53): the message of a NOT NULL or CHECK
    * violation carries {@code Failing row contains (…)}, the values of the row, such as the name and
    * the description of a product.
+   *
+   * <p>The code and the log line read the same name, the one Hibernate gives the constraint ({@link
+   * ConstraintViolations}, SHOP-59), never the words of the driver message. Every write of the app
+   * goes through JPA, so Hibernate wraps each violation.
    */
   @ExceptionHandler(DataIntegrityViolationException.class)
   public ResponseEntity<ProblemDetail> handleDataIntegrity(
       DataIntegrityViolationException ex, HttpServletRequest request) {
-    String rootMsg = rootMessage(ex).toLowerCase(Locale.ROOT);
+    String constraint = ConstraintViolations.nameOf(ex).orElse("unknown");
 
-    // Branch on the constraint name when it is identifiable.
     ErrorCode code;
     String detail;
-    if (rootMsg.contains("products_slug_unique")
-        || (rootMsg.contains("unique") && rootMsg.contains("slug"))) {
+    if (ConstraintViolations.isViolationOf(ex, ConstraintViolations.PRODUCT_SLUG_UNIQUE)) {
       code = ErrorCode.PRODUCT_SLUG_DUPLICATED;
       detail = "Product slug already exists.";
     } else {
@@ -309,7 +309,7 @@ public class GlobalExceptionHandler {
         "Data integrity violation at {}: code={} constraint={}",
         request.getRequestURI(),
         code,
-        constraintName(ex));
+        constraint);
 
     ProblemDetail body = problemFactory.from(code, HttpStatus.CONFLICT, detail, request);
     return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
@@ -433,21 +433,6 @@ public class GlobalExceptionHandler {
     }
     return Objects.requireNonNullElse(
         parameter.getParameterName(), "arg" + parameter.getParameterIndex());
-  }
-
-  /**
-   * The name of the constraint the statement broke, as Hibernate read it from the error of the
-   * server, or {@code unknown}: never the message, which may carry values of the row. Every write
-   * of the app goes through JPA, so Hibernate wraps each violation.
-   */
-  private static String constraintName(Throwable t) {
-    for (Throwable cur = t; cur != null && cur.getCause() != cur; cur = cur.getCause()) {
-      if (cur instanceof ConstraintViolationException violation
-          && violation.getConstraintName() != null) {
-        return violation.getConstraintName();
-      }
-    }
-    return "unknown";
   }
 
   /** Finds the root-cause message — used for logging only, never echoed to the client. */
