@@ -79,12 +79,29 @@ export function discountPercent(price: number, compareAtPrice: number): number {
 const META_DESCRIPTION_LENGTH = 160;
 
 /**
+ * The description of a product as S5 tells it, unchanged, or `null` when it has none: missing, empty or only spaces,
+ * as a product written before descriptions were checked can have. The one rule of "no description" for the meta
+ * description and the JSON-LD (AC27), which both then use the sentence of the site.
+ */
+export function descriptionOf(description: string | null): string | null {
+  return description?.trim() ? description : null;
+}
+
+/** Characters as a reader sees them: a letter with its marks, an emoji joined with ZWJ or a flag is one. */
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/**
  * The meta description of S5 (AC27): the first 160 characters of the description, each run of line breaks and spaces
- * folded into one space. Characters are code points, so a letter or an emoji is never cut in half. `null` when there is
- * no description, and the page then uses its own sentence. HTML stays text: the Metadata API of Next escapes it (NFR11).
+ * folded into one space. Characters are graphemes, so a letter is never cut from its marks, even decomposed (NFD), and
+ * an emoji, a ZWJ sequence or a flag is never cut in half. `null` when there is no description (`descriptionOf`), and
+ * the page then uses its own sentence. HTML stays text: the Metadata API of Next escapes it (NFR11).
  */
 export function metaDescriptionOf(description: string | null): string | null {
-  const folded = description?.replace(/\s+/g, ' ').trim();
-  if (!folded) return null;
-  return Array.from(folded).slice(0, META_DESCRIPTION_LENGTH).join('').trimEnd();
+  const present = descriptionOf(description);
+  if (present === null) return null;
+  const folded = present.replace(/\s+/g, ' ').trim();
+  return Array.from(graphemes.segment(folded), ({ segment }) => segment)
+    .slice(0, META_DESCRIPTION_LENGTH)
+    .join('')
+    .trimEnd();
 }

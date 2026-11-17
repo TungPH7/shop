@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 
 import {
+  descriptionOf,
   discountPercent,
   formatPrice,
   isStoreSlug,
@@ -174,6 +175,22 @@ describe('metaDescriptionOf', () => {
     expect(metaDescriptionOf(description)).toBe(`${'a'.repeat(159)}😀`);
   });
 
+  test('never cuts a decomposed Vietnamese letter (NFD) from its marks', () => {
+    // ệ as e, U+0323 and U+0302: three code points, one letter, which is the 160th.
+    const letter = 'e\u0323\u0302';
+    const description = `${'a'.repeat(159)}${letter}bc`;
+
+    expect(metaDescriptionOf(description)).toBe(`${'a'.repeat(159)}${letter}`);
+  });
+
+  test('never cuts an emoji joined with ZWJ, nor a flag', () => {
+    const family = '👨\u200d👩\u200d👧';
+    const flag = '🇻🇳';
+
+    expect(metaDescriptionOf(`${'a'.repeat(159)}${family}b`)).toBe(`${'a'.repeat(159)}${family}`);
+    expect(metaDescriptionOf(`${'a'.repeat(159)}${flag}b`)).toBe(`${'a'.repeat(159)}${flag}`);
+  });
+
   test('ends on no space when the 160th character is one', () => {
     const description = `${'a'.repeat(159)} bcd`;
 
@@ -190,6 +207,21 @@ describe('metaDescriptionOf', () => {
     'is null for the description %j, so the page uses its own sentence',
     (description) => {
       expect(metaDescriptionOf(description)).toBeNull();
+    },
+  );
+});
+
+describe('descriptionOf', () => {
+  test('keeps a description as written, its line breaks and spaces too, for the JSON-LD (AC27)', () => {
+    expect(descriptionOf('  Áo thun cotton 100%.\nCổ tròn, tay ngắn.\n')).toBe(
+      '  Áo thun cotton 100%.\nCổ tròn, tay ngắn.\n',
+    );
+  });
+
+  test.each([null, '', '  ', '  \n\t '])(
+    'is null for the description %j, which is no description',
+    (description) => {
+      expect(descriptionOf(description)).toBeNull();
     },
   );
 });

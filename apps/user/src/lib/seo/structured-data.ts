@@ -96,7 +96,7 @@ export type ProductLdInput = {
 /**
  * `Product` of S5 (AC27): `name`, `description`, `url` and one `Offer` with the price as an integer of VND and the
  * availability. No `image`: a product shows a placeholder tile, not a picture (SPEC of SHOP-7, Ảnh giữ chỗ). Rendered
- * only through `JsonLd`, which turns `<` into `<` (NFR11).
+ * only through `JsonLd`, which turns `<` into `\u003c` (NFR11).
  */
 export function productLd({
   name,

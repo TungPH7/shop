@@ -190,6 +190,8 @@ function parseSitemap(xml: string): SitemapUrl[] {
 test('AC28 lists the products on sale in /sitemap.xml with hreflang vi, en and their last edit, and no hidden product', async ({
   request,
 }) => {
+  // The poll below waits up to the 60 s of NFR7: the test needs more than the default 30 s around it.
+  test.setTimeout(90_000);
   const pathOfLoc = (entry: SitemapUrl) => new URL(entry.loc).pathname;
   const productPaths = (slug: string) => [`/en/products/${slug}`, `/vi/products/${slug}`];
   let urls: SitemapUrl[] = [];
