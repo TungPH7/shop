@@ -9,9 +9,13 @@ import {
   createProduct,
   deleteProduct,
   deleteStaleProducts,
+  newRunId,
   type CreatedProduct,
   type ProductInput,
 } from './support/products';
+
+// The run id of this file only, in the names (so the slugs) of its products: see newRunId.
+const runId = newRunId();
 
 // The meta tags and JSON-LD of S5 (AC27) and the products of /sitemap.xml (AC28), SHOP-31, on the real api: each test
 // reads products this file creates through the admin API and deletes when done (NFR23). The tests share those products,
@@ -38,7 +42,7 @@ test.beforeAll(async ({}, testInfo) => {
   api = await adminApi(adminUrlFor(testInfo.project.use.baseURL));
   await deleteStaleProducts(api);
   const create = async (input: ProductInput) => {
-    const product = await createProduct(api, input);
+    const product = await createProduct(api, runId, input);
     created.push(product);
     return product;
   };

@@ -7,9 +7,12 @@ import {
   createProduct,
   deleteProduct,
   deleteStaleProducts,
-  runId,
+  newRunId,
   type CreatedProduct,
 } from './support/products';
+
+// The run id of this file only, in the names (so the slugs) of its products: see newRunId.
+const runId = newRunId();
 
 // S6, the product not found page of the store (SHOP-24: AC26), on the real api: a page load of the product detail page
 // answers HTTP 404 with S6, the same for a slug that never existed, a hidden product and a deleted one (NFR9). The tests
@@ -47,11 +50,11 @@ const neverExisted = `khong-co-san-pham-${runId}`;
 test.beforeAll(async ({}, testInfo) => {
   api = await adminApi(adminUrlFor(testInfo.project.use.baseURL));
   await deleteStaleProducts(api);
-  onSale = await createProduct(api, { name: 'Mũ lưỡi trai', price: 150000 });
+  onSale = await createProduct(api, runId, { name: 'Mũ lưỡi trai', price: 150000 });
   created.push(onSale);
-  hidden = await createProduct(api, { name: 'Khăn quàng', price: 120000, status: 'HIDDEN' });
+  hidden = await createProduct(api, runId, { name: 'Khăn quàng', price: 120000, status: 'HIDDEN' });
   created.push(hidden);
-  deleted = await createProduct(api, { name: 'Găng tay len', price: 90000 });
+  deleted = await createProduct(api, runId, { name: 'Găng tay len', price: 90000 });
   await deleteProduct(api, deleted.id);
 });
 

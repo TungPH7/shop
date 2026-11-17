@@ -7,9 +7,13 @@ import {
   createProduct,
   deleteProduct,
   deleteStaleProducts,
+  newRunId,
   type CreatedProduct,
   type ProductInput,
 } from './support/products';
+
+// The run id of this file only, in the names (so the slugs) of its products: see newRunId.
+const runId = newRunId();
 
 // S5, the product detail page of the store (SHOP-21: AC24, AC25), on the real api: each test reads products this file
 // creates through the admin API and deletes when done (NFR23). The tests of a file share those products, so they run
@@ -37,7 +41,7 @@ test.beforeAll(async ({}, testInfo) => {
   api = await adminApi(adminUrlFor(testInfo.project.use.baseURL));
   await deleteStaleProducts(api);
   const create = async (input: ProductInput) => {
-    const product = await createProduct(api, input);
+    const product = await createProduct(api, runId, input);
     created.push(product);
     return product;
   };

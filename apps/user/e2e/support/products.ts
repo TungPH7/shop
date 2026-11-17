@@ -29,8 +29,15 @@ export function adminUrlFor(baseURL: string | undefined): string {
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
-/** Six random characters of this run, in the name of each of its products. */
-export const runId = Array.from({ length: 6 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('');
+/**
+ * Six random characters, in the name of each product of a spec file. Each file makes its own, at its top: a module is
+ * loaded once per worker, so a run id of this module would be the same for every file a worker runs, and two files
+ * naming a product alike would make the same slug. S5 of the second one would then show the page of the first, still in
+ * the catalog cache for 10 s (NFR7), as AC27 OutOfStock in vi did after product-detail.spec.ts in one worker.
+ */
+export function newRunId(): string {
+  return Array.from({ length: 6 }, () => ALPHABET[randomInt(ALPHABET.length)]).join('');
+}
 
 /** The label of an E2E product, at the end of its name so a name still starts with its words. */
 const E2E_LABEL = /\bE2E [a-z0-9]{6}$/;
@@ -70,9 +77,10 @@ export function adminApi(url: string): Promise<APIRequestContext> {
   });
 }
 
-/** Creates a product on sale, named `<name> E2E <runId>`; the api makes its slug from that name. */
+/** Creates a product on sale, named `<name> E2E <runId>` with the run id of its file; the api makes its slug from it. */
 export async function createProduct(
   api: APIRequestContext,
+  runId: string,
   input: ProductInput,
 ): Promise<CreatedProduct> {
   const response = await api.post('/api/admin/products', {
