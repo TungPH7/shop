@@ -25,6 +25,9 @@ import org.springframework.core.io.ClassPathResource;
  * from {@code root} to {@code org.hibernate.orm.jdbc.bind}, must stay at {@code INFO} or above
  * (SHOP-49). Spring Boot reads the names of the loggers and their levels ignoring case, and so does
  * this test.
+ *
+ * <p>Nor does any profile log a failed statement with its values (SHOP-51): {@code application.yml}
+ * turns {@code org.hibernate.orm.jdbc.error} off, and no profile turns it back on.
  */
 class ProfileLogLevelsTest {
 
@@ -44,12 +47,12 @@ class ProfileLogLevelsTest {
    * The logger with which Hibernate writes a failed statement with its values, such as the INSERT
    * of a product whose slug breaks {@code products_slug_unique} (SHOP-51).
    */
-  private static final String JDBC_ERROR_LOGGER = "logging.level.org.hibernate.orm.jdbc.error";
+  private static final String JDBC_ERROR_LOGGER = "org.hibernate.orm.jdbc.error";
 
   @Test
   void theBaseFileTurnsOffTheLoggerOfFailedStatements() {
     assertThat(levelsOf(JDBC_ERROR_LOGGER, load("application.yml")))
-        .containsExactly(Map.entry(JDBC_ERROR_LOGGER, "OFF"));
+        .containsExactly(Map.entry("logging.level." + JDBC_ERROR_LOGGER, "OFF"));
   }
 
   @ParameterizedTest
@@ -77,11 +80,7 @@ class ProfileLogLevelsTest {
         "application-prod.yml"
       })
   void noProfileLogsTheValuesBoundToSql(String file) {
-    YamlPropertiesFactoryBean yaml = new YamlPropertiesFactoryBean();
-    yaml.setResources(new ClassPathResource(file));
-    Properties properties = yaml.getObject();
-
-    assertThat(levelsOfTheBindLoggerChain(properties))
+    assertThat(levelsOfTheBindLoggerChain(load(file)))
         .allSatisfy(
             (logger, level) ->
                 assertThat(level.toUpperCase(Locale.ROOT)).as(logger).isIn(QUIET_LEVELS));
@@ -123,10 +122,10 @@ class ProfileLogLevelsTest {
   }
 
   /** The levels set on one logger, by property name, the names compared ignoring case. */
-  private static Map<String, String> levelsOf(String property, Properties properties) {
+  private static Map<String, String> levelsOf(String logger, Properties properties) {
     Map<String, String> levels = new TreeMap<>();
     for (String name : properties.stringPropertyNames()) {
-      if (name.equalsIgnoreCase(property)) {
+      if (name.equalsIgnoreCase("logging.level." + logger)) {
         levels.put(name, properties.getProperty(name));
       }
     }

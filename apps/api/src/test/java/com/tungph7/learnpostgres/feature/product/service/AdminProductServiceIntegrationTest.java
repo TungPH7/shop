@@ -350,11 +350,7 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
   @Test
   void create_whenTheGeneratedSlugIsTakenAfterTheCheck_retriesWithTheNextNumber() {
     create("Áo thun cổ tròn", null);
-    // The read runs before the other add commits, so it still sees every slug free.
-    doReturn(List.of())
-        .doAnswer(invocation -> slugsAmong(invocation.getArgument(0)))
-        .when(repository)
-        .findSlugsAmong(any(String[].class));
+    missTheTakenSlugsOnce();
 
     AdminProduct product = create("Áo thun cổ tròn", null);
 
@@ -436,11 +432,7 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
   void create_whenTheGeneratedSlugIsTakenAfterTheCheck_logsNoValueOfTheInsert(
       CapturedOutput output) {
     create("Ao thun SHOP51", null);
-    // The read runs before the other add commits, so it still sees every slug free.
-    doReturn(List.of())
-        .doAnswer(invocation -> slugsAmong(invocation.getArgument(0)))
-        .when(repository)
-        .findSlugsAmong(any(String[].class));
+    missTheTakenSlugsOnce();
 
     AdminProduct product =
         service.create(
@@ -454,7 +446,9 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
                 null));
 
     assertThat(product.slug()).isEqualTo("ao-thun-shop51-2");
+    // A line the test must see, so that it fails when no log is captured at all.
     assertThat(output.getOut())
+        .contains("Generated slug taken by another add")
         .doesNotContain("org.hibernate.orm.jdbc.error")
         .doesNotContain("Ao thun SHOP51")
         .doesNotContain("mo-ta-shop51-generated");
@@ -471,7 +465,9 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
                 + "\"description\":\"mo-ta-shop51-typed\",\"price\":200000}")
         .andExpect(status().isConflict());
 
+    // A line the test must see, so that it fails when no log is captured at all.
     assertThat(output.getOut())
+        .contains("Business 409 [PRODUCT_SLUG_DUPLICATED]")
         .doesNotContain("org.hibernate.orm.jdbc.error")
         .doesNotContain("Ao thun SHOP51 typed")
         .doesNotContain("mo-ta-shop51-typed");
@@ -519,6 +515,17 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
         .doAnswer(invocation -> slugExists(invocation.getArgument(0)))
         .when(repository)
         .existsBySlug(slug);
+  }
+
+  /**
+   * Makes the first read of the taken slugs see every slug free, as when the other add has not
+   * committed yet; the next reads see the database.
+   */
+  private void missTheTakenSlugsOnce() {
+    doReturn(List.of())
+        .doAnswer(invocation -> slugsAmong(invocation.getArgument(0)))
+        .when(repository)
+        .findSlugsAmong(any(String[].class));
   }
 
   /** The slugs among the given ones, ignoring case, read by the test outside the spied query. */
