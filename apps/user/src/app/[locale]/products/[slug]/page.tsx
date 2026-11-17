@@ -6,7 +6,7 @@ import { notFound } from 'next/navigation';
 
 import { JsonLd } from '~/components/seo/json-ld';
 import { ProductDetail, ProductDetailSkeleton } from '~/features/product/components/product-detail';
-import { metaDescriptionOf } from '~/features/product/model/product';
+import { descriptionOf, metaDescriptionOf } from '~/features/product/model/product';
 import { getStoreProduct } from '~/features/product/server/get-product';
 import { localizedUrl } from '~/lib/seo/alternates';
 import { buildPageMetadata } from '~/lib/seo/metadata';
@@ -64,9 +64,10 @@ export default function ProductPage({ params }: { params: Params }) {
 }
 
 /**
- * The product, and its JSON-LD `Product` (AC27): the full description, or the sentence of the site when it has none; the
- * address at the stored slug in the locale of the path. Rendered through `JsonLd`, which turns `<` into `<`, so a
- * description holding `</script>` cannot close the block (NFR11).
+ * The product, and its JSON-LD `Product` (AC27): the full description, or the sentence of the site when it has none
+ * (`descriptionOf`, the rule of the meta description too); the address at the stored slug in the locale of the path.
+ * Rendered through `JsonLd`, which turns `<` into `\u003c`, so a description holding `</script>` cannot close the
+ * block (NFR11).
  */
 async function StoreProductView({ params }: { params: Params }) {
   const { locale, slug } = await params;
@@ -80,7 +81,7 @@ async function StoreProductView({ params }: { params: Params }) {
       <JsonLd
         data={productLd({
           name: product.name,
-          description: product.description ?? t('siteDescription'),
+          description: descriptionOf(product.description) ?? t('siteDescription'),
           url: localizedUrl(locale, `/products/${product.slug}`),
           price: product.price,
           inStock: product.availability === 'IN_STOCK',

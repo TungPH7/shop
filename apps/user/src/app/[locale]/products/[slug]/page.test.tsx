@@ -155,6 +155,19 @@ test('gives the JSON-LD of an out-of-stock product with no description the sente
   });
 });
 
+test('gives the JSON-LD of a product with a blank description the sentence of the site, as its meta description', async () => {
+  // A blank description is no description, for the JSON-LD as for the meta description (review of PR #57).
+  getStoreProduct.mockResolvedValue({ ...shirt, description: '  ' });
+
+  const { ld } = await partsOf(Promise.resolve({ locale: 'vi', slug: 'ao-thun-co-tron' }));
+  const metadata = await generateMetadata({
+    params: Promise.resolve({ locale: 'vi', slug: 'ao-thun-co-tron' }),
+  });
+
+  expect(ld.props.data).toMatchObject({ description: SITE_DESCRIPTION });
+  expect(metadata.description).toBe(SITE_DESCRIPTION);
+});
+
 test('calls notFound when the store has no product at the slug', async () => {
   getStoreProduct.mockResolvedValue(null);
 
