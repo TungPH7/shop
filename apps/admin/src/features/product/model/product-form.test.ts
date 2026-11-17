@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
+import { type AdminProduct } from '@/features/product/model/product';
 import {
   parsePriceInput,
+  productEditSchema,
   productFormDefaults,
   productFormSchema,
+  productFormValuesOf,
   type ProductFormValues,
   slugFromName,
 } from '@/features/product/model/product-form';
@@ -222,5 +225,118 @@ describe('productFormSchema', () => {
         slug: 'slugFormat',
       });
     });
+  });
+});
+
+// S2 in edit mode (US3): the form starts from the saved product, and checks the slug
+// only when it differs from the saved one, as PUT /api/admin/products/{id} does (NFR16).
+const saved: AdminProduct = {
+  id: '019a8f2e-5b7c-7d10-9e3f-1a2b3c4d5e6f',
+  name: 'Áo thun cổ tròn',
+  slug: 'ao-thun-co-tron',
+  description: 'Áo thun cotton 100%.\nCổ tròn, tay ngắn.',
+  price: 250000,
+  compareAtPrice: null,
+  status: 'ACTIVE',
+  availability: 'IN_STOCK',
+  createdAt: '2026-11-16T02:10:00.000Z',
+  updatedAt: '2026-11-16T02:15:30.000Z',
+  version: 3,
+};
+
+describe('productFormValuesOf', () => {
+  it('fills the fields with the saved product, its prices grouped as the fields show them', () => {
+    expect(productFormValuesOf({ ...saved, price: 200000, compareAtPrice: 1250000 })).toEqual({
+      name: 'Áo thun cổ tròn',
+      slug: 'ao-thun-co-tron',
+      slugEdited: true,
+      description: 'Áo thun cotton 100%.\nCổ tròn, tay ngắn.',
+      price: '200.000',
+      compareAtPrice: '1.250.000',
+      status: 'ACTIVE',
+      availability: 'IN_STOCK',
+    });
+  });
+
+  it('leaves the description and the compare-at price empty when the product has none', () => {
+    const form = productFormValuesOf({ ...saved, description: null, compareAtPrice: null });
+
+    expect(form.description).toBe('');
+    expect(form.compareAtPrice).toBe('');
+  });
+});
+
+describe('productEditSchema', () => {
+  const schema = productEditSchema(saved.slug);
+
+  function editErrorsOf(input: ProductFormValues, of = schema): Record<string, string> {
+    const result = of.safeParse(input);
+    if (result.success) return {};
+    return Object.fromEntries(
+      result.error.issues.map((issue) => [issue.path.join('.'), issue.message]),
+    );
+  }
+
+  it('AC9 turns the edited fields into the body of PUT, keeping the slug', () => {
+    const form = {
+      ...productFormValuesOf(saved),
+      name: 'Áo thun cổ tròn basic',
+      price: '200000',
+      compareAtPrice: '250000',
+    };
+
+    expect(schema.parse(form)).toEqual({
+      name: 'Áo thun cổ tròn basic',
+      slug: 'ao-thun-co-tron',
+      description: 'Áo thun cotton 100%.\nCổ tròn, tay ngắn.',
+      price: 200000,
+      compareAtPrice: 250000,
+      status: 'ACTIVE',
+      availability: 'IN_STOCK',
+    });
+  });
+
+  it('AC12 sends a new slug in the right format', () => {
+    expect(schema.parse({ ...productFormValuesOf(saved), slug: 'ao-thun-basic' }).slug).toBe(
+      'ao-thun-basic',
+    );
+  });
+
+  it('does not check the format of the saved slug, as an old product may have a wrong one (NFR16)', () => {
+    const old = productEditSchema('Ao_Thun Cu');
+
+    expect(old.parse({ ...productFormValuesOf(saved), slug: 'Ao_Thun Cu' }).slug).toBe(
+      'Ao_Thun Cu',
+    );
+    expect(old.parse({ ...productFormValuesOf(saved), slug: 'ao_thun cu' }).slug).toBe(
+      'ao_thun cu',
+    );
+  });
+
+  it('checks the format and the length of a slug that differs from the saved one', () => {
+    expect(editErrorsOf({ ...productFormValuesOf(saved), slug: 'Ao-Thun-Basic' })).toEqual({
+      slug: 'slugFormat',
+    });
+    expect(editErrorsOf({ ...productFormValuesOf(saved), slug: 'a'.repeat(101) })).toEqual({
+      slug: 'slugTooLong',
+    });
+  });
+
+  it('rejects an empty slug, which an edit cannot generate', () => {
+    expect(editErrorsOf({ ...productFormValuesOf(saved), slug: '' })).toEqual({
+      slug: 'slugFormat',
+    });
+  });
+
+  it('asks a new price of an old product priced 0 (Product Rules)', () => {
+    expect(editErrorsOf(productFormValuesOf({ ...saved, price: 0 }))).toEqual({
+      price: 'priceMin',
+    });
+  });
+
+  it('reports every invalid field at once, the slug included', () => {
+    expect(
+      editErrorsOf({ ...productFormValuesOf(saved), name: ' ', slug: '-x', price: '0' }),
+    ).toEqual({ name: 'nameRequired', slug: 'slugFormat', price: 'priceMin' });
   });
 });

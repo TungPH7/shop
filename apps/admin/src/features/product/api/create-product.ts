@@ -87,7 +87,7 @@ const validationProblemSchema = z.object({
 /** Branches on the status and the code of the error, never on its message. */
 export function createProductErrorOf(
   error: unknown,
-  input: CreateProductInput,
+  input: Pick<CreateProductInput, 'slug'>,
 ): CreateProductError {
   if (!isApiError(error) || error.kind !== 'http') return { kind: 'general' };
 
