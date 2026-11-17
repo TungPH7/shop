@@ -43,6 +43,12 @@
     "password_too_short": "Mật khẩu phải có ít nhất 6 ký tự.",
     "password_mismatch": "Mật khẩu xác nhận không khớp."
   },
+  "Nav": {
+    "label": "Điều hướng chính",
+    "home": "Trang chủ",
+    "products": "Sản phẩm",
+    "about": "Giới thiệu"
+  },
   "LanguageSwitcher": {
     "label": "Ngôn ngữ"
   },
@@ -122,41 +128,44 @@
     "metaTitle": "Sản phẩm",
     "metaDescription": "Duyệt sản phẩm được lấy phía server qua Data Access Layer, validate ở biên và cache để tối ưu hiệu năng.",
     "title": "Sản phẩm",
-    "intro": "Lấy phía server qua Data Access Layer (BFF → backend NestJS), validate ở biên và cache.",
-    "empty": "Chưa có sản phẩm nào.",
-    "loading": "Đang tải sản phẩm…",
     "searchLabel": "Tìm theo tên",
-    "searchPlaceholder": "vd. Áo",
-    "sortLabel": "Sắp xếp theo",
-    "orderLabel": "Thứ tự",
-    "applyLabel": "Áp dụng",
-    "sortCreatedAt": "Mới nhất",
-    "sortPrice": "Giá",
-    "sortSale": "Đang giảm",
-    "orderAsc": "Tăng dần",
-    "orderDesc": "Giảm dần",
-    "prev": "← Trước",
-    "next": "Sau →",
-    "pageInfo": "Trang {page}/{total}",
-    "density": "Mật độ",
-    "densityComfortable": "Thoáng",
-    "densityCompact": "Gọn",
-    "countTotal": "Tổng sản phẩm",
-    "countLoading": "Đang đếm…",
-    "countError": "Không tải được số lượng",
-    "countRefresh": "Làm mới số lượng",
-    "view": "Hiển thị",
-    "viewList": "Danh sách",
-    "viewGrid": "Lưới",
-    "refresh": "Làm mới sản phẩm",
-    "refreshed": "Đã làm mới lúc",
-    "rateLimited": "Làm mới quá nhiều lần liên tiếp — backend demo giới hạn số request mỗi phút. Vui lòng đợi khoảng một phút rồi làm mới lại.",
-    "zoom": "Phóng to",
-    "zoomClose": "Đóng",
-    "delete": "Xoá",
-    "deleteValidationError": "Sản phẩm không hợp lệ.",
-    "deleteAuthError": "Bạn cần đăng nhập (và có quyền) để xoá.",
-    "deleteUnknownError": "Không xoá được. Vui lòng thử lại."
+    "searchPlaceholder": "Tìm sản phẩm…",
+    "sortLabel": "Sắp xếp",
+    "sort": {
+      "newest": "Mới nhất",
+      "price-asc": "Giá thấp đến cao",
+      "price-desc": "Giá cao đến thấp",
+      "relevance": "Liên quan nhất"
+    },
+    "list": "Danh sách sản phẩm",
+    "originalPrice": "Giá gốc:",
+    "discount": "Giảm",
+    "outOfStock": "Hết hàng",
+    "progress": "Đã xem {shown, number} trên {total, number} sản phẩm",
+    "loadMore": "Xem thêm",
+    "loading": "Đang tải…",
+    "loadMoreError": "Không tải thêm được. Vui lòng thử lại.",
+    "empty": "Chưa có sản phẩm nào.",
+    "noResults": "Không tìm thấy sản phẩm nào cho “{q}”",
+    "clearSearch": "Xóa tìm kiếm"
+  },
+  "ProductDetail": {
+    "back": "Sản phẩm",
+    "price": "Giá bán",
+    "originalPrice": "Giá gốc:",
+    "discount": "Giảm",
+    "inStock": "Còn hàng",
+    "outOfStock": "Hết hàng",
+    "description": "Mô tả"
+  },
+  "ProductNotFound": {
+    "title": "Không tìm thấy sản phẩm",
+    "description": "Sản phẩm này không tồn tại hoặc không còn được bán.",
+    "viewAll": "Xem tất cả sản phẩm"
+  },
+  "ProductUnavailable": {
+    "title": "Tạm thời không tải được sản phẩm",
+    "description": "Cửa hàng đang gặp sự cố. Vui lòng tải lại trang sau ít phút."
   },
   "ErrorDemo": {
     "title": "Demo xử lý lỗi",

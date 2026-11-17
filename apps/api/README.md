@@ -115,6 +115,47 @@ database `${POSTGRES_DB}`:
 > "baseline" (`baseline-on-migrate: true`, `baseline-version: 0`) nên migration `V1__init.sql` chạy
 > tiếp ngay trên state đã có sẵn.
 
+### 4.1. Deploy dừng ở `V6__assert_pgcrypto_in_public`
+
+`app.gen_uuid_v7()` gọi `public.gen_random_bytes()` của `pgcrypto` (V5). V6 kiểm hàm đó có thật,
+nếu không thì dừng lần deploy; Flyway rollback riêng V6, database ở lại V5 và bản cũ vẫn chạy.
+Log deploy chỉ có thông báo chính của lỗi, không có Hint (xem 4.2); thông báo đó đủ để biết
+`pgcrypto` đang ở đâu. Sửa database bằng role có quyền tạo extension, sau đó deploy lại:
+
+- **`pgcrypto` nằm ở schema khác**, thông báo ghi `is in schema "<tên>", not "public"`: chuyển
+  nó về `public`:
+
+  ```sql
+  ALTER EXTENSION pgcrypto SET SCHEMA public;
+  ```
+- **`pgcrypto` chưa cài**, thông báo ghi `is in schema "(not installed)"`: `ALTER EXTENSION … SET
+  SCHEMA` lỗi vì extension không có. Cài nó vào `public`:
+
+  ```sql
+  CREATE EXTENSION pgcrypto SCHEMA public;
+  ```
+
+Không sửa file V6 để đổi thông báo: V6 đã chạy trên các môi trường, và Flyway kiểm checksum của
+nó (SHOP-53).
+
+### 4.2. Log của một migration lỗi không có phần chi tiết
+
+`application.yml` đặt `logServerErrorDetail: false` cho driver PostgreSQL ở mọi profile (NFR12,
+SHOP-53; `ProfileLogLevelsTest` chặn profile nào bật lại). Driver khi đó chỉ giữ thông báo chính
+của lỗi, như tên constraint hay tên schema, và bỏ Detail, Hint, Where cùng các giá trị của câu
+lệnh, vì các phần đó có thể chứa dữ liệu của một dòng (`Failing row contains (…)`).
+
+Hệ quả cho vận hành: **mọi migration lỗi lúc deploy giờ chỉ để lại thông báo chính trong log của
+app**, không còn Detail hay Hint. Khi cần phần chi tiết, xem nó ở phía database, đừng bật lại
+`logServerErrorDetail` cho app:
+
+- **Log của PostgreSQL** ghi lỗi kèm `DETAIL` và `HINT` (mặc định `log_min_messages = warning`,
+  `log_error_verbosity = default`). Với compose của repo: `docker compose logs postgres`; với
+  database được quản lý, xem log của nhà cung cấp.
+- **Chạy lại câu lệnh lỗi bằng tay** với `psql`, bằng role của migration: `psql` in đủ `ERROR`,
+  `DETAIL` và `HINT`. Bọc trong `BEGIN; … ROLLBACK;` để không đổi gì database; với V6, chỉ cần khối
+  `DO $$ … $$` ở mục 1 của file, khối này không ghi gì.
+
 ---
 
 ## 5. Chạy source code
@@ -182,7 +223,7 @@ local hoặc CI.
 ./mvnw test
 
 # Chỉ 1 class
-./mvnw test -Dtest=ProductServiceTest
+./mvnw test -Dtest=ProductSlugsTest
 
 # Test + coverage report
 ./mvnw verify
@@ -291,12 +332,12 @@ git commit --no-verify -m "wip: ..."
 │   │   └── security/            # SecurityConfig, headers, CORS, CSP, HSTS
 │   ├── feature/                 # feature module (vertical slice)
 │   │   ├── health/              # /api/health
-│   │   └── product/             # CRUD demo: controller / service / repo / mapper / dto / domain
+│   │   └── product/             # catalog: domain (Product, ProductSlugs) / repository (JPA + SQL list)
 │   └── infrastructure/          # gateway/adapter ra ngoài (sau này)
 ├── src/main/resources/
 │   ├── application.yml          # config chung
 │   ├── application-{dev,staging,prod,test}.yml
-│   ├── db/migration/            # V1__init.sql, V2__app_helpers.sql, V3__create_products_table.sql
+│   ├── db/migration/            # V1__init.sql … V4__expand_products_catalog.sql
 │   └── logback-spring.xml
 ├── src/test/java/.../
 │   └── AbstractContainerBaseTest.java   # Testcontainers Postgres parent
@@ -314,13 +355,12 @@ git commit --no-verify -m "wip: ..."
 
 ## 10. Endpoint chính
 
-|        Endpoint        |               Mô tả                |
-|------------------------|------------------------------------|
-| `GET /actuator/health` | Liveness + readiness               |
-| `GET /actuator/info`   | Build info                         |
-| `GET /v3/api-docs`     | OpenAPI JSON                       |
-| `GET /swagger-ui.html` | Swagger UI                         |
-| `/api/products/**`     | CRUD demo (xem `feature/product/`) |
+|        Endpoint        |        Mô tả         |
+|------------------------|----------------------|
+| `GET /actuator/health` | Liveness + readiness |
+| `GET /actuator/info`   | Build info           |
+| `GET /v3/api-docs`     | OpenAPI JSON         |
+| `GET /swagger-ui.html` | Swagger UI           |
 
 ---
 

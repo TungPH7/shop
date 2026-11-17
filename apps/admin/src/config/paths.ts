@@ -17,13 +17,15 @@ export const paths = {
     path: '/products',
     getHref: () => '/products',
   },
-  productDetail: {
-    path: '/products/:productId',
-    getHref: (productId: string) => `/products/${productId}`,
+  /** S2 in add mode (US2). */
+  productNew: {
+    path: '/products/new',
+    getHref: () => '/products/new',
   },
+  /** S2 in edit mode (US3). */
   productEdit: {
-    path: '/admin/products/:productId/edit',
-    getHref: (productId: string) => `/admin/products/${productId}/edit`,
+    path: '/products/:productId/edit',
+    getHref: (productId: string) => `/products/${encodeURIComponent(productId)}/edit`,
   },
   about: {
     path: '/about',

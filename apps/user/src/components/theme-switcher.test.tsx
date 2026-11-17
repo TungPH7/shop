@@ -41,6 +41,16 @@ describe('ThemeSwitcher', () => {
     expect(setTheme).toHaveBeenCalledWith('dark');
   });
 
+  // Under 1024px the bar shows the icon and hides the words (S4.1, SHOP-11); the words stay the name of the button.
+  test('gives each option an icon hidden from assistive tech, and its words as the name', () => {
+    renderWithProviders(<ThemeSwitcher />, { locale: 'vi' });
+    for (const name of ['Sáng', 'Tối', 'Hệ thống']) {
+      const button = screen.getByRole('button', { name });
+      expect(button.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+      expect(button.querySelector('.nav-btn__label')).toHaveTextContent(name);
+    }
+  });
+
   test('nhãn group dịch theo locale (vi)', () => {
     renderWithProviders(<ThemeSwitcher />, { locale: 'vi' });
     expect(screen.getByRole('group', { name: 'Giao diện' })).toBeInTheDocument();

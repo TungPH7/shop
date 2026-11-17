@@ -6,20 +6,20 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 
 import { JsonLd } from '~/components/seo/json-ld';
-import { LanguageSwitcher } from '~/components/language-switcher';
 import { ThemeProvider } from '~/components/theme-provider';
-import { ThemeSwitcher } from '~/components/theme-switcher';
 import { WebVitals } from '~/components/web-vitals';
 import { sans } from '~/config/fonts';
 import { defaultLocale, isLocale, type Locale, locales } from '~/config/i18n';
 import { AuthStatus } from '~/features/auth/components/auth-status';
 import { SiteFooter } from '~/features/site/components/site-footer';
+import { SiteNav } from '~/features/site/components/site-nav';
 import { getCopyrightYear } from '~/features/site/model/get-copyright-year';
 import { siteUrl } from '~/lib/seo/site-url';
 import { organizationLd, webSiteLd } from '~/lib/seo/structured-data';
 import { siteConfig } from '~/lib/site-config';
 
 import '~/styles/tokens.css';
+import '~/styles/components.css';
 import '~/app/globals.css';
 
 // Map locale app → cặp og:locale (định dạng OG `ll_CC`). Đủ cho 2 locale; thêm locale → thêm dòng.
@@ -98,15 +98,20 @@ export default async function LocaleLayout({
             ngoài NextIntlClientProvider để ThemeSwitcher có CẢ theme + i18n context. */}
         <ThemeProvider>
           <NextIntlClientProvider>
-            {/* AuthStatus đọc cookie phiên ⇒ DYNAMIC → bọc Suspense để giữ static shell (PPR). */}
-            <Suspense fallback={null}>
-              <AuthStatus />
-            </Suspense>
-            <LanguageSwitcher />
-            <ThemeSwitcher />
-            {children}
-            {/* app → feature: composition root ghép feature `site`. */}
-            <SiteFooter year={copyrightYear} />
+            {/* Khung trang S4.1 và S4.11 (SHOP-11): thanh điều hướng, nội dung, chân trang, rộng tối đa --app-max với
+                lề --gutter. app → feature: composition root ghép feature `site` và `auth`. AuthStatus đọc cookie
+                phiên ⇒ DYNAMIC → bọc Suspense để giữ static shell (PPR); SiteNav nhận nó qua prop. */}
+            <div className="site-shell">
+              <SiteNav
+                account={
+                  <Suspense fallback={null}>
+                    <AuthStatus />
+                  </Suspense>
+                }
+              />
+              {children}
+              <SiteFooter year={copyrightYear} />
+            </div>
           </NextIntlClientProvider>
         </ThemeProvider>
       </body>

@@ -1,24 +1,33 @@
 package com.tungph7.learnpostgres.common.error;
 
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.MessageSourceResolvable;
+import org.springframework.core.MethodParameter;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.validation.FieldError;
+import org.springframework.validation.method.ParameterErrors;
+import org.springframework.validation.method.ParameterValidationResult;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -49,6 +58,34 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 public class GlobalExceptionHandler {
 
   private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+  /**
+   * The order in which the constraints of one field are reported, by the code of the constraint:
+   * the value is missing, then it is of the wrong kind (a fraction, a bad format), then it is too
+   * long, too small or too big. Other constraints, such as the class-level rules that compare a
+   * field with another, come last, since they only mean something once the field itself is valid.
+   */
+  private static final List<String> RULE_ORDER =
+      List.of(
+          "NotNull",
+          "NotBlank",
+          "NotEmpty",
+          "Digits",
+          "Pattern",
+          "Email",
+          "Size",
+          "DecimalMin",
+          "Min",
+          "Positive",
+          "PositiveOrZero",
+          "DecimalMax",
+          "Max",
+          "Negative",
+          "NegativeOrZero");
+
+  private static final Comparator<FieldError> RULE_PRIORITY =
+      Comparator.comparingInt(GlobalExceptionHandler::ruleRank)
+          .thenComparing(error -> Objects.requireNonNullElse(error.getCode(), ""));
 
   private final ProblemDetailFactory problemFactory;
 
@@ -102,63 +139,74 @@ public class GlobalExceptionHandler {
 
   /**
    * {@code @PathVariable} / {@code @RequestParam} of the wrong type (e.g. an invalid UUID at {@code
-   * /products/{id}}).
+   * /products/{id}}). The body adds only {@code parameter}, as the API Contract of the plan of
+   * SHOP-7 writes a parameter error.
    */
   @ExceptionHandler(MethodArgumentTypeMismatchException.class)
   public ResponseEntity<ProblemDetail> handleTypeMismatch(
       MethodArgumentTypeMismatchException ex, HttpServletRequest request) {
     String paramName = ex.getName();
-    Object rejectedValue = ex.getValue();
     String expectedType =
         ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "unknown";
     String detail =
         "Parameter '%s' has invalid value '%s' (expected: %s)."
-            .formatted(paramName, rejectedValue, expectedType);
+            .formatted(paramName, ex.getValue(), expectedType);
 
     log.warn("Type mismatch at {}: {}", request.getRequestURI(), detail);
 
-    Map<String, Object> extra = new LinkedHashMap<>();
-    extra.put("parameter", paramName);
-    extra.put("rejectedValue", rejectedValue);
-    extra.put("expectedType", expectedType);
-
-    ProblemDetail body =
-        problemFactory.from(
-            ErrorCode.INVALID_PARAMETER, HttpStatus.BAD_REQUEST, detail, request, extra);
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    return invalidParameter(paramName, detail, request);
   }
 
   /**
-   * Bean Validation failure. Wired in advance of the per-endpoint {@code @Valid} usage so
-   * validation can plug in without changes here.
+   * A handler method whose arguments break their constraints (NFR3). Without this handler the
+   * catch-all made it a 500.
+   *
+   * <ul>
+   *   <li>A {@code @RequestParam} or {@code @PathVariable} that breaks a constraint, such as
+   *       {@code @Min(0) int offset}: 400 {@code INVALID_PARAMETER} naming the first invalid
+   *       parameter, in the order of the method, as the type mismatch above does.
+   *   <li>Otherwise, a {@code @Valid} object, such as the request body of a method that also has a
+   *       constrained parameter ({@link ParameterErrors}): 400 {@code VALIDATION_FAILED} with its
+   *       field errors, as {@link #handleValidation} writes them. The object itself is never in the
+   *       response or the log (NFR12).
+   *   <li>A return value that breaks a constraint is a bug of the app, not of the request, so it
+   *       stays a 500.
+   * </ul>
+   */
+  @ExceptionHandler(HandlerMethodValidationException.class)
+  public ResponseEntity<ProblemDetail> handleMethodValidation(
+      HandlerMethodValidationException ex, HttpServletRequest request) {
+    List<ParameterValidationResult> arguments =
+        ex.getParameterValidationResults().stream()
+            .filter(result -> result.getMethodParameter().getParameterIndex() >= 0)
+            .toList();
+    ParameterValidationResult first =
+        arguments.stream()
+            .filter(result -> !(result instanceof ParameterErrors))
+            .min(Comparator.comparingInt(result -> result.getMethodParameter().getParameterIndex()))
+            .orElse(null);
+    if (first != null) {
+      return invalidParameter(first, request);
+    }
+    if (arguments.isEmpty()) {
+      return handleAny(ex, request);
+    }
+    List<FieldError> fieldErrors =
+        arguments.stream()
+            .map(ParameterErrors.class::cast)
+            .flatMap(errors -> errors.getFieldErrors().stream())
+            .toList();
+    return validationFailed(fieldErrors, request);
+  }
+
+  /**
+   * The {@code @Valid} request body breaks its constraints: 400 {@code VALIDATION_FAILED} with one
+   * error per invalid field (AC7), see {@link #validationFailed}.
    */
   @ExceptionHandler(MethodArgumentNotValidException.class)
   public ResponseEntity<ProblemDetail> handleValidation(
       MethodArgumentNotValidException ex, HttpServletRequest request) {
-    List<Map<String, Object>> fieldErrors =
-        ex.getBindingResult().getFieldErrors().stream()
-            .map(
-                fe -> {
-                  Map<String, Object> m = new LinkedHashMap<>();
-                  m.put("field", fe.getField());
-                  m.put("rejectedValue", fe.getRejectedValue());
-                  m.put("message", fe.getDefaultMessage());
-                  return m;
-                })
-            .toList();
-
-    log.warn(
-        "Validation failed at {}: {} field error(s)", request.getRequestURI(), fieldErrors.size());
-
-    Map<String, Object> extra = Map.of("errors", fieldErrors);
-    ProblemDetail body =
-        problemFactory.from(
-            ErrorCode.VALIDATION_FAILED,
-            HttpStatus.BAD_REQUEST,
-            "Validation failed for %d field(s).".formatted(fieldErrors.size()),
-            request,
-            extra);
-    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+    return validationFailed(ex.getBindingResult().getFieldErrors(), request);
   }
 
   /**
@@ -233,17 +281,23 @@ public class GlobalExceptionHandler {
    *
    * <p>Do NOT echo {@code ex.getMessage()} — Postgres error messages contain SQL fragments and
    * internal constraint names.
+   *
+   * <p>The log line names the constraint only (NFR12, SHOP-53): the message of a NOT NULL or CHECK
+   * violation carries {@code Failing row contains (…)}, the values of the row, such as the name and
+   * the description of a product.
+   *
+   * <p>The code and the log line read the same name, the one Hibernate gives the constraint ({@link
+   * ConstraintViolations}, SHOP-59), never the words of the driver message. Every write of the app
+   * goes through JPA, so Hibernate wraps each violation.
    */
   @ExceptionHandler(DataIntegrityViolationException.class)
   public ResponseEntity<ProblemDetail> handleDataIntegrity(
       DataIntegrityViolationException ex, HttpServletRequest request) {
-    String rootMsg = rootMessage(ex).toLowerCase(Locale.ROOT);
+    String constraint = ConstraintViolations.nameOf(ex).orElse("unknown");
 
-    // Branch on the constraint name when it is identifiable.
     ErrorCode code;
     String detail;
-    if (rootMsg.contains("products_slug_unique")
-        || (rootMsg.contains("unique") && rootMsg.contains("slug"))) {
+    if (ConstraintViolations.isViolationOf(ex, ConstraintViolations.PRODUCT_SLUG_UNIQUE)) {
       code = ErrorCode.PRODUCT_SLUG_DUPLICATED;
       detail = "Product slug already exists.";
     } else {
@@ -252,7 +306,10 @@ public class GlobalExceptionHandler {
     }
 
     log.warn(
-        "Data integrity violation at {}: code={} root={}", request.getRequestURI(), code, rootMsg);
+        "Data integrity violation at {}: code={} constraint={}",
+        request.getRequestURI(),
+        code,
+        constraint);
 
     ProblemDetail body = problemFactory.from(code, HttpStatus.CONFLICT, detail, request);
     return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
@@ -281,6 +338,102 @@ public class GlobalExceptionHandler {
   // =================================================================
   // Helpers
   // =================================================================
+
+  /** The 400 {@code INVALID_PARAMETER} of a parameter that breaks a constraint. */
+  private ResponseEntity<ProblemDetail> invalidParameter(
+      ParameterValidationResult result, HttpServletRequest request) {
+    String paramName = parameterName(result.getMethodParameter());
+    String reason =
+        result.getResolvableErrors().stream()
+            .map(MessageSourceResolvable::getDefaultMessage)
+            .filter(message -> message != null && !message.isBlank())
+            .findFirst()
+            .orElse("is invalid");
+    String detail =
+        "Parameter '%s' has invalid value '%s' (%s)."
+            .formatted(paramName, result.getArgument(), reason);
+
+    log.warn("Invalid parameter at {}: {}", request.getRequestURI(), detail);
+
+    return invalidParameter(paramName, detail, request);
+  }
+
+  /**
+   * A 400 {@code INVALID_PARAMETER} that adds {@code parameter} and nothing more, as the API
+   * Contract writes it.
+   */
+  private ResponseEntity<ProblemDetail> invalidParameter(
+      String paramName, String detail, HttpServletRequest request) {
+    ProblemDetail body =
+        problemFactory.from(
+            ErrorCode.INVALID_PARAMETER,
+            HttpStatus.BAD_REQUEST,
+            detail,
+            request,
+            Map.of("parameter", paramName));
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+  }
+
+  /**
+   * The 400 {@code VALIDATION_FAILED} of an object whose fields break their constraints: {@code
+   * errors} has one {@code field}, {@code rejectedValue} and {@code message} per invalid field, and
+   * {@code detail} counts the fields. A field that breaks several constraints shows the one that
+   * comes first in {@link #RULE_ORDER}.
+   */
+  private ResponseEntity<ProblemDetail> validationFailed(
+      List<FieldError> fieldErrors, HttpServletRequest request) {
+    Map<String, FieldError> firstByField = new LinkedHashMap<>();
+    for (FieldError error : fieldErrors) {
+      firstByField.merge(
+          error.getField(),
+          error,
+          (kept, other) -> RULE_PRIORITY.compare(other, kept) < 0 ? other : kept);
+    }
+    List<Map<String, Object>> errors =
+        firstByField.values().stream()
+            .map(
+                fe -> {
+                  Map<String, Object> m = new LinkedHashMap<>();
+                  m.put("field", fe.getField());
+                  m.put("rejectedValue", fe.getRejectedValue());
+                  m.put("message", fe.getDefaultMessage());
+                  return m;
+                })
+            .toList();
+
+    log.warn("Validation failed at {}: {} field(s)", request.getRequestURI(), errors.size());
+
+    ProblemDetail body =
+        problemFactory.from(
+            ErrorCode.VALIDATION_FAILED,
+            HttpStatus.BAD_REQUEST,
+            "Validation failed for %d field(s).".formatted(errors.size()),
+            request,
+            Map.of("errors", errors));
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
+  }
+
+  private static int ruleRank(FieldError error) {
+    int rank = RULE_ORDER.indexOf(error.getCode());
+    return rank >= 0 ? rank : RULE_ORDER.size();
+  }
+
+  /**
+   * The name the client sent a parameter under: the name of its {@code @RequestParam} or {@code
+   * PathVariable} when it gives one, else the name of the Java parameter.
+   */
+  private static String parameterName(MethodParameter parameter) {
+    RequestParam requestParam = parameter.getParameterAnnotation(RequestParam.class);
+    if (requestParam != null && !requestParam.name().isEmpty()) {
+      return requestParam.name();
+    }
+    PathVariable pathVariable = parameter.getParameterAnnotation(PathVariable.class);
+    if (pathVariable != null && !pathVariable.name().isEmpty()) {
+      return pathVariable.name();
+    }
+    return Objects.requireNonNullElse(
+        parameter.getParameterName(), "arg" + parameter.getParameterIndex());
+  }
 
   /** Finds the root-cause message — used for logging only, never echoed to the client. */
   private static String rootMessage(Throwable t) {

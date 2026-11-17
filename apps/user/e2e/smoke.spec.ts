@@ -21,14 +21,18 @@ test.describe('smoke: server render, điều hướng, i18n', () => {
 
   test('điều hướng sang trang About', async ({ page }) => {
     await page.goto('/en');
-    await page.getByRole('link', { name: /About/ }).click();
+    // Through the main navigation of the bar (SHOP-11); the home page has an "About →" link of its own.
+    await page
+      .getByRole('navigation', { name: 'Main navigation' })
+      .getByRole('link', { name: 'About' })
+      .click();
     await expect(page).toHaveURL(/\/en\/about$/);
     await expect(page.getByRole('heading', { level: 1, name: 'About' })).toBeVisible();
   });
 
   test('đổi ngôn ngữ runtime en → vi (full-reload, folder 22)', async ({ page }) => {
     await page.goto('/en');
-    // LanguageSwitcher = <nav aria-label="Language"> gồm nút EN (đang active, disabled) + VI. Đổi locale
+    // LanguageSwitcher = role=group tên "Language" gồm nút EN (đang active, disabled) + VI. Đổi locale
     // = FULL RELOAD cố ý (window.location.replace) chống chớp trắng theme (folder 22) → Playwright thấy
     // như một navigation bình thường.
     await page.getByRole('button', { name: 'VI' }).click();

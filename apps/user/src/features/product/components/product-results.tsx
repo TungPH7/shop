@@ -1,155 +1,111 @@
+import { useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
 
-import { Can } from '~/components/can';
-import { DensityScope } from '~/components/density-scope';
-import { DensityToggle } from '~/components/density-toggle';
-import { JsonLd } from '~/components/seo/json-ld';
-import { DeleteProductButton } from '~/features/product/components/delete-product-button';
-import { ProductCountBadge } from '~/features/product/components/product-count-badge';
+import { LoadMoreButton } from '~/features/product/components/load-more-button';
+import { ProductCard } from '~/features/product/components/product-card';
 import { ProductFilters } from '~/features/product/components/product-filters';
-import { ProductImageZoomButton } from '~/features/product/components/product-image-zoom-button';
-import { ProductList } from '~/features/product/components/product-list';
-import { ProductPagination } from '~/features/product/components/product-pagination';
-import { ProductProviders } from '~/features/product/components/product-providers';
-import { ViewScope } from '~/features/product/components/view-scope';
-import { ViewToggle } from '~/features/product/components/view-toggle';
-import { DELETE_PRODUCT_PERMISSION } from '~/features/product/model/product-actions';
-import { productImageSrc } from '~/features/product/model/product';
-import { productListQuerySchema } from '~/features/product/model/product-query';
-import { getProducts } from '~/features/product/server/get-products';
-import { RateLimitError } from '~/lib/errors/app-error';
-import { normalizeError } from '~/lib/errors/normalize-error';
-import { err, ok, type Result } from '~/lib/errors/result';
-import { itemListLd } from '~/lib/seo/structured-data';
-import { parseSearchParams } from '~/lib/validation/parse-search-params';
+import { nextProductsHref, parseProductQuery } from '~/features/product/model/product-query';
+import { getStoreProducts } from '~/features/product/server/get-products';
+import { Link } from '~/i18n/navigation';
+
+/** The id of the grid, for Load more to move the focus to the first new card. */
+const LIST_ID = 'product-list';
+
+/** Skeleton cards while the products load: 8 (design.md of SHOP-7, S4.5, loading). */
+const SKELETON_CARDS = 8;
 
 /**
- * Phần ĐỘNG của trang products — đọc `searchParams` (request-time) → bọc `<Suspense>` ở page (PPR, mẫu
- * folder 10). Cũng là nơi gắn SEAM state (folder 14): gom trong `ProductProviders` (Redux S1 + TanStack
- * S2 + nuqs) ĐẶT trong dynamic-hole (KHÔNG root — cacheComponents cấm provider request-time ở static
- * shell, bài học Stage A). 429 (lỗi DỰ KIẾN) mô hình hoá bằng `Result` (folder 17) → dịu tại chỗ; lỗi
- * THẬT khác ném cho `[locale]/error.tsx`.
+ * The results of S4 (`/[locale]/products`, design.md of SHOP-7, S4.3–S4.10): the dynamic hole of the page, inside its
+ * `<Suspense>`, since it reads `searchParams` at request time and the catalog of the api with `cacheLife('catalog')`
+ * (plan of SHOP-7, Architecture Decisions 8). Styles: `.product-filters`, `.product-grid`, `.product-empty`,
+ * `.load-more` in src/styles/components.css.
  *
- * ⚠️ `view` (nuqs, URL) KHÔNG sống sót qua form-GET filter / `<Link>` phân trang (chúng dựng lại query
- * → mất param ngoài tầm chúng). Đây là trade-off MIX paradigm (server-nav × client URL-state); muốn giữ
- * thì hoặc carry `view` tường minh, hoặc nuqs-hoá cả filter. Giữ tối thiểu để demo nuqs rõ.
+ * - The search S4.3 and the sort S4.4 of the URL, above the grid (ProductFilters). A wrong value of the URL is read as
+ *   its default (AC22).
+ * - The grid S4.5 holds `page × 24` products on sale that match the search, in the order chosen, each a card S4.6; no
+ *   delete button (AC16).
+ * - Under it, the progress line S4.9, and Load more S4.10 while products are left (AC21); both keep the search and the
+ *   sort (AC22).
+ * - No product, in place of the grid (S4.7, AC23): while searching, "Không tìm thấy sản phẩm nào cho “xyz”" and Clear
+ *   search S4.8, back to S4 with no parameter; else "Chưa có sản phẩm nào.".
+ * - The api fails: the DAL throws, and so does this component, to the error boundary of `[locale]`, the error state of
+ *   S4.5 with its Try again; never an empty list (NFR26). A later block that fails leaves the products read before it,
+ *   with the error line of S4.10.
  */
 export async function ProductResults({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const query = parseProductQuery(await searchParams);
+  const { items, totalItems, complete } = await getStoreProducts(query);
   const t = await getTranslations('Products');
-  const tv = await getTranslations('Validation');
-  const query = parseSearchParams(productListQuerySchema, await searchParams);
 
-  // ⭐ Lỗi DỰ KIẾN (429 rate-limit) → mô hình hoá bằng `Result` (folder 17), KHÔNG để sập trang. `catch`
-  // đặt NGOÀI `use cache` (nằm trong getProducts) để tránh CACHE NHẦM trạng thái lỗi. `normalizeError`
-  // map `ApiError(429)` → `RateLimitError` (ngữ nghĩa, thay cho magic `status === 429`); lỗi THẬT khác
-  // (network/5xx/lệch schema) ⇒ `throw` cho `[locale]/error.tsx`.
-  let result: Result<Awaited<ReturnType<typeof getProducts>>, RateLimitError>;
-  try {
-    result = ok(await getProducts(query));
-  } catch (caught: unknown) {
-    const error = normalizeError(caught);
-    if (!(error instanceof RateLimitError)) throw error;
-    result = err(error);
+  const filters = <ProductFilters query={query} />;
+
+  if (items.length === 0) {
+    return (
+      <>
+        {filters}
+        <div className="product-empty">
+          <p role="status">{query.q === '' ? t('empty') : t('noResults', { q: query.q })}</p>
+          {query.q !== '' && <Link href="/products">{t('clearSearch')}</Link>}
+        </div>
+      </>
+    );
   }
 
+  const nextHref = nextProductsHref(query, { shown: items.length, totalItems, complete });
+
   return (
-    <ProductProviders>
-      <DensityToggle
-        labels={{
-          label: t('density'),
-          comfortable: t('densityComfortable'),
-          compact: t('densityCompact'),
-        }}
-      />
-      <ProductCountBadge
-        labels={{
-          total: t('countTotal'),
-          loading: t('countLoading'),
-          error: t('countError'),
-          refresh: t('countRefresh'),
-        }}
-      />
-      <ViewToggle labels={{ label: t('view'), list: t('viewList'), grid: t('viewGrid') }} />
-      <ProductFilters
-        current={query}
-        labels={{
-          search: t('searchLabel'),
-          searchPlaceholder: t('searchPlaceholder'),
-          sort: t('sortLabel'),
-          order: t('orderLabel'),
-          apply: t('applyLabel'),
-          sortOptions: {
-            createdAt: t('sortCreatedAt'),
-            price: t('sortPrice'),
-            sale: t('sortSale'),
-          },
-          orderOptions: { asc: t('orderAsc'), desc: t('orderDesc') },
-        }}
-        errorMessages={{ too_short: tv('too_short') }}
-      />
-      {result.ok ? (
-        <>
-          {/* ItemList JSON-LD (folder 21) từ DATA THẬT đã fetch — nằm trong dynamic-hole (Suspense) nên
-              STREAM theo kết quả (bot chạy JS đọc được). url bỏ qua vì chưa có trang chi tiết (§22). */}
-          <JsonLd
-            data={itemListLd(
-              result.value.items.map((p) => ({ name: p.name })),
-              t('title'),
-            )}
-          />
-          <DensityScope>
-            <ViewScope>
-              <ProductList
-                products={result.value.items}
-                emptyLabel={t('empty')}
-                renderItemActions={(product) => (
-                  <>
-                    {/* ⭐ Folder 20 — island next/dynamic (zoom ảnh): cho MỌI người, đặt NGOÀI <Can>. */}
-                    <ProductImageZoomButton
-                      src={productImageSrc(product)}
-                      alt={product.name}
-                      label={t('zoom')}
-                      closeLabel={t('zoomClose')}
-                    />
-                    {/* ⭐ Authz element-level: nút Xoá CHỈ hiện nếu user có quyền DELETE sản phẩm (ADMIN/
-                        SELLER). CLIENT/anon → ẩn. Backend vẫn chặn 401/403 độc lập (defense-in-depth). */}
-                    <Can
-                      method={DELETE_PRODUCT_PERMISSION.method}
-                      path={DELETE_PRODUCT_PERMISSION.path}
-                    >
-                      <DeleteProductButton
-                        productId={product.id}
-                        label={t('delete')}
-                        messages={{
-                          validation: t('deleteValidationError'),
-                          auth: t('deleteAuthError'),
-                          unknown: t('deleteUnknownError'),
-                        }}
-                      />
-                    </Can>
-                  </>
-                )}
-              />
-            </ViewScope>
-          </DensityScope>
-          <ProductPagination
-            page={result.value.page}
-            totalPages={result.value.totalPages}
-            query={query}
-            labels={{
-              prev: t('prev'),
-              next: t('next'),
-              info: t('pageInfo', { page: result.value.page, total: result.value.totalPages }),
-            }}
-          />
-        </>
-      ) : (
-        <p role="status">{t('rateLimited')}</p>
-      )}
-    </ProductProviders>
+    <>
+      {filters}
+      <ul id={LIST_ID} className="product-grid" aria-label={t('list')}>
+        {items.map((product) => (
+          <li key={product.id}>
+            <ProductCard product={product} />
+          </li>
+        ))}
+      </ul>
+      <div className="load-more">
+        <p role="status" aria-live="polite" className="load-more__progress">
+          {t('progress', { shown: items.length, total: totalItems })}
+        </p>
+        <LoadMoreButton
+          listId={LIST_ID}
+          shown={items.length}
+          nextHref={nextHref}
+          failed={!complete}
+        />
+      </div>
+    </>
+  );
+}
+
+/**
+ * What S4 shows while it reads the products: the place of the search and the sort, with no field to type into yet,
+ * since the real ones replace it; then 8 skeleton cards in a busy list, with no words.
+ */
+export function ProductResultsSkeleton() {
+  const t = useTranslations('Products');
+
+  return (
+    <>
+      <div className="product-filters" aria-hidden="true">
+        <span className="skeleton product-filters__search product-filters__skeleton" />
+        <span className="skeleton product-filters__sort product-filters__skeleton" />
+      </div>
+      <ul className="product-grid" aria-label={t('list')} aria-busy="true">
+        {Array.from({ length: SKELETON_CARDS }, (_, i) => (
+          <li key={i}>
+            <div className="card product-card">
+              <span className="skeleton product-card__skeleton-tile" />
+              <span className="skeleton product-card__skeleton-line" />
+              <span className="skeleton product-card__skeleton-price" />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }

@@ -2,8 +2,13 @@
 
 import { useEffect } from 'react';
 
+import { sans } from '~/config/fonts';
 import { captureError } from '~/lib/monitoring/capture-error';
 
+// The stylesheets of the root layout, in the same order: when the layout fails on the server, Next sends only the CSS
+// that this file imports (SHOP-10).
+import '~/styles/tokens.css';
+import '~/styles/components.css';
 import '~/app/globals.css';
 
 /**
@@ -16,7 +21,8 @@ import '~/app/globals.css';
  * mới bắt được. Không có file này ⇒ lỗi root layout = màn hình trắng.
  *
  * Đặc thù (docs Next 16):
- *  - **THAY THẾ root layout khi kích hoạt** ⇒ phải TỰ khai `<html>` + `<body>` (+ global CSS).
+ *  - **THAY THẾ root layout khi kích hoạt** ⇒ phải TỰ khai `<html>` + `<body>`, nạp lại ba file CSS của layout
+ *    (`tokens.css`, `components.css`, `globals.css`) và đặt class font `sans.variable` lên `<html>`.
  *  - Nằm NGOÀI `NextIntlClientProvider` (provider sống trong layout vừa hỏng) ⇒ **KHÔNG có i18n** ⇒
  *    nội dung là **fallback TIẾNG ANH hardcode** (đúng yêu cầu plan §394 "English fallback").
  *  - Là Client Component (`'use client'`); **không** export được `metadata` ⇒ dùng `<title>` của React.
@@ -38,19 +44,22 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html lang="en">
+    <html lang="en" className={sans.variable}>
       <body>
         <title>Something went wrong</title>
-        <main role="alert">
-          <h1>Something went wrong</h1>
-          <p>
-            A critical error occurred and the page could not be displayed. Please try again in a
-            moment.
-          </p>
-          <button type="button" onClick={() => unstable_retry()}>
-            Try again
-          </button>
-        </main>
+        {/* The frame of the layout (SHOP-11) without its bar and footer: the --gutter on each side of the page. */}
+        <div className="site-shell">
+          <main role="alert">
+            <h1>Something went wrong</h1>
+            <p>
+              A critical error occurred and the page could not be displayed. Please try again in a
+              moment.
+            </p>
+            <button type="button" onClick={() => unstable_retry()}>
+              Try again
+            </button>
+          </main>
+        </div>
       </body>
     </html>
   );

@@ -16,7 +16,7 @@
 │   ├── hooks/                 # hook dùng chung
 │   ├── i18n/                  # routing / navigation / request của next-intl
 │   ├── lib/                   # hạ tầng: http, auth, errors, logger, monitoring,
-│   │                          #   analytics, query, seo, validation
+│   │                          #   analytics, seo, validation
 │   ├── stores/                # Redux store + facade hướng-domain
 │   ├── styles/                # tokens.css (design token)
 │   ├── testing/               # harness test: render seam, setup, MSW
@@ -64,7 +64,6 @@ src/features/<name>/
 ├── model/         # type + schema Zod + logic THUẦN (no React, no IO) — dễ test nhất
 ├── server/        # DAL: gọi backend. BẮT BUỘC `import 'server-only'`
 ├── actions/       # Server Actions ("use server") — lớp client gọi được
-├── api/           # hook TanStack Query (chỉ khi cần fetch phía client)
 ├── components/    # UI của feature (Server + Client Component)
 └── hooks/ store/  # hook headless / client state riêng feature (tạo khi cần)
 ```

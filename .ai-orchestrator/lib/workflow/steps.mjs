@@ -426,7 +426,8 @@ function decideBuild(facts, options) {
   // The draft PR of a build waits for your preview (human-loop spec 4.2); red CI goes to /ao-fix first.
   if (pr?.state === 'open' && pr.draft) {
     if (pr.ci.failed) return out(stop(`CI is red on the draft PR #${pr.number} of ${key}`, `/ao-fix ${pr.number}`));
-    return out(stop(`the draft PR #${pr.number} of ${key} waits for your preview${pr.ci.pending ? ' (CI still running)' : ''}: the screenshots and API samples of its dev agents are in .ai/runs/${key}/preview/`, `/ao-preview ${key}, or /ao-review ${pr.number} to skip the preview`));
+    // facts.previewDir: where the preview is when the item has a lane (review of shop PR #21).
+    return out(stop(`the draft PR #${pr.number} of ${key} waits for your preview${pr.ci.pending ? ' (CI still running)' : ''}: the screenshots and API samples of its dev agents are in ${facts.previewDir ?? `.ai/runs/${key}/preview/`}`, `/ao-preview ${key}, or /ao-review ${pr.number} to skip the preview`));
   }
   if (pr?.state === 'open') return out(stop(`PR #${pr.number} of ${key} is open: the build is done`, pr.ci.failed || pr.changesRequested ? `/ao-fix ${pr.number}` : `/ao-review ${pr.number}`));
   // A Story split into Sub-tasks goes on through them: their agents keep the ledgers, one per Sub-task. Any other item
@@ -724,10 +725,13 @@ function decideQa(facts, options) {
   // A qa run the usage limit stopped may have picked the item up already: it goes on from In QA too.
   const last = (facts.run?.runs ?? []).filter((r) => r.command === 'qa' && r.role === 'qa').at(-1);
   const stopped = last && STOPPED.includes(last.outcome) && last.session ? last : null;
+  // A qa run stopped because another deploy came during it (parallel-runs spec 5.1) left the item In QA with no report:
+  // a new run tests the version that runs now.
+  const superseded = last?.outcome === 'superseded';
   // A defect you found (human-loop spec 5.1): before qa runs, and until you Accept after its PASS.
   const asked = options.note?.trim() || undefined;
   const defect = asked && !noteDone(facts, 'qa', 'qa-defect', asked) ? asked : undefined;
-  const states = stopped || defect ? ['ready-for-qa', 'in-qa'] : ['ready-for-qa'];
+  const states = stopped || superseded || defect ? ['ready-for-qa', 'in-qa'] : ['ready-for-qa'];
   if (!states.includes(item.state)) return stop(`${item.key} is ${item.status}, not Ready for QA`, nextFor(item, pr));
   if (!pr?.merged || !pr.mergeCommit) return stop(`PR #${pr?.number ?? '?'} of ${item.key} is not merged`, `/ao-status ${item.key}`);
   const env = title(qa.environment);
@@ -806,8 +810,8 @@ function decideRelease(facts) {
 }
 
 // /ao-ship vX.Y.0 (release-workflow spec 2.7): the full regression of the release on Staging, the notes of devops, then
-// a script commits the report and the changelog on the release branch as ao-dev and opens the release PR; it ends at
-// gate ⑤, your approval of that PR. Each run of the command goes on from the step still missing. A regression holds for
+// a script commits the report and the changelog on release-notes/<version> as ao-dev, waits for merge-gate to merge its
+// PR into the release branch (Pilot 3, spec 2.9), and opens the release PR; it ends at gate ⑤, your approval of that PR. Each run of the command goes on from the step still missing. A regression holds for
 // a newer head only when the branch changed nothing but those two files since; otherwise it runs again.
 // facts.ship: { version, branch, staging, bugs, regression, changedSinceRegression, notes, pr }.
 function decideShip(facts, options) {

@@ -2,6 +2,7 @@ import {
   type BreadcrumbList,
   type ItemList,
   type Organization,
+  type Product,
   type WebSite,
   type WithContext,
 } from 'schema-dts';
@@ -78,5 +79,43 @@ export function breadcrumbLd(crumbs: BreadcrumbLdItem[]): WithContext<Breadcrumb
       name: crumb.name,
       item: crumb.url,
     })),
+  };
+}
+
+/** The product of S5, as `productLd` needs it: plain values, so this shared layer knows no feature. */
+export type ProductLdInput = {
+  name: string;
+  description: string;
+  /** The absolute URL of the page of the product, in the locale of the page. */
+  url: string;
+  /** In whole dong (NFR14). */
+  price: number;
+  inStock: boolean;
+};
+
+/**
+ * `Product` of S5 (AC27): `name`, `description`, `url` and one `Offer` with the price as an integer of VND and the
+ * availability. No `image`: a product shows a placeholder tile, not a picture (SPEC of SHOP-7, Ảnh giữ chỗ). Rendered
+ * only through `JsonLd`, which turns `<` into `\u003c` (NFR11).
+ */
+export function productLd({
+  name,
+  description,
+  url,
+  price,
+  inStock,
+}: ProductLdInput): WithContext<Product> {
+  return {
+    '@context': CONTEXT,
+    '@type': 'Product',
+    name,
+    description,
+    url,
+    offers: {
+      '@type': 'Offer',
+      price,
+      priceCurrency: 'VND',
+      availability: inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+    },
   };
 }

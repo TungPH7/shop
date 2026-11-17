@@ -55,7 +55,7 @@ Helper trả về `{ store, queryClient, user, … }` để test tương tác ti
 
 ### TE-010 [MUST] Mỗi test có store và query client riêng
 
-`makeStore(preloadedState)` cho state khởi tạo; query client của test đặt `retry: false`. Dùng chung singleton giữa các test ⇒ rò rỉ trạng thái, test phụ thuộc thứ tự chạy.
+`makeStore(preloadedState)` cho state khởi tạo; query client của test đặt `retry: false`, và lệnh ghi lấy cùng `MUTATION_DEFAULTS` với app (`retry: false`, `networkMode: 'always'`, `ST-004`). Dùng chung singleton giữa các test ⇒ rò rỉ trạng thái, test phụ thuộc thứ tự chạy.
 
 ### TE-011 [MUST] Test tôn trọng seam, không phá layering
 

@@ -7,8 +7,8 @@ import { paths } from '@/config/paths';
 // benefit to lazy-loading the first screen every visitor sees.
 export function HomeRoute() {
   return (
-    <section>
-      <h2>Phase 1.1 — Core foundation (UI-agnostic)</h2>
+    <section className="card">
+      <h1>Phase 1.1 — Core foundation (UI-agnostic)</h1>
       <p>
         API base URL: <code>{env.apiUrl}</code>
       </p>

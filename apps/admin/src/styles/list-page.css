@@ -1,0 +1,113 @@
+/* The list page of products, S1 of docs/specs/SHOP-7/design.md: the cells, the
+   message row and the skeleton of the product table, then the title row, the filter
+   row and the table card. Built only from the tokens of tokens.css, on the shared
+   classes of components.css (.table, .card, .skeleton), so main.tsx loads it after
+   components.css. Each class is listed in docs/design-system/admin.md. */
+
+/* --- Product table, S1.6 -------------------------------------------------------- */
+
+/* Cells of the product table (S1.6): the tile, the name and the slug under it; a
+   message row (S1.9, the error state); the skeleton (6 rows while loading). */
+.table__product {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 0;
+}
+
+.table__product-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.table__name {
+  color: var(--text);
+  font-weight: var(--fw-semibold);
+}
+
+.table__sub {
+  color: var(--hint);
+  font-size: var(--fs-sm);
+}
+
+/* The buttons of a row (S1.7, S1.8): Edit then Delete, 8 px apart. */
+.table__row-actions {
+  display: inline-flex;
+  gap: var(--space-2);
+}
+
+.table .table__message {
+  height: auto;
+  padding: var(--space-7) var(--space-3);
+  text-align: center;
+}
+
+.table__message > p {
+  margin: 0 0 var(--space-3);
+  color: var(--muted);
+}
+
+.table__skeleton-tile {
+  flex: none;
+  width: var(--tile-thumb);
+  height: var(--tile-thumb);
+  border-radius: var(--r-thumb);
+}
+
+.table__skeleton-text {
+  flex: 1;
+}
+
+.table__skeleton-cell {
+  width: 60%;
+}
+
+/* --- List page, S1 -------------------------------------------------------------- */
+
+/* The title row (S1.2, S1.3), the filter row (S1.4, S1.5), then the table card with
+   the pagination (S1.6, S1.11). */
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+}
+
+.page-header > h1 {
+  margin: 0;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--gap);
+}
+
+.toolbar__group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3-5);
+  align-items: center;
+}
+
+.toolbar__count {
+  margin: 0;
+  color: var(--muted);
+  font: var(--fw-semibold) var(--fs-sm) / 18.1px var(--font);
+}
+
+.toolbar > .search {
+  flex: 0 1 var(--search-width);
+}
+
+.list-page__card > .pagination {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}

@@ -43,6 +43,12 @@
     "password_too_short": "Password must be at least 6 characters.",
     "password_mismatch": "The passwords don't match."
   },
+  "Nav": {
+    "label": "Main navigation",
+    "home": "Home",
+    "products": "Products",
+    "about": "About"
+  },
   "LanguageSwitcher": {
     "label": "Language"
   },
@@ -122,41 +128,44 @@
     "metaTitle": "Products",
     "metaDescription": "Browse products fetched server-side through the Data Access Layer, validated at the boundary and cached for performance.",
     "title": "Products",
-    "intro": "Fetched server-side through the Data Access Layer (BFF → NestJS backend), validated at the boundary and cached.",
-    "empty": "No products found.",
-    "loading": "Loading products…",
     "searchLabel": "Search by name",
-    "searchPlaceholder": "e.g. Áo",
+    "searchPlaceholder": "Search products…",
     "sortLabel": "Sort by",
-    "orderLabel": "Order",
-    "applyLabel": "Apply",
-    "sortCreatedAt": "Newest",
-    "sortPrice": "Price",
-    "sortSale": "On sale",
-    "orderAsc": "Ascending",
-    "orderDesc": "Descending",
-    "prev": "← Previous",
-    "next": "Next →",
-    "pageInfo": "Page {page} of {total}",
-    "density": "Density",
-    "densityComfortable": "Comfortable",
-    "densityCompact": "Compact",
-    "countTotal": "Total products",
-    "countLoading": "Counting…",
-    "countError": "Couldn't load count",
-    "countRefresh": "Refresh count",
-    "view": "View",
-    "viewList": "List",
-    "viewGrid": "Grid",
-    "refresh": "Refresh products",
-    "refreshed": "Refreshed at",
-    "rateLimited": "Too many refreshes in a row — the demo backend limits requests per minute. Please wait about a minute, then refresh again.",
-    "zoom": "Zoom",
-    "zoomClose": "Close",
-    "delete": "Delete",
-    "deleteValidationError": "Invalid product.",
-    "deleteAuthError": "You must be signed in (with permission) to delete.",
-    "deleteUnknownError": "Could not delete. Please try again."
+    "sort": {
+      "newest": "Newest",
+      "price-asc": "Price: low to high",
+      "price-desc": "Price: high to low",
+      "relevance": "Most relevant"
+    },
+    "list": "Product list",
+    "originalPrice": "Original price:",
+    "discount": "Off",
+    "outOfStock": "Out of stock",
+    "progress": "Viewed {shown, number} of {total, plural, one {# product} other {# products}}",
+    "loadMore": "Load more",
+    "loading": "Loading…",
+    "loadMoreError": "Couldn't load more. Please try again.",
+    "empty": "No products yet.",
+    "noResults": "No products found for “{q}”",
+    "clearSearch": "Clear search"
+  },
+  "ProductDetail": {
+    "back": "Products",
+    "price": "Price",
+    "originalPrice": "Original price:",
+    "discount": "Off",
+    "inStock": "In stock",
+    "outOfStock": "Out of stock",
+    "description": "Description"
+  },
+  "ProductNotFound": {
+    "title": "Product not found",
+    "description": "This product doesn't exist or is no longer available.",
+    "viewAll": "View all products"
+  },
+  "ProductUnavailable": {
+    "title": "We couldn't load this product right now",
+    "description": "The store is having a problem. Please reload the page in a few minutes."
   },
   "ErrorDemo": {
     "title": "Error handling demo",

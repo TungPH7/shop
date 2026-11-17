@@ -1,57 +1,171 @@
-import { z } from 'zod';
+import * as z from 'zod';
+
+import { parseSearchParams } from '~/lib/validation/parse-search-params';
 
 /**
- * ⭐ Contract QUERY danh sách sản phẩm — schema DÙNG CHUNG client↔server (đầu folder 13).
+ * The query of S4 (`/[locale]/products`) in the URL (plan of SHOP-7, Architecture Decisions 11):
+ * `?q=&sort=newest|price-asc|price-desc|relevance&page=N`.
  *
- * Mirror SUBSET query của backend public `GET /products` (đọc SOURCE thật, KHÔNG đoán —
- * `Nestjs-Super/ecom/src/routes/product/product.model.ts` → `GetProductsQuerySchema`):
- * `page` / `name` / `sortBy` / `orderBy`. (`limit` cố định trong DAL; brand/category/price filter để
- * dành — giữ demo gọn.) enum khớp ĐÚNG hằng backend (`OrderBy` asc|desc, `SortBy` createdAt|price|sale).
+ * - `q` is the keyword of the search S4.3 (US5b, SHOP-28), without the spaces around and between its words and cut at
+ *   100 characters, as the api cleans it (API Contract, Từ khóa `q`); empty is no search.
+ * - `sort` is the order S4.4: the newest first by default, and relevance by default while searching. Relevance exists
+ *   only while searching.
+ * - `page` is how many times 24 products were loaded: 1 by default.
  *
- * Hai nguyên tắc validate (folder 13):
- *  1. **Schema = nguồn-sự-thật** → type suy ra bằng `z.infer` (KHÔNG khai trùng).
- *  2. **Locale-agnostic** → schema CHỈ kiểm cấu trúc/ràng buộc, KHÔNG nhúng chuỗi đã dịch; lỗi phát ra
- *     dưới dạng **CODE ổn định** (vd `min(2, { error: 'too_short' })`) để UI map sang i18n bằng
- *     `t('Validation.<code>')` (quyết định folder 13 — nhất quán `reason` codes folder 12).
+ * A default is left out of the URL. The URL is user input: a wrong value falls back to its default, never an error
+ * (AC22).
  */
-export const PRODUCT_SORT_BY = ['createdAt', 'price', 'sale'] as const;
-export const PRODUCT_ORDER_BY = ['asc', 'desc'] as const;
 
-export type ProductSortBy = (typeof PRODUCT_SORT_BY)[number];
-export type ProductOrderBy = (typeof PRODUCT_ORDER_BY)[number];
+/** Products of each load: 1, 2, 3 and 4 columns all divide it (design.md, S4.5). */
+export const PAGE_SIZE = 24;
+
+/** The longest keyword, in UTF-16 units as the api counts them (SPEC, Tìm theo tên). */
+export const MAX_KEYWORD_LENGTH = 100;
+
+const DEFAULT_PAGE = 1;
+
+const SORTS = ['newest', 'price-asc', 'price-desc', 'relevance'] as const;
+
+export type ProductSort = (typeof SORTS)[number];
+
+/** Digits only, so `1e3`, `0x10` or `1.5` are no page; past the safe integers, a page is no longer exact. */
+const pageSchema = z
+  .string()
+  .regex(/^\d+$/)
+  .transform(Number)
+  .pipe(z.number().int().min(1).max(Number.MAX_SAFE_INTEGER))
+  .catch(DEFAULT_PAGE);
 
 /**
- * Từ khoá tìm theo tên: tối thiểu 2 ký tự KHI có (1 ký tự ~ vô nghĩa + nặng backend). Tách riêng để
- * **client form** validate hiện lỗi (code `too_short`) VÀ `productListQuerySchema` tái dùng (dưới) →
- * **1 schema, 2 nơi** = bằng chứng "share client/server".
+ * Spaces as the api reads them, and more: JavaScript's `\s` lacks U+0085 and U+001C–U+001F, which the api strips, so
+ * every control character counts as a space here. A keyword of control characters alone is then no search, never one
+ * the api refuses (AC22).
+ *
+ * One difference with `ProductSearchTerms.of` of the api, on purpose: a run of control characters that are not spaces
+ * there, such as U+0001, is one space here before the cut at 100, where the api keeps each one and counts it. So a
+ * keyword holding them keeps a few more of its characters here than the api would keep of it. The page never sends
+ * this keyword: it asks the api its folded words (`foldKeyword`), so this cut is the one that decides the search.
  */
-export const productSearchNameSchema = z.string().trim().min(2, { error: 'too_short' });
+const SPACES = /[\p{Cc}\s]+/gu;
+
+const keywordSchema = z
+  .string()
+  .transform((q) => q.replace(SPACES, ' ').trim().slice(0, MAX_KEYWORD_LENGTH).trimEnd())
+  .catch('');
+
+const productQuerySchema = z
+  .object({
+    q: keywordSchema.optional(),
+    sort: z.enum(SORTS).optional().catch(undefined),
+    page: pageSchema.optional(),
+  })
+  .transform(({ q = '', sort, page = DEFAULT_PAGE }) => ({
+    q,
+    sort: sort !== undefined && sortsFor(q).includes(sort) ? sort : defaultSort(q),
+    page,
+  }));
+
+export type ProductQuery = { q: string; sort: ProductSort; page: number };
+
+export function parseProductQuery(
+  raw: Record<string, string | string[] | undefined>,
+): ProductQuery {
+  return parseSearchParams(productQuerySchema, raw);
+}
+
+/** The order of S4.4 when the URL names none: relevance while searching, else the newest first (SPEC, Sắp xếp). */
+function defaultSort(q: string): ProductSort {
+  return q === '' ? 'newest' : 'relevance';
+}
+
+/** The options of S4.4 for the keyword `q`: relevance only while searching (AC20). */
+export function sortsFor(q: string): readonly ProductSort[] {
+  return q === '' ? SORTS.filter((sort) => sort !== 'relevance') : SORTS;
+}
+
+const API_SORTS = {
+  newest: 'NEWEST',
+  'price-asc': 'PRICE_ASC',
+  'price-desc': 'PRICE_DESC',
+  relevance: 'RELEVANCE',
+} as const satisfies Record<ProductSort, string>;
+
+/** `sort` as `GET /api/products` names it (API Contract). */
+export function apiSortOf(sort: ProductSort): (typeof API_SORTS)[ProductSort] {
+  return API_SORTS[sort];
+}
+
+const COMBINING_MARKS = /[\u0300-\u036f]/g;
+const NOT_LETTER_OR_DIGIT = /[^a-z0-9]+/g;
 
 /**
- * Query đã CHUẨN HOÁ từ `searchParams`. searchParams = đầu vào URL người dùng → KHÔNG tin → **tha
- * thứ**: `.catch(v)` (parse lỗi → fallback) để param hỏng chỉ **SANITIZE** về mặc định an toàn, KHÔNG
- * làm sập trang. (Khác form: form muốn HIỆN lỗi → `productSearchNameSchema` + `getFieldErrorCodes`.)
+ * The words of the keyword `q` as the api searches them (ADR-0002, `ProductSearchTerms`): folded as
+ * `ProductSearchTerms.fold` and `app.search_fold` fold, step for step (NFD, no combining mark U+0300–U+036F, `đ` and
+ * `Đ` to `d`, lower case, each run of characters other than a–z and 0–9 one space), each word once in the order of
+ * its first time, joined by one space. Empty when `q` has no word, as `%` or `!!!`, which matches no product.
+ *
+ * `A`, `á` and `a!` are one search at the api, and so one search here: what the page asks the api and caches. The
+ * field and S4.7 show the keyword as typed.
  */
-export const productListQuerySchema = z.object({
-  page: z.coerce.number().int().positive().catch(1),
-  name: productSearchNameSchema.optional().catch(undefined),
-  sortBy: z.enum(PRODUCT_SORT_BY).catch('createdAt'),
-  orderBy: z.enum(PRODUCT_ORDER_BY).catch('desc'),
-});
+export function foldKeyword(q: string): string {
+  const folded = q
+    .normalize('NFD')
+    .replace(COMBINING_MARKS, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase()
+    .replace(NOT_LETTER_OR_DIGIT, ' ')
+    .trim();
+  return folded === '' ? '' : [...new Set(folded.split(' '))].join(' ');
+}
 
-/** Type query suy ra từ schema (SSOT) — dùng ở DAL `getProducts(query)` + client filter. */
-export type ProductListQuery = z.infer<typeof productListQuerySchema>;
+/** The path of S4 for `query`, without its locale and without the defaults: for a link or the router. */
+export function productsHref({ q, sort, page }: ProductQuery): string {
+  const params = new URLSearchParams();
+  if (q !== '') params.set('q', q);
+  if (sort !== defaultSort(q)) params.set('sort', sort);
+  if (page !== DEFAULT_PAGE) params.set('page', String(page));
+  const search = params.toString();
+  return search === '' ? '/products' : `/products?${search}`;
+}
 
 /**
- * `ProductListQuery` → `Record<string,string>` cho URL, **BỎ giá trị mặc định** → URL gọn (vd
- * `/products?name=Áo` thay vì kèm `page=1&sortBy=createdAt&orderBy=desc`). Dùng cho `<Link>` phân trang
- * (giữ filter hiện tại, chỉ đổi `page`). Pure → test được + dùng được cả client.
+ * Where the search S4.3 goes with the words `typed`: the first 24 products of that keyword (AC18).
+ *
+ * A sort the visitor chose stays; one they did not choose was the default of the old keyword, and becomes the default
+ * of the new one: relevance for a search. The search form sends the same fields without JavaScript (ProductFilters).
  */
-export function productQueryToParams(query: ProductListQuery): Record<string, string> {
-  const params: Record<string, string> = {};
-  if (query.page > 1) params.page = String(query.page);
-  if (query.name) params.name = query.name;
-  if (query.sortBy !== 'createdAt') params.sortBy = query.sortBy;
-  if (query.orderBy !== 'desc') params.orderBy = query.orderBy;
-  return params;
+export function searchHref(query: ProductQuery, typed: string): string {
+  return productsHref(parseProductQuery({ q: typed, sort: chosenSortOf(query) ?? undefined }));
+}
+
+/**
+ * The sort the visitor chose in `query`, or null when it is the default of its keyword: the one sort a new search
+ * keeps (S4.3), in the URL and in the hidden field of the search form.
+ */
+export function chosenSortOf(query: ProductQuery): ProductSort | null {
+  return query.sort === defaultSort(query.q) ? null : query.sort;
+}
+
+/** Where the sort S4.4 goes with `sort`: the first 24 products of the same search in that order. */
+export function sortHref(query: ProductQuery, sort: ProductSort): string {
+  return productsHref(parseProductQuery({ q: query.q, sort }));
+}
+
+/** What S4 shows of `query`: products shown, products on sale, and whether every block needed was read. */
+export type ProductsShown = { shown: number; totalItems: number; complete: boolean };
+
+/**
+ * Where Load more (S4.10) goes from `query`, or null when every product is shown and there is no Load more. The search
+ * and the sort stay (AC22).
+ *
+ * - After a failed block, the page of the URL again: the button is Try again.
+ * - While products are left, the page after the whole loads of 24 shown.
+ */
+export function nextProductsHref(
+  query: ProductQuery,
+  { shown, totalItems, complete }: ProductsShown,
+): string | null {
+  if (!complete) return productsHref(query);
+  if (shown >= totalItems) return null;
+  return productsHref({ ...query, page: Math.ceil(shown / PAGE_SIZE) + 1 });
 }

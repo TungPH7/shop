@@ -1,7 +1,8 @@
 # CI of a project (ai-orchestrator, quality-gates spec section 2.4): four jobs, one check each. jira-sync watches this
 # workflow by its name, CI. merge-gate, audit and the ruleset require the four jobs, which .ai-orchestrator/quality/gates.yaml
 # lists under `checks`. The project provides the scripts lint, typecheck, test:coverage (writing lcov) and build, run
-# with npm or pnpm by the lockfile at its root.
+# with npm or pnpm by the lockfile at its root. Two more jobs are this project's own: caddy-proxy (SHOP-57) and
+# not-found (SHOP-61).
 name: CI
 
 on:
@@ -114,6 +115,64 @@ jobs:
         if: github.event_name == 'pull_request'
         run: node .ai-orchestrator/scripts/coverage-diff.mjs --base "$BASE_SHA"
       - run: $PM run build
+
+  # A check of this project, not of the kit (SHOP-57): the Caddyfile of the admin image, run as a proxy in Docker by
+  # apps/admin/scripts/check-caddy-proxy.mjs, keeps X-Forwarded-Proto, X-Forwarded-Host and X-Forwarded-For of Caddy of
+  # the VPS. When it lost them, the api read http and answered every POST of the browser with 403 "Invalid CORS request"
+  # (SHOP-56). Not a required check of gates.yaml, but merge-gate merges only when every check run passed.
+  caddy-proxy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: By hand only on develop, main or release/*
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/develop|refs/heads/main|refs/heads/release/*) ;;
+            *) echo "::error::CI runs by hand only on develop, main or release/*, not on $GITHUB_REF"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # pnpm, by packageManager of package.json, installed as in build-test. The script needs Docker and Node alone, so
+      # the packages of the project are not installed.
+      - name: pnpm
+        run: node .ai-orchestrator/scripts/ci-package-manager.mjs
+      # --fail-if-no-match: when the filter matches no project, as after apps/admin moves, pnpm prints "No projects
+      # matched the filters" and exits 0; with it the step fails instead of passing with nothing checked (SHOP-62).
+      - run: pnpm --fail-if-no-match --filter ./apps/admin run check:caddy
+
+  # A check of this project, not of the kit (SHOP-61): the product not found page S6 answers HTTP 404 on the build of
+  # user, as Production serves it (AC26). Next renders it one way under `next dev`, where the E2E tests run, and another
+  # in the build, so apps/user/scripts/check-not-found.mjs builds the app, runs `next start` against a stub api, and
+  # loads three paths (SHOP-58). Not a required check of gates.yaml, but merge-gate merges only when every check run
+  # passed. Keep it next to caddy-proxy when the kit's ci.yml is copied in again.
+  not-found:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: By hand only on develop, main or release/*
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/develop|refs/heads/main|refs/heads/release/*) ;;
+            *) echo "::error::CI runs by hand only on develop, main or release/*, not on $GITHUB_REF"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.HEAD_SHA }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # pnpm, by packageManager of package.json, installed as in build-test. Only user and what it needs are installed.
+      - name: pnpm
+        run: node .ai-orchestrator/scripts/ci-package-manager.mjs
+      # --fail-if-no-match, as in caddy-proxy: a filter that matches no project fails the step (SHOP-62).
+      - run: pnpm install --frozen-lockfile --fail-if-no-match --filter ./apps/user...
+      - run: pnpm --fail-if-no-match --filter ./apps/user run check:not-found
 
   # gitleaks on the commits the PR or the push brings, pinned and checked against its published checksum.
   secrets:

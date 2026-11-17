@@ -8,12 +8,16 @@ export const MAX_RETRIES = 2;
 // 408 Request Timeout, 429 Too Many Requests, and 5xx are transient.
 const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
-// Only retry methods that are safe to repeat. Retrying a POST could create
-// duplicates; GET/HEAD/OPTIONS/PUT/DELETE are idempotent by HTTP semantics.
-const IDEMPOTENT_METHODS = new Set(['get', 'head', 'options', 'put', 'delete']);
+// Only reads are retried, never a write (NFR19 of docs/specs/SHOP-7/spec.md; plan,
+// Architecture Decisions 13). A POST sent twice could add the product twice. A PUT
+// or DELETE is idempotent, but the retry of one that succeeded and lost its answer
+// gets a false 409 (version moved on) or a false 404: the form or the dialog shows a
+// failure for a write that happened. The person tries again instead, and the DELETE
+// of the API answers 204 even for a product already gone.
+const READ_METHODS = new Set(['get', 'head', 'options']);
 
 export function isRetryableError(error: AxiosError, method: string | undefined): boolean {
-  if (!method || !IDEMPOTENT_METHODS.has(method.toLowerCase())) {
+  if (!method || !READ_METHODS.has(method.toLowerCase())) {
     return false;
   }
   // A user-canceled request must never be retried.

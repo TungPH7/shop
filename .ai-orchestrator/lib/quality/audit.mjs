@@ -8,7 +8,7 @@ import { adfText, readChecks } from '../tracker/facts.mjs';
 import { raiseFlag } from '../tracker/sync.mjs';
 import { touchedPaths } from './diff-paths.mjs';
 import { docsPullRequest, readDocsFacts } from './docs-pr.mjs';
-import { approved, botLogin, docsUnmet, docsVerdict, isBackMerge, notesPaths, notesVersion, protectedPaths, releaseTags, truncated, unmetConditions } from './merge-gate.mjs';
+import { approved, botLogin, docsUnmet, docsVerdict, isBackMerge, isReleasePr, notesPaths, notesVersion, protectedPaths, releaseTags, truncated, unmetConditions } from './merge-gate.mjs';
 
 // Who may merge a PR that needs no approval of yours, a merge back or the release report: merge-gate, with ao-merge
 // (Pilot 3, spec 2.9), or with ao-dev only in a project that has no ao-merge yet; or you. In a project with ao-merge, a
@@ -83,7 +83,8 @@ export function decideAudit({ sha, branch, message, pull, files = [], reviews = 
     if (paths.length > 0 && !approvers.includes(merger)) problems.push(`PR #${pull.number} changes ${paths.join(', ')}, which only you merge, but ${merger} merged it`);
   }
   // GitHub lists at most 3,000 files of a PR: past that, its paths were never all checked (review round 3 of shop PR #13).
-  if (!isBackMerge(pull) && parseBranch(pull.head.ref)?.kind !== 'release' && truncated(pull, files)) {
+  // A release PR into main and a merge back are spared, as merge-gate spares them (review round 4).
+  if (!isBackMerge(pull) && !isReleasePr(pull) && truncated(pull, files)) {
     problems.push(`PR #${pull.number} changes ${pull.changed_files} files, of which GitHub listed ${files.length}: check its paths by hand`);
   }
   if (missing.length > 0) problems.unshift(`PR #${pull.number} was merged without: ${missing.join('; ')}`);

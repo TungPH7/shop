@@ -159,7 +159,7 @@ kit_copy:
     - ".githooks/**"
     - ".mcp.json"
     - ".jira/config.yml"
-    - ".github/workflows/{ci,jira-sync,merge-gate}.yml"
+    - ".github/workflows/{ci,jira-sync,merge-gate,pr-review}.yml"
   # A project adds the skills of its stack, so only the files the PR changes are compared.
   same_when_changed: [".claude/skills/**"]
   # They hold the space key and the stack skills of the project: ao-step renders them again.

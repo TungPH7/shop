@@ -20,19 +20,17 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
-    "e2e:report": "playwright show-report"
+    "e2e:report": "playwright show-report",
+    "check:not-found": "node scripts/check-not-found.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "5.4.0",
     "@reduxjs/toolkit": "2.12.0",
     "@t3-oss/env-nextjs": "0.13.11",
-    "@tanstack/react-query": "5.101.1",
-    "@tanstack/react-query-devtools": "5.101.1",
     "jose": "6.2.3",
     "next": "16.4.6",
     "next-intl": "4.13.0",
     "next-themes": "0.4.6",
-    "nuqs": "2.8.9",
     "pino": "10.3.1",
     "react": "19.2.7",
     "react-dom": "19.2.7",

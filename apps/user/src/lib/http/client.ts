@@ -16,10 +16,40 @@ import { ApiError } from '~/lib/http/api-error';
  * Validate Zod NGAY ở biên → trả kiểu đã kiểm chứng, hoặc ném `ApiError` chuẩn hoá
  * (network / http / validation).
  *
+ * Every request has a time limit of 5 s (`AbortSignal.timeout`), so a caller does not pass its own `signal`.
+ *
  * Auth seam (folder 15): caller đọc token httpOnly NGOÀI scope `use cache` rồi truyền qua
  * `init.headers` (vd `Authorization: Bearer …`) — KHÔNG gọi `cookies()` trong `use cache`
  * (luật cô lập folder 10). Mọi verb dưới đây đều forward `init.headers`.
  */
+/** Time limit of every request (NFR26 of SHOP-7): past it, the DAL throws instead of waiting. */
+const REQUEST_TIMEOUT_MS = 5000;
+
+/**
+ * The URL of `path` on the backend. `new URL` resolves an absolute path against the origin of `API_URL`, so
+ * `/api/products` reaches the same URL whether `API_URL` ends in `/api` or not (plan of SHOP-7, Architecture
+ * Decisions 12).
+ */
+function apiUrl(path: string): URL {
+  return new URL(path, env.API_URL);
+}
+
+/**
+ * The time limit aborts the whole request, its headers and its body: `fetch` or `response.json()` then throws the reason
+ * of the signal, a `DOMException` named `TimeoutError`.
+ */
+function isTimeout(cause: unknown): boolean {
+  return cause instanceof DOMException && cause.name === 'TimeoutError';
+}
+
+function timeoutError(cause: unknown): ApiError {
+  return new ApiError({
+    kind: 'timeout',
+    message: `Request timed out after ${REQUEST_TIMEOUT_MS} ms`,
+    cause,
+  });
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -28,12 +58,14 @@ async function request<T>(
 ): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`${env.API_URL}${path}`, {
+    response = await fetch(apiUrl(path), {
       ...init,
       method,
       headers: { Accept: 'application/json', ...init?.headers },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (cause) {
+    if (isTimeout(cause)) throw timeoutError(cause);
     throw new ApiError({
       kind: 'network',
       message: 'Network error — could not reach the server',
@@ -53,6 +85,7 @@ async function request<T>(
   try {
     body = await response.json();
   } catch (cause) {
+    if (isTimeout(cause)) throw timeoutError(cause);
     throw new ApiError({ kind: 'validation', message: 'Response was not valid JSON', cause });
   }
 
@@ -84,12 +117,4 @@ export function httpPost<T>(path: string, schema: ZodType<T>, init?: RequestInit
 /** PUT + validate response ở biên (folder 16: cập nhật hồ sơ). Như `httpPost` về header/body. */
 export function httpPut<T>(path: string, schema: ZodType<T>, init?: RequestInit): Promise<T> {
   return request('PUT', path, schema, init);
-}
-
-/**
- * DELETE + validate response ở biên (folder 12). Mutation THẬT đi qua đây từ DAL `server-only`,
- * được gọi bởi Server Action (sau khi action đã validate input + re-authorize).
- */
-export function httpDelete<T>(path: string, schema: ZodType<T>, init?: RequestInit): Promise<T> {
-  return request('DELETE', path, schema, init);
 }

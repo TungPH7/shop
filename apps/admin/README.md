@@ -5,9 +5,9 @@
 - Kiến trúc feature-first + **quy tắc dependency được máy enforce** (ESLint, không phải "niềm tin").
 - Quality gate từ commit đầu: lint · format · type-check · test · git hooks · CI.
 - Các building block chuẩn: routing, API layer, server/client state, auth + RBAC, form, error handling, logging, i18n, security, performance, CI/CD.
-- Một feature mẫu **Product (CRUD)** làm khuôn để nhân bản feature mới.
+- Feature `product`: phần CRUD mẫu của template đã gỡ ở SHOP-17; quản lý sản phẩm thật của Epic SHOP-7 thay vào từ US1 (SHOP-19).
 
-> **⚠️ Trạng thái thật của repo (đọc trước khi chạy):** Phase 1.1 — core (folders `00`→`19`) **đã hoàn tất**. Toàn bộ phase này **cố ý KHÔNG dùng thư viện UI và KHÔNG style** → giao diện là **HTML thuần, xấu là đúng thiết kế**, không phải lỗi. Mục tiêu là một lõi mà lắp UI nào cũng được; Phase 1.2 (folders `20`→`25`) mới lắp UI adapter (Ant Design / Headless) lên trên **mà không sửa logic**.
+> **⚠️ Trạng thái thật của repo (đọc trước khi chạy):** Phase 1.1 — core (folders `00`→`19`) **đã hoàn tất**. App **không dùng thư viện UI**: giao diện là design system của chính app, bằng CSS variables và CSS thường (SHOP-8, xem [`docs/design-system/admin.md`](../../docs/design-system/admin.md) của repo và `15-ui-and-accessibility.md` §15.3 của coding conventions).
 
 ---
 
@@ -74,7 +74,7 @@ pnpm -v        # kỳ vọng: 11.8.0
 | Test | **Vitest 4** + RTL + **MSW** + **Playwright** | unit/integration + E2E, coverage có threshold |
 | Chất lượng | ESLint 10 · Prettier 3 · Husky · lint-staged · commitlint | chặn ngay ở commit |
 | CI | GitHub Actions | 2 job: `verify` + `e2e` |
-| UI library | **(cố ý chưa có)** | Phase 1.2 mới lắp — xem cảnh báo đầu file |
+| Giao diện | CSS variables + CSS thường · **Be Vietnam Pro** (`@fontsource/be-vietnam-pro` 5.3.0) | không thư viện UI — xem cảnh báo đầu file |
 
 Version được **pin chính xác** (không `^`/`~`) và `pnpm-lock.yaml` được commit → máy bạn, máy đồng đội và CI có cây phụ thuộc **y hệt**.
 
@@ -139,20 +139,17 @@ pnpm lint && pnpm format:check && pnpm typecheck && pnpm build
 | Route | Nội dung | Yêu cầu |
 |---|---|---|
 | `/` | Trang chủ — hiển thị `VITE_API_URL` đang dùng | — |
-| `/products` | Danh sách sản phẩm; ô Search lưu **trên URL** (nuqs) | — |
-| `/products/:id` | Chi tiết; nút Edit/Delete chỉ hiện khi **đủ quyền** | — |
+| `/products` | Chỉ có tiêu đề **Products** (S1.2 của `docs/specs/SHOP-7/design.md`) tới khi US1 (SHOP-19) làm danh sách | — |
 | `/about` | Trang tĩnh (route lazy-load) | — |
 | `/login` | `POST /auth/login` → lưu token → `GET /profile` | tài khoản của backend |
-| `/profile` | Thông tin user | đã đăng nhập |
-| `/admin`, `/admin/products/:id/edit` | Khu vực quản trị | đăng nhập + có module `role` |
+| `/profile` | Thông tin user và nút Sign out | đã đăng nhập |
+| `/admin` | Khu vực quản trị | đăng nhập + có module `role` |
 | `/access-denied`, `*` (404) | Trang chặn quyền / không tìm thấy | — |
 
 Trên thanh header (chạy được **không cần đăng nhập**, tốt để nghiệm thu nhanh):
 
 - **Language** `en ⇄ vi` — đổi ngôn ngữ **ngay lập tức**, không reload, và **nhớ lựa chọn** sau khi tắt trình duyệt.
-- **Theme / Sidebar toggle** — chứng minh luồng client state (Redux) chạy đúng. *Chưa đổi màu sắc* vì theming thuộc Phase 1.2.
-
-> **📌 Lưu ý trung thực về trang `/products`:** backend demo hiện trả về payload có shape **khác** với model `Product` của repo → trang sẽ hiện `Failed to load products: Response did not match the expected schema`. Đây **đúng là hành vi mong đợi** của nguyên tắc *validate-at-boundary* (Zod chặn dữ liệu sai shape ngay tại biên thay vì để app vỡ ở chỗ khác). Feature Product là **khuôn mẫu**, không phải tích hợp thật với backend đó; E2E test chạy trên API mock nên vẫn xanh. Muốn thấy trang chạy với dữ liệu thật: sửa `src/features/product/model/product.ts` cho khớp contract backend của bạn.
+- **Theme** `Light / Dark / System` — đổi màu cả trang **ngay**, và nhớ lựa chọn sau khi tải lại trang, không nháy màu lúc tải. Lựa chọn đi qua client state (Redux, facade `useTheme`).
 
 ---
 
@@ -167,10 +164,10 @@ src/
 │   └── <x>/      #   api/ · components/ · hooks/ · model/
 ├── components/   # UI dùng chung (form, feedback, i18n, security, virtual)
 ├── lib/          # hạ tầng: api, auth, i18n, logger, monitoring, react-query…
-├── stores/       # Redux store + domain-hook facade (useTheme, useSidebar)
+├── stores/       # Redux store + domain-hook facade (useTheme)
 ├── config/       # env.ts (Zod-validated) · paths.ts (typed URLs)
 ├── testing/      # render helper + MSW handlers (không vào prod bundle)
-├── styles/ · utils/
+├── styles/
 └── main.tsx      # entry: setupObservability() → setupAuth() → render
 
 e2e/              # Playwright specs        docs/       # tài liệu ngắn
@@ -181,7 +178,7 @@ scripts/          # build-analyze.mjs       study-guide-impl/  # tài liệu h�
 
 - `shared/*` (`components`, `lib`, `stores`, `config`, `utils`, `testing`) **không** import `features/` hay `app/`.
 - `features/*` **không** import `app/`, và **không** import feature khác (cấm cross-feature).
-- Cần ghép 2 feature? → compose ở tầng `app` (ví dụ: truyền slot `actions` chứa `<Can>` của auth vào `ProductDetail`).
+- Cần ghép 2 feature? → compose ở tầng `app` (ví dụ: route của app truyền vào component của feature A một slot `ReactNode` dựng từ feature B).
 - **Không có barrel file** (`index.ts` re-export) — import thẳng tới file đích.
 
 Tất cả điều trên được **ESLint chặn tự động** (`import-x/no-restricted-paths`, `check-file`) — vi phạm là `pnpm lint` đỏ, không phải chuyện review nhắc nhau.
@@ -237,7 +234,6 @@ CI không có file `.env` (bị gitignore) nên **inject `VITE_API_URL`** qua re
 | `cp : The term 'cp' is not recognized` (Windows) | PowerShell dùng `Copy-Item .env.example .env.development` |
 | `Port 5173 is in use` | `pnpm dev --port 5174` hoặc tắt tiến trình đang chiếm cổng |
 | Lỗi lạ lúc `pnpm install` / `tsc` | Sai version Node → `node -v` phải là `v24.17.0` (dùng nvm/fnm: `nvm use`) |
-| `/products` báo `Response did not match the expected schema` | **Đúng như mong đợi** — xem ghi chú ở [§5](#5-trong-app-có-gì-để-xem) |
 | `pnpm e2e` báo không tìm thấy browser | `pnpm exec playwright install chromium` |
 | `pnpm preview` ra trang trắng | Cần `.env.production` **trước khi** `pnpm build` (env bake lúc build) |
 | Commit bị chặn | pre-commit/commitlint đang bắt lỗi — đọc log, sửa, hoặc `pnpm lint:fix` |
@@ -265,5 +261,5 @@ README này chỉ là **cửa vào**. Chi tiết nằm ở:
 ## Roadmap
 
 - ✅ **Phase 1.1 — Core (00→19):** hoàn tất. Nền tảng UI-agnostic + feature mẫu Product CRUD.
-- ⏭️ **Phase 1.2 — UI layer (20→25):** design token, theme sáng/tối, UI contract + alias `@ui`, adapter Headless và Ant Design, hệ responsive.
+- ✅ **Design system (SHOP-8):** token sáng/tối, font Be Vietnam Pro, class dùng chung và khung trang, bằng CSS variables và CSS thường. Không thư viện UI, không alias `@ui` (mục 14 của `docs/specs/SHOP-7/plan.md`).
 - 🔜 **Deploy phase:** CSP headers ở edge, refresh token qua httpOnly cookie, SHA-pin actions, CD.

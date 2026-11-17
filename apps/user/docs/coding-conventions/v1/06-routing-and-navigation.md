@@ -83,6 +83,8 @@ import { Link } from '~/i18n/navigation';
 
 > ⚠️ `redirect` của next-intl bị TS suy ra `void` (không phải `never`): trong Server Action phải `return` sau khi gọi; trong guard phải `throw` sau khi gọi.
 
+> ⚠️ Khung trang ở layout gốc (thanh điều hướng) nằm ngoài mọi `<Suspense>`. Với `cacheComponents`, `usePathname` treo lúc prerender một route có tham số động không nằm trong `generateStaticParams`, và build hỏng. `Link` của next-intl cũng gọi `usePathname` mỗi lần render. Nên ở khung trang: link dùng `StaticLink` của `~/i18n/static-link` (đường dẫn qua `getPathname` của locale hiện tại), còn chỗ cần đường dẫn hiện tại đặt trong `<Suspense>` có fallback (xem `SiteNav`, SHOP-41). Mọi chỗ khác vẫn dùng `Link` của `~/i18n/navigation`.
+
 ## 6.7 `proxy.ts` (thay `middleware.ts`) — `[MUST]`
 
 - Đặt ở `src/proxy.ts`. Nội dung hiện tại: `createMiddleware(routing)` của next-intl.
@@ -92,11 +94,11 @@ import { Link } from '~/i18n/navigation';
 
 ## 6.8 Route Handler vs Server Action — `[MUST]`
 
-| Nhu cầu                                   | Dùng                                     |
-| ----------------------------------------- | ---------------------------------------- |
-| Mutation phát sinh từ UI của ta           | **Server Action** (→ §09)                |
-| Client cần fetch dữ liệu (TanStack Query) | **Route Handler** `app/api/*` → DAL      |
-| Webhook / caller ngoài / cron             | **Route Handler**                        |
-| Revalidate theo tag từ hệ thống ngoài     | **Route Handler** (nhớ bảo vệ bằng auth) |
+| Nhu cầu                                     | Dùng                                     |
+| ------------------------------------------- | ---------------------------------------- |
+| Mutation phát sinh từ UI của ta             | **Server Action** (→ §09)                |
+| Client cần gọi endpoint của ta bằng `fetch` | **Route Handler** `app/api/*` → DAL      |
+| Webhook / caller ngoài / cron               | **Route Handler**                        |
+| Revalidate theo tag từ hệ thống ngoài       | **Route Handler** (nhớ bảo vệ bằng auth) |
 
 Route Handler cũng chỉ **mỏng**: parse → gọi DAL → trả JSON.

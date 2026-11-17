@@ -15,6 +15,66 @@ _(Chưa có thay đổi chờ phát hành.)_
 
 ## v1
 
+### [1.3.1] — 2026-11-17
+
+SHOP-67 sửa các finding Medium và Low của `reviewer` ở PR #59 (SHOP-34) và hai Low ở PR #63 (SHOP-66). Bản này chỉ sửa luật cho khớp code đang có, không thêm ràng buộc nào với code, nên là PATCH.
+
+**Fixed**
+- Bảng file của mục 15.3 ở `15-ui-and-accessibility.md`: thêm `src/styles/form-page.css`, các class của trang form sản phẩm (S2) tách khỏi `components.css`. Minh chứng: `src/main.tsx` nạp nó sau `list-page.css`.
+- `ST-004`, `TE-010` và mục 12 của `docs/conventions.md`: `retry: false` và `networkMode: 'always'` của lệnh ghi là hằng `MUTATION_DEFAULTS` của `src/lib/react-query/query-client.ts`, mà `createQueryClient()` và `createTestQueryClient()` cùng dùng. Test so sánh hai factory ở `query-client.test.ts` bỏ đi vì không còn gì để so.
+
+### [1.3.0] — 2026-11-17
+
+SHOP-66 làm theo NFR19 của SPEC SHOP-7: lệnh ghi của `admin` không tạm dừng khi trình duyệt báo offline (finding Low của `reviewer` ở PR #55). `ST-004` thêm một ràng buộc mới, nên đây là MINOR: cùng PR, `createQueryClient()` đặt `networkMode: 'always'` cho mọi lệnh ghi và các hook ghi thôi tự đặt option này, nên luật mới không xung đột với code hiện có.
+
+**Changed**
+- `ST-004`: mọi lệnh ghi lấy `networkMode: 'always'` từ `defaultOptions.mutations` của QueryClient; hook ghi không đặt lại option này. Minh chứng: `src/lib/react-query/query-client.ts`, `createTestQueryClient()` ở `src/testing/render.tsx`, test `query-client.test.ts`, và các test offline ở `product-form.test.tsx`, `product-edit.test.tsx`, `product-delete-dialog.test.tsx`.
+
+### [1.2.0] — 2026-11-17
+
+SHOP-37 (US4, xóa sản phẩm) làm theo NFR19 của SPEC SHOP-7 và mục 13 của plan: `admin` không bao giờ tự thử lại lệnh ghi. `API-006` hẹp lại, nên đây là MINOR: không còn code nào thử lại `PUT` hay `DELETE` (`src/lib/api/retry.ts` đổi cùng PR), nên luật mới không xung đột với code hiện có. Kèm một sửa ví dụ của `PS-002` (comment trên SHOP-37 từ finding Low của `reviewer` ở PR #34).
+
+**Changed**
+- `API-006`: chỉ thử lại `GET`, `HEAD`, `OPTIONS`; không bao giờ `POST`, `PUT`, `PATCH`, `DELETE`. Minh chứng: `READ_METHODS` ở `src/lib/api/retry.ts`, test `never retries a write` ở `retry.test.ts` và `does NOT retry a DELETE…` ở `api-client.test.ts`. Dòng Retry của `docs/conventions.md` sửa theo.
+
+**Fixed**
+- Ví dụ ✅ của `PS-002` ở `03-project-structure.md`: thôi ẩn `<DeleteButton />` theo `hasModule('product')`, và ghi rõ ví dụ chặn theo quyền chỉ áp dụng sau Epic đăng nhập, vì trước đó `hasModule` luôn `false` và nút Xóa S1.8 phải hiện với mọi người.
+
+### [1.1.2] — 2026-11-17
+
+SHOP-52 tách CSS của trang danh sách sản phẩm khỏi `components.css` (finding Low của `reviewer` ở PR #38). Bản này chỉ thêm file đó vào bảng của mục 15.3, không thêm ràng buộc nào với code, nên là PATCH.
+
+**Fixed**
+- Bảng file của mục 15.3 ở `15-ui-and-accessibility.md`: thêm `src/styles/list-page.css`. Minh chứng: `src/main.tsx` nạp nó sau `components.css`.
+
+### [1.1.1] — 2026-11-16
+
+SHOP-42 (PR #31) gỡ `<Can>`, `usePermission().hasPermission` và `invariant`, nhưng bộ quy ước còn tả chúng (finding Medium và Low của `reviewer` ở PR #31, Task SHOP-47). Bản này chỉ sửa luật cho khớp code đang có, không thêm ràng buộc nào với code, nên là PATCH.
+
+**Fixed**
+- `AU-008`: `usePermission()` chỉ trả `{ hasModule(module) }`. Minh chứng: `src/features/auth/hooks/use-permission.ts`.
+- `AU-011`: đổi tên thành "Chặn ở tầng route", chỉ còn `ProtectedRoute` và `RequireModule`. Tầng element (`<Can method path>`) thành `[PLANNED]`, tạm ngưng tới Epic đăng nhập, vì các trang sản phẩm của admin ở ngoài `ProtectedRoute` trong Epic SHOP-7 (NFR8).
+- `AU-012`, `AU-013`: không còn dựa trên `<Can>`; tầng `app` đọc `usePermission()` rồi bơm vào slot.
+- Ví dụ ✅ của `PS-002` ở `03-project-structure.md`: dùng `usePermission().hasModule` thay cho `<Can>`.
+- Ví dụ ✅ của `RT-007` ở `07-routing.md` và mục Params của `docs/conventions.md`: thu hẹp `useParams()` bằng `if (!productId) throw …`, không dùng `invariant`.
+
+### [1.1.0] — 2026-11-15
+
+Design system của `admin` (SHOP-8, mục 14 của plan `docs/specs/SHOP-7/plan.md`): CSS variables và CSS thường, không Tailwind hay thư viện UI (NFR13). Mục 15.3 cũ chỉ là hướng `[PLANNED]`, chưa áp dụng khi review, nên thay nó bằng rule mới là thay đổi MINOR, không phải `v2/`.
+
+**Added**
+- `UI-011 [MUST] Chỉ dùng token của tokens.css, không tự đặt giá trị`. Minh chứng: `src/styles/tokens.css`, PR #18.
+- `UI-012 [MUST] Dùng class của components.css trước khi viết CSS mới`. Minh chứng: `src/styles/components.css`, PR #18.
+- `UI-013 [MUST] Không thêm thư viện styling hay thư viện UI`.
+- `UI-014 [MUST] Sáng và tối đi qua token, không qua component`. Minh chứng: `light-dark()` trong `tokens.css`, `public/theme-init.js`, `syncThemeToDocument`.
+- Checklist PR và bảng anti-pattern ở `20-quick-reference.md` nhắc `UI-011`, `UI-012`.
+
+**Changed**
+- `15-ui-and-accessibility.md`: bỏ hướng `[PLANNED]` "Tailwind v4 + `cva`" của 15.3 và câu "UI-agnostic" ở đầu chương. 15.2 đổi tên thành "Hợp đồng props của component dùng chung"; `UI-008` giữ nguyên ý (props mô tả ý định), nhưng không còn nói tới việc thay markup bằng thư viện UI.
+
+**Fixed**
+- Ví dụ ở `04-naming-conventions.md` và `09-state-management.md`: `ui-slice.ts` thành `theme-slice.ts`, `toggleTheme` thành `setTheme`, vì PR #18 gỡ slice `ui`.
+
 ### [1.0.0] — 2026-07-22
 
 Phát hành lần đầu bộ coding convention, biên soạn bám sát codebase thực tế (`src/`, 124 file) và cấu hình đang chạy (`eslint.config.js`, `tsconfig.base.json`, `.prettierrc.json`, `.lintstagedrc.json`, `.github/workflows/ci.yml`). Gồm 21 tài liệu (00–20).

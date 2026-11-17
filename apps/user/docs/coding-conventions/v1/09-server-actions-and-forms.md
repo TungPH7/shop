@@ -122,7 +122,7 @@ const errorMessages = {
 
 ```
 model/      schema dùng chung (client + server) + type state
-server/     DAL: httpPut/httpDelete + authHeaders (server-only)
+server/     DAL: httpPost/httpPut + authHeaders (server-only)
 actions/    'use server': validate → re-authz → delegate → updateTag
 components/ *-form.tsx   (client: RHF hoặc useActionState)
             *-panel.tsx  (server: guard requireUser + map i18n + prefill)

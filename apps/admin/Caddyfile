@@ -2,10 +2,19 @@
 # sends /api/* to the app api of the environment, and answers index.html for any other path, so the routes of the app
 # load from a link. Caddy of the VPS keeps HTTPS and basic auth in front of it. The name api is the same in every
 # environment, so one image serves all three; API_UPSTREAM changes it, as host:port.
+#
+# Caddy of the VPS calls this one over the Docker network, from a private address, with X-Forwarded-Proto: https.
+# Trusting the private ranges keeps that header on its way to the api (SHOP-56): with forward-headers-strategy native,
+# the api takes its scheme from it, and when it read http there it took every same-origin POST of the browser for a
+# cross-origin one and answered 403 "Invalid CORS request". The container publishes no port, so only containers of the
+# network reach it. scripts/check-caddy-proxy.mjs checks this.
 {
 	admin off
 	auto_https off
 	persist_config off
+	servers {
+		trusted_proxies static private_ranges
+	}
 }
 
 :5173 {

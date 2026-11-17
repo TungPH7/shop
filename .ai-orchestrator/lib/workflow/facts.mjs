@@ -217,7 +217,9 @@ export function reviewReports(reviews, { roles, bot, head, approvers = [], on })
     if (!report) return null;
     const open = named(report);
     const still = report.sha === head ? stillBlocking(open, accepted) : open;
-    return { sha: report.sha, at: report.at, ok: report.ok, blocking: still.length, open, ids: still.map(findingId), state: report.state, onHead: report.sha === head };
+    // Only a High can be accepted, so only Highs get an id to name (review round 4 of shop PR #13).
+    const ids = still.filter(({ severity }) => severity === 'High').map(findingId);
+    return { sha: report.sha, at: report.at, ok: report.ok, blocking: still.length, open, ids, state: report.state, onHead: report.sha === head };
   };
   const reports = Object.fromEntries(roles.map((role) => [role, brief(all.filter((report) => report.role === role).at(-1))]));
   return { reports, securityFull: brief(all.filter((report) => report.role === 'security' && !report.scope).at(-1)) };

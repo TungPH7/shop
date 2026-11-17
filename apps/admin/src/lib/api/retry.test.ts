@@ -12,7 +12,7 @@ function axiosError(opts: { code?: string; status?: number }): AxiosError {
 }
 
 describe('isRetryableError', () => {
-  it('retries idempotent methods on transient statuses', () => {
+  it('retries a read method on transient statuses', () => {
     for (const status of [408, 429, 500, 502, 503, 504]) {
       expect(isRetryableError(axiosError({ status }), 'get')).toBe(true);
     }
@@ -27,8 +27,17 @@ describe('isRetryableError', () => {
     expect(isRetryableError(axiosError({}), 'get')).toBe(true);
   });
 
-  it('never retries non-idempotent methods or a missing method', () => {
-    expect(isRetryableError(axiosError({ status: 500 }), 'post')).toBe(false);
+  it('retries every read method: GET, HEAD and OPTIONS', () => {
+    for (const method of ['get', 'HEAD', 'options']) {
+      expect(isRetryableError(axiosError({ status: 503 }), method)).toBe(true);
+    }
+  });
+
+  it('never retries a write, nor a missing method (NFR19)', () => {
+    for (const method of ['post', 'put', 'patch', 'delete', 'DELETE']) {
+      expect(isRetryableError(axiosError({ status: 500 }), method)).toBe(false);
+      expect(isRetryableError(axiosError({}), method)).toBe(false);
+    }
     expect(isRetryableError(axiosError({ status: 500 }), undefined)).toBe(false);
   });
 

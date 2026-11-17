@@ -10,14 +10,15 @@ SEO, theme, test và CI — thay vì `create-next-app` rồi tự lắp lại t�
 **chứng minh từng mảnh chạy thật**, không phải để làm sản phẩm.
 
 **Trạng thái hiện tại:** Phase 1.1 ✅ **hoàn tất** (folder 00–25) — phần lõi server-first.
-Phase 1.2 (lớp UI adapter: UI contract `@ui`, shadcn/Antd, Storybook) **chưa làm** → giao diện hiện tại
-là HTML + CSS variables thuần, **cố ý chưa có UI library**. Đừng kỳ vọng một giao diện đẹp: giá trị của
-repo nằm ở kiến trúc bên dưới.
+Giao diện là HTML + CSS variables và CSS thường, **không Tailwind hay thư viện UI** (plan SHOP-7, mục 14,
+NFR13): token, font Be Vietnam Pro và class dùng chung ở `src/styles/`, mô tả ở
+[docs/design-system/user.md](../../docs/design-system/user.md). Lớp UI adapter của lộ trình cũ (UI contract
+`@ui`, shadcn/Antd, Storybook) không làm nữa.
 
-|                 |                                                                                                          |
-| --------------- | -------------------------------------------------------------------------------------------------------- |
-| **Nhánh chính** | `main` · nhánh phát triển hiện tại `base-1/core-and-ui-agnostic`                                         |
-| **Đọc tiếp**    | [Quy ước codebase](docs/conventions.md) · [Tài liệu "vì sao" từng bước](study-guide-impl/build-project/) |
+|                 |                                                                  |
+| --------------- | ---------------------------------------------------------------- |
+| **Nhánh chính** | `main` · nhánh phát triển hiện tại `base-1/core-and-ui-agnostic` |
+| **Đọc tiếp**    | [Quy ước codebase](docs/coding-conventions/)                     |
 
 ---
 
@@ -39,20 +40,20 @@ repo nằm ở kiến trúc bên dưới.
 
 ## 1. Tech stack
 
-| Nhóm                      | Công nghệ                                                                                                             |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| Runtime · package manager | Node **24.17.0** · pnpm **11.8.0** (pin chính xác, commit lockfile)                                                   |
-| Framework                 | **Next.js 16.2.9** (App Router, Turbopack, Cache Components/PPR) · **React 19.2.7**                                   |
-| Ngôn ngữ                  | **TypeScript 6** `strict` + `noUncheckedIndexedAccess`                                                                |
-| Data                      | **BFF**: DAL `server-only` + native `fetch` → backend NestJS · **Zod 4** ở mọi biên                                   |
-| State                     | RSC (mặc định) · **nuqs** (URL) · **TanStack Query** (server-state client) · **Redux Toolkit** (UI state, sau facade) |
-| Auth                      | Tự xây: **jose** (JWE) + cookie `__Host-session` httpOnly + RBAC từ backend                                           |
-| Form                      | **react-hook-form** + `zodResolver` · Server Actions                                                                  |
-| i18n                      | **next-intl 4** (`/en`, `/vi`) — key type-safe                                                                        |
-| Theme                     | **next-themes** + design tokens CSS variables (light/dark/system)                                                     |
-| Quan sát                  | logger (**pino** ở server) · monitoring seam · analytics seam · `instrumentation.ts`                                  |
-| Test                      | **Vitest 4** + RTL (unit/integration) · **Playwright 1.61** + axe (E2E) · **MSW**                                     |
-| Chất lượng                | ESLint 9 (flat, type-aware) · Prettier · Husky + lint-staged + commitlint · GitHub Actions                            |
+| Nhóm                      | Công nghệ                                                                                              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Runtime · package manager | Node **24.17.0** · pnpm **11.8.0** (pin chính xác, commit lockfile)                                    |
+| Framework                 | **Next.js 16.4.6** (App Router, Turbopack, Cache Components/PPR) · **React 19.2.7**                    |
+| Ngôn ngữ                  | **TypeScript 6** `strict` + `noUncheckedIndexedAccess`                                                 |
+| Data                      | **BFF**: DAL `server-only` + native `fetch` → backend NestJS · **Zod 4** ở mọi biên                    |
+| State                     | RSC (mặc định) · URL qua `searchParams` · **Redux Toolkit** (UI state, sau facade)                     |
+| Auth                      | Tự xây: **jose** (JWE) + cookie `__Host-session` httpOnly + RBAC từ backend                            |
+| Form                      | **react-hook-form** + `zodResolver` · Server Actions                                                   |
+| i18n                      | **next-intl 4** (`/en`, `/vi`) — key type-safe                                                         |
+| Theme                     | **next-themes** + design tokens CSS variables (light/dark/system); font Be Vietnam Pro qua `next/font` |
+| Quan sát                  | logger (**pino** ở server) · monitoring seam · analytics seam · `instrumentation.ts`                   |
+| Test                      | **Vitest 4** + RTL (unit/integration) · **Playwright 1.61** + axe (E2E) · **MSW**                      |
+| Chất lượng                | ESLint 9 (flat, type-aware) · Prettier · Husky + lint-staged + commitlint · GitHub Actions             |
 
 **Luồng dữ liệu (BFF)** — trình duyệt không bao giờ gọi thẳng backend:
 
@@ -155,7 +156,7 @@ pnpm dev
 **Dấu hiệu thành công** — màn hình hiện:
 
 ```
-▲ Next.js 16.2.9 (Turbopack)
+▲ Next.js 16.4.6 (Turbopack)
 - Local:        http://localhost:3000
 - Environments: .env.development
 ✓ Ready in 9.0s
@@ -173,7 +174,7 @@ Danh sách trang nên thử để thấy đủ tính năng:
 | Đường dẫn                      | Xem được gì                                                                                    |
 | ------------------------------ | ---------------------------------------------------------------------------------------------- |
 | `/en` · `/vi`                  | Trang chủ · đổi **ngôn ngữ** và **theme sáng/tối** ở đầu trang                                 |
-| `/en/products`                 | Danh sách sản phẩm **lấy thật từ backend** · tìm kiếm, sắp xếp, phân trang, đổi grid/list      |
+| `/en/products`                 | Mới có tiêu đề: danh sách, tìm kiếm và sắp xếp đến ở các Story catalog của SHOP-7              |
 | `/en/caching`                  | Cùng một trang: một phần **cache tĩnh**, một phần **render theo từng request** (PPR)           |
 | `/en/error-demo`               | 3 kịch bản lỗi khác nhau và ranh giới nào bắt được lỗi đó                                      |
 | `/en/login`                    | Đăng nhập _(cần tài khoản thật trên backend demo — không có vẫn xem được các trang công khai)_ |
@@ -201,11 +202,11 @@ Dừng server: bấm **Ctrl + C** trong cửa sổ terminal.
 Toàn bộ env được **validate bằng Zod** ở `src/config/env/` → thiếu hoặc sai là `dev`/`build` **chết ngay
 lập tức** kèm thông báo rõ, thay vì lỗi mơ hồ lúc chạy.
 
-| Biến                   | Phạm vi    | Ý nghĩa                                                                                        |
-| ---------------------- | ---------- | ---------------------------------------------------------------------------------------------- |
-| `API_URL`              | **server** | URL backend cho DAL. Không lộ ra trình duyệt → nơi đặt URL nội bộ.                             |
+| Biến                   | Phạm vi    | Ý nghĩa                                                                                                                           |
+| ---------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `API_URL`              | **server** | URL backend cho DAL. Không lộ ra trình duyệt → nơi đặt URL nội bộ.                                                                |
 | `NEXT_PUBLIC_SITE_URL` | public     | Origin công khai của chính site (không có `/` cuối) — nguồn cho canonical/hreflang/sitemap/OG. Mặc định là origin của Production. |
-| `AUTH_SECRET`          | **server** | Khoá niêm phong (mã hoá JWE) cookie phiên đăng nhập. **Tối thiểu 32 ký tự.**                   |
+| `AUTH_SECRET`          | **server** | Khoá niêm phong (mã hoá JWE) cookie phiên đăng nhập. **Tối thiểu 32 ký tự.**                                                      |
 
 **Next.js nạp file nào?**
 
@@ -266,8 +267,7 @@ Trong output của `build`, ký hiệu `◐` cạnh mỗi route nghĩa là route
 phần động stream sau) — đây là tiêu chí phải giữ khi thêm tính năng mới.
 
 > ⚠️ Deploy thật **bắt buộc Node runtime** (Vercel / self-host `next start` / Docker `output: 'standalone'`).
-> `cacheComponents` + PPR **không** hỗ trợ static export và edge runtime. Chi tiết:
-> [`study-guide-impl/build-project/25-ci-cd/04-cd-reference.md`](study-guide-impl/build-project/25-ci-cd/).
+> `cacheComponents` + PPR **không** hỗ trợ static export và edge runtime.
 
 ---
 
@@ -279,26 +279,24 @@ src/
 │   ├── [locale]/         #   mọi trang nằm dưới locale: /en, /vi
 │   └── api/              #   Route Handlers (endpoint BFF cho client)
 ├── features/             # mỗi domain nghiệp vụ = một "ốc đảo" độc lập
-│   └── product/          # ⭐ SLICE THAM CHIẾU — copy khuôn này khi thêm feature mới
-│       ├── model/        #     type + schema Zod + logic thuần (dễ test nhất)
-│       ├── server/       #     DAL `server-only` gọi backend
-│       ├── actions/      #     Server Actions ('use server') — mutation
-│       ├── api/          #     TanStack Query hooks (phía client)
-│       └── components/   #     UI của feature
-├── lib/                  # hạ tầng chung: http · auth · errors · logger · monitoring · query · seo · validation
-├── components/           # UI dùng chung ≥ 2 feature (theme/language switcher, <Can>, <JsonLd>…)
+│   ├── auth/             #   đăng nhập, tài khoản: model/ · server/ · actions/ · components/
+│   ├── product/          #   catalog cho khách: components/ (chỉ đọc, không Server Action ghi — NFR8)
+│   ├── site/             #   khung trang và trang chủ: model/ · components/
+│   ├── caching-demo/     #   demo cache của template: model/ · components/
+│   └── error-demo/       #   demo error boundary của template: model/ · components/
+├── lib/                  # hạ tầng chung: analytics · http · auth · errors · logger · monitoring · seo · validation
+├── components/           # UI dùng chung ≥ 2 feature (theme/language switcher, <JsonLd>…)
 ├── config/               # env (Zod, fail-fast) · i18n · security-headers
 ├── i18n/                 # next-intl: routing · navigation · request
 ├── stores/               # facade Redux (feature chỉ gọi hook hướng-domain, không chạm RTK)
-├── styles/               # design tokens (CSS variables) + globals
+├── styles/               # design system: tokens.css (CSS variables) · components.css
 ├── testing/              # harness test: renderWithProviders · MSW handlers · stubs
 ├── proxy.ts              # middleware của Next 16 (i18n routing)
 └── instrumentation.ts    # boot: pino sink · onRequestError · MSW-in-server cho E2E
 
 e2e/                      # Playwright specs
 messages/                 # en.json · vi.json (i18n)
-docs/conventions.md       # LUẬT của codebase
-study-guide-impl/          # tài liệu "vì sao" cho từng bước 00–25
+docs/coding-conventions/  # LUẬT của codebase (SSOT); docs/conventions.md chỉ là nhật ký build
 ```
 
 **Quy tắc phụ thuộc — một chiều, được ESLint chặn tự động:**
@@ -317,8 +315,8 @@ Cần dùng chung cho 2 feature → **nâng lên `shared`** hoặc **ghép ở `
 
 ## 8. Quy ước quan trọng
 
-Bản đầy đủ (25 mục, có giải thích "vì sao") ở **[`docs/conventions.md`](docs/conventions.md)**. Bảy điều
-cần nhớ ngay:
+Luật đầy đủ, có giải thích "vì sao", ở **[`docs/coding-conventions/`](docs/coding-conventions/)**. Bảy điều cần
+nhớ ngay:
 
 - **Server Component là mặc định** — `"use client"` là ngoại lệ, đặt càng sâu (leaf) càng tốt.
 - **Import qua alias `~/...`** (→ `src/`), không bao giờ `../../../`. **Không có barrel file** (`index.ts` bị cấm).
@@ -336,11 +334,11 @@ Pin phiên bản **chính xác** (`x.y.z`, không `^`/`~`) và commit `pnpm-lock
 
 Ba tầng **bổ sung nhau**, không thay thế nhau:
 
-| Tầng            | Lệnh                     | Phủ cái gì                                                                    |
-| --------------- | ------------------------ | ----------------------------------------------------------------------------- |
-| **Unit**        | `pnpm test`              | Hàm thuần, schema, component đồng bộ, DAL (qua MSW)                           |
-| **Integration** | `pnpm test`              | Nhiều seam trong một cây component (Redux + Query + nuqs + i18n cùng tồn tại) |
-| **E2E**         | `pnpm build && pnpm e2e` | Render ở **server**, PPR, đổi ngôn ngữ/theme runtime, a11y động (axe)         |
+| Tầng            | Lệnh                     | Phủ cái gì                                                            |
+| --------------- | ------------------------ | --------------------------------------------------------------------- |
+| **Unit**        | `pnpm test`              | Hàm thuần, schema, component đồng bộ, DAL (qua MSW)                   |
+| **Integration** | `pnpm test`              | Nhiều seam trong một cây component (Redux + i18n)                     |
+| **E2E**         | `pnpm build && pnpm e2e` | Render ở **server**, PPR, đổi ngôn ngữ/theme runtime, a11y động (axe) |
 
 ```bash
 # Lần đầu chạy E2E: cài trình duyệt
@@ -351,8 +349,10 @@ pnpm e2e:report            # xem báo cáo
 ```
 
 > **Vì sao E2E quan trọng ở đây:** async Server Component **không** unit-test được (giới hạn chính thức
-> của Next) → E2E là nơi _duy nhất_ verify chúng. Backend trong E2E được mock bằng **MSW chạy trong process
-> Next** (không phải `page.route`) vì việc fetch diễn ra ở server.
+> của Next) → E2E là nơi _duy nhất_ verify chúng. Test của catalog chạy với `api` thật. Mock **MSW chạy trong
+> process Next** (không phải `page.route`, vì việc fetch diễn ra ở server) chỉ còn giả API đăng nhập của backend
+> NestJS cũ, cho hai test đăng nhập và đăng xuất của `e2e/auth.spec.ts`. Hai test này chỉ chạy ở local với
+> `E2E_API_MOCKING=1`, còn lại bị bỏ qua với `reason: login Epic`.
 
 CI (`.github/workflows/ci.yml`) chạy 2 job song song: `verify` (lint → typecheck → format → test+coverage → audit)
 và `build-e2e` (build production → Playwright).
@@ -397,14 +397,6 @@ taskkill /F /T /PID <số PID ở cột cuối>
 
 > Trên Git Bash phải dùng `taskkill //F //T //PID <pid>` — lệnh `kill` của Git Bash **không** diệt tiến
 > trình con của Node, để lại server cũ giữ cổng và phục vụ bản build cũ (rất dễ đánh lừa).
-
-</details>
-
-<details>
-<summary><b>⚠️ Trang Products báo "Too many refreshes" / danh sách trống</b></summary>
-
-Backend demo là **dịch vụ công cộng dùng chung có giới hạn số request/phút**. Chờ khoảng 1 phút rồi tải
-lại. Đây là hành vi _đã được xử lý có chủ đích_ (lỗi dự kiến → hiện thông báo, giữ trang sống), không phải bug.
 
 </details>
 
@@ -458,16 +450,15 @@ công khai (Home, About, Products, Caching, Error demo) **vẫn chạy đầy đ
 
 README này cố tình **ngắn**. Chi tiết nằm ở:
 
-| Tài liệu                                                                                                   | Nội dung                                                                         |
-| ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| [`docs/conventions.md`](docs/conventions.md)                                                               | **Luật của codebase** (25 mục) + cách enforce bằng máy. Đọc trước khi viết code. |
-| [`study-guide-impl/build-project/00-overview/`](study-guide-impl/build-project/00-overview/)               | Triết lý, mô hình server-first, 7 seam kiến trúc, chiến lược phase               |
-| [`study-guide-impl/build-project/23-feature-example/`](study-guide-impl/build-project/23-feature-example/) | **Công thức thêm feature mới** + ma trận truy vết + Definition of Done           |
-| [`study-guide-impl/build-project/<01–25>/`](study-guide-impl/build-project/)                               | "Vì sao" của từng quyết định, theo đúng thứ tự đã build                          |
-| [`.env.example`](.env.example)                                                                             | Template env — liệt kê mọi biến kèm giải thích                                   |
+| Tài liệu                                               | Nội dung                                                                       |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------ |
+| [`docs/coding-conventions/`](docs/coding-conventions/) | **Luật của codebase** (SSOT) + cách enforce bằng máy. Đọc trước khi viết code. |
+| [`docs/conventions.md`](docs/conventions.md)           | Nhật ký build, không phải luật                                                 |
+| [`.env.example`](.env.example)                         | Template env — liệt kê mọi biến kèm giải thích                                 |
 
-**Lộ trình tiếp theo:** Phase 1.2 (folder 26–32) — lớp UI adapter: UI contract `@ui`, adapter headless/Antd
-chứng minh swap được, Storybook. Và wire CD thật khi chốt hosting.
+**Lộ trình tiếp theo:** các màn hình của Epic SHOP-7 (danh mục sản phẩm), dựng trên design system CSS thường
+([docs/design-system/user.md](../../docs/design-system/user.md)). Lớp UI adapter của Phase 1.2 cũ (UI contract
+`@ui`, adapter headless/Antd, Storybook) đã bỏ theo plan SHOP-7, mục 14. Và wire CD thật khi chốt hosting.
 
 ---
 

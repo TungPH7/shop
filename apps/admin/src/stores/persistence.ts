@@ -7,6 +7,8 @@ import { themeValues, type Theme } from '@/stores/theme/theme-slice';
 // minimal so an old/foreign value is rejected cleanly instead of corrupting the
 // store (Vercel `client-localstorage-schema`). Bumping SCHEMA_VERSION makes any
 // previously stored value fail validation → graceful fallback to the default.
+// public/theme-init.js reads the same key, version and values before the first
+// paint: change it with this file (src/theme-init.test.ts ties the two).
 const STORAGE_KEY = 'tungph7.theme';
 const SCHEMA_VERSION = 1;
 

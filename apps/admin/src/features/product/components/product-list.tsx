@@ -1,80 +1,164 @@
-import { useDeferredValue } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 
+import { Pagination } from '@/components/ui/pagination';
+import { SegmentedFilter } from '@/components/ui/segmented-control';
 import { paths } from '@/config/paths';
-import { prefetchProduct } from '@/features/product/api/get-product';
-import { useProducts } from '@/features/product/api/get-products';
+import { PRODUCTS_PAGE_SIZE, useProducts } from '@/features/product/api/get-products';
+import { ProductDeleteDialog } from '@/features/product/components/product-delete-dialog';
+import { ProductSearch } from '@/features/product/components/product-search';
+import {
+  ProductRows,
+  ProductRowsSkeleton,
+  ProductTable,
+  ProductTableMessage,
+} from '@/features/product/components/product-table';
 import { useProductFilters } from '@/features/product/hooks/use-product-filters';
-import { formatPriceFromCents } from '@/features/product/model/product';
-import { isApiError } from '@/lib/api/api-error';
+import { type AdminProductSummary, PRODUCT_STATUS_FILTERS } from '@/features/product/model/product';
 
-// UI-agnostic (Phase 1.1): plain markup only. Server data comes from TanStack
-// Query (folder 08); the search term is URL state via nuqs (folder 09). Strings
-// use the lazy-loaded `product` namespace (folder 14) — the `count` key shows
-// i18next pluralization (`count_one`/`count_other`).
+// S1 of docs/specs/SHOP-7/design.md, the admin product list (US1): the title and
+// Add product (S1.2, S1.3), the status filter with its count (S1.4), the search box
+// (S1.5), the table (S1.6, S1.7, S1.8) with its empty states (S1.9, S1.10), the
+// pagination (S1.11), and the delete dialog S3 that Delete of a row opens (US4).
+// Every filter lives in the URL (AC4). Outside ProtectedRoute: until the login Epic,
+// the basic auth of the host guards admin (AC1).
 export function ProductList() {
   const { t } = useTranslation('product');
-  const queryClient = useQueryClient();
-  const { search, setSearch } = useProductFilters();
-  // Filter against the DEFERRED term so the input stays responsive on large
-  // lists: typing updates instantly while the (potentially expensive) filter
-  // catches up at lower priority. Pairs with <VirtualList> for big result sets.
-  // (Vercel rerender-use-deferred-value.)
-  const deferredSearch = useDeferredValue(search);
-  const { data: products, isPending, isError, error } = useProducts();
+  const { filters, setStatus, setSearch, clearFilters, hrefForPage } = useProductFilters();
+  const { data, isPending, isError, isPlaceholderData, refetch } = useProducts(filters);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
+  // The product of the open dialog S3, or null while it is closed.
+  const [toDelete, setToDelete] = useState<AdminProductSummary | null>(null);
+  // Set when the dialog closes on a delete: the row and its Delete button are gone.
+  const focusTableRef = useRef(false);
+  const isFiltered = filters.q.trim() !== '' || filters.status !== 'all';
+  // An empty placeholder is the page of the last filters, not of these: the next
+  // filters may have products, so until their own answer the list shows the skeleton
+  // and no count, as on the first load, never an empty state.
+  const shown = isPlaceholderData && data?.items.length === 0 ? undefined : data;
 
-  // Client-side filter once data is present (case-insensitive name match).
-  const filtered = products?.filter((product) =>
-    product.name.toLowerCase().includes(deferredSearch.toLowerCase()),
-  );
+  // Closed on a delete: focus goes to the table, not to <body>. A Cancel leaves it to
+  // the dialog, which gives it back to the Delete button of the row (S3.1). This runs
+  // after the dialog's own clean-up, which is an unmount, so it has the last word.
+  useEffect(() => {
+    if (toDelete === null && focusTableRef.current) {
+      focusTableRef.current = false;
+      tableRef.current?.focus();
+    }
+  }, [toDelete]);
+
+  function handleDeleted() {
+    focusTableRef.current = true;
+    setToDelete(null);
+  }
+
+  function handleClearFilters() {
+    clearFilters();
+    searchRef.current?.focus();
+  }
+
+  function body() {
+    if (data === undefined && isError) {
+      return (
+        <ProductTableMessage
+          role="alert"
+          message={t('list.error')}
+          action={
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              onClick={() => void refetch()}
+            >
+              {t('list.retry')}
+            </button>
+          }
+        />
+      );
+    }
+    if (shown === undefined) return <ProductRowsSkeleton />;
+    if (shown.items.length > 0)
+      return <ProductRows products={shown.items} onDelete={setToDelete} />;
+    if (isFiltered) {
+      return (
+        <ProductTableMessage
+          role="status"
+          message={t('list.noMatch')}
+          action={
+            <button
+              type="button"
+              className="btn btn--secondary btn--sm"
+              onClick={handleClearFilters}
+            >
+              {t('filters.clear')}
+            </button>
+          }
+        />
+      );
+    }
+    return (
+      <ProductTableMessage
+        role="status"
+        message={t('list.empty')}
+        action={
+          <Link className="btn btn--primary" to={paths.productNew.getHref()}>
+            {t('actions.add')}
+          </Link>
+        }
+      />
+    );
+  }
 
   return (
-    <section>
-      <h2>{t('title')}</h2>
+    <section className="list-page">
+      <div className="page-header">
+        <h1>{t('title')}</h1>
+        <Link className="btn btn--primary" to={paths.productNew.getHref()}>
+          {t('actions.add')}
+        </Link>
+      </div>
 
-      <label>
-        Search:{' '}
-        <input
-          type="search"
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Filter by name…"
-        />
-      </label>
+      <div className="toolbar">
+        <div className="toolbar__group">
+          <SegmentedFilter
+            label={t('filters.statusLabel')}
+            options={PRODUCT_STATUS_FILTERS.map((value) => ({
+              value,
+              label: t(`filters.${value}`),
+            }))}
+            value={filters.status}
+            onChange={setStatus}
+          />
+          <p className="toolbar__count" role="status">
+            {shown === undefined ? '' : t('filters.count', { count: shown.totalItems })}
+          </p>
+        </div>
+        <ProductSearch ref={searchRef} value={filters.q} onSearch={setSearch} />
+      </div>
 
-      {isPending ? <p role="status">{t('loading')}</p> : null}
-      {isError ? (
-        <p role="alert">
-          Failed to load products: {isApiError(error) ? error.message : 'Unknown error'}
-        </p>
-      ) : null}
-      {filtered ? (
-        filtered.length > 0 ? (
-          <>
-            <p>{t('count', { count: filtered.length })}</p>
-            <ul>
-              {filtered.map((product) => (
-                <li key={product.id}>
-                  <Link
-                    to={paths.productDetail.getHref(product.id)}
-                    // Preload the detail on intent (hover/focus) → instant navigation.
-                    onMouseEnter={() => void prefetchProduct(queryClient, product.id)}
-                    onFocus={() => void prefetchProduct(queryClient, product.id)}
-                  >
-                    {product.name}
-                  </Link>{' '}
-                  — ${formatPriceFromCents(product.priceCents)}
-                  {product.inStock ? '' : ' (out of stock)'}
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : (
-          <p>{t('empty')}</p>
-        )
-      ) : null}
+      <div className="card list-page__card">
+        <ProductTable ref={tableRef} isBusy={isPending || isPlaceholderData}>
+          {body()}
+        </ProductTable>
+        {shown === undefined ? null : (
+          <Pagination
+            page={shown.offset / PRODUCTS_PAGE_SIZE + 1}
+            pageSize={PRODUCTS_PAGE_SIZE}
+            totalItems={shown.totalItems}
+            hrefFor={hrefForPage}
+          />
+        )}
+      </div>
+
+      <ProductDeleteDialog
+        product={toDelete}
+        onCancel={() => {
+          setToDelete(null);
+        }}
+        onDeleted={handleDeleted}
+      />
     </section>
   );
 }

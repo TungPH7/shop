@@ -171,11 +171,11 @@ Sau vài giây, terminal in ra:
 
 Mở trình duyệt (Chrome / Edge / Safari) và vào: **http://localhost:5173**
 
-✅ **Đúng khi:** thấy tiêu đề **tungph7 codebase**, một thanh menu (Home · Products · About · Login) và một ô chọn ngôn ngữ.
+✅ **Đúng khi:** thấy ba "viên thuốc" bo tròn ở đầu trang: bên trái tên **tungph7 codebase**, ở giữa menu (Home · Products · About), bên phải ô chọn **Language**, ô chọn **Theme** và **Login**. Chữ là font Be Vietnam Pro, và nền sáng hay tối theo cài đặt của máy.
 
-> ### "Sao trang trông trơ trụi, không màu mè gì vậy?"
+> ### Giao diện lấy từ đâu?
 >
-> **Đúng như thiết kế, không phải lỗi.** Giai đoạn hiện tại (Phase 1.1) cố ý **chưa lắp thư viện giao diện** để phần lõi có thể ghép với *bất kỳ* bộ UI nào sau này (Ant Design, Headless…). Phần đang chạy là **bộ khung kỹ thuật**: điều hướng, đa ngôn ngữ, đăng nhập, phân quyền, gọi API, xử lý lỗi. Giao diện đẹp thuộc Phase 1.2.
+> App không dùng thư viện giao diện nào. Màu, chữ, khoảng cách và các khối dùng chung (nút, thẻ, ô nhập, bảng) là CSS của chính app, mô tả ở [`docs/design-system/admin.md`](../../../docs/design-system/admin.md) của repo.
 
 ---
 
@@ -188,12 +188,10 @@ Không cần tài khoản, làm được ngay:
 | Bấm menu **About**, rồi **Home** | Trang đổi ngay, **URL trên thanh địa chỉ đổi theo**, không nháy tải lại |
 | Đổi ô **Language** từ `en` sang `vi` | Chữ trên menu đổi sang tiếng Việt **tức thì** (Home → Trang chủ) |
 | Đóng hẳn trình duyệt rồi mở lại `localhost:5173` | Vẫn còn tiếng Việt — app **nhớ** lựa chọn của bạn |
-| Bấm nút **Sidebar / Theme** | Chữ trên nút đổi trạng thái (chưa đổi màu — theming thuộc Phase 1.2) |
+| Đổi ô **Theme** sang `Dark`, rồi `Light`, rồi `System` | Màu cả trang đổi **ngay**: tối, sáng, rồi theo cài đặt sáng/tối của máy |
+| Chọn `Dark`, rồi tải lại trang (F5) | Trang vẫn tối, và **không nháy** màu sáng lúc tải — app nhớ lựa chọn |
 | Gõ bừa một địa chỉ sai, ví dụ `localhost:5173/abcxyz` | Hiện trang **404**, menu vẫn còn, app **không chết** |
-| Vào **Products** | Xem ghi chú ngay bên dưới 👇 |
-
-> **Trang Products báo `Failed to load products: Response did not match the expected schema` — đây là kết quả ĐÚNG, không phải hỏng.**
-> Máy chủ demo đang trả dữ liệu theo định dạng **khác** với định dạng mà app yêu cầu. App phát hiện sai lệch **ngay tại cửa vào** và báo lỗi rõ ràng, thay vì hiển thị dữ liệu sai lệch rồi vỡ ở chỗ khác. Đây chính là cơ chế an toàn dữ liệu của dự án đang hoạt động. Phần Product ở đây là **feature mẫu** để lập trình viên nhân bản, chưa phải tích hợp thật với máy chủ đó.
+| Vào **Products** | Chỉ có tiêu đề **Products**; danh sách sản phẩm sẽ có từ US1 (SHOP-19) |
 
 **Muốn đăng nhập thử?** Cần một tài khoản do người quản trị **máy chủ dữ liệu** cấp (repo này không tự tạo tài khoản). Có tài khoản rồi thì vào **Login**, nhập email + mật khẩu; đăng nhập xong menu sẽ hiện email của bạn, và các trang quản trị chỉ mở ra nếu tài khoản **đủ quyền**.
 

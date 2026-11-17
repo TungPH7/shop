@@ -24,12 +24,17 @@ export default defineConfig({
     // env.ts validates VITE_API_URL at import → provide one for the test run so
     // the api singleton can be imported without the fail-fast throwing.
     env: { VITE_API_URL: 'http://localhost:3000' },
+    // Node would load nuqs on its own, and its react-router adapter would then import a
+    // second copy of react-router, outside the router of the test ("useNavigate() may be
+    // used only in the context of a <Router>"). Inlined, it shares the copy of the app.
+    server: { deps: { inline: ['nuqs'] } },
     coverage: {
       provider: 'v8',
       // The default reporters plus lcov: the CI of ai-orchestrator reads coverage/lcov.info to measure the lines a PR
       // changes.
       reporter: ['text', 'html', 'clover', 'json', 'lcov'],
-      include: ['src/**/*.{ts,tsx}'],
+      // public/theme-init.js runs in the browser before the app, and has its own tests.
+      include: ['src/**/*.{ts,tsx}', 'public/**/*.js'],
       // Exclude what is not meaningfully UNIT-testable so the % reflects tested
       // logic, not boilerplate: test files/utils, type decls, the entry, env +
       // env-coupled singletons, app composition/bootstrap + route shells (E2E
@@ -38,18 +43,19 @@ export default defineConfig({
         'src/**/*.test.{ts,tsx}',
         'src/testing/**',
         'src/**/*.d.ts',
-        'src/main.tsx',
         // env.ts stays in: the CI of ai-orchestrator needs every file a PR changes in coverage/lcov.info (SHOP-1).
-        'src/config/paths.ts',
+        // So do main.tsx, the root layout and the home and about routes, which SHOP-8 changes, and the paths, the route
+        // table and the admin route, which SHOP-17 changes, and the profile route, which SHOP-42 changes, and the add
+        // route of products, which SHOP-20 adds (routes.test.tsx renders it). And the QueryClient factory, which SHOP-66
+        // changes (query-client.test.ts).
         'src/app/provider.tsx',
         'src/app/router.ts',
-        'src/app/routes.tsx',
         'src/app/configure-auth.ts',
         'src/app/observability.ts',
-        'src/app/layouts/**',
-        'src/app/routes/**',
+        'src/app/routes/{access-denied,login,not-found}/**',
+        'src/app/routes/products/products-route.tsx',
+        'src/app/routes/route-error.tsx',
         'src/lib/api/api.ts',
-        'src/lib/react-query/query-client.ts',
         'src/lib/logger/app-logger.ts',
         'src/lib/i18n/i18n.ts',
       ],

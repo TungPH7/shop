@@ -1,29 +1,63 @@
-import { queryOptions, useQuery } from '@tanstack/react-query';
-import { z } from 'zod';
+import { keepPreviousData, queryOptions, useQuery } from '@tanstack/react-query';
 
 import { productKeys } from '@/features/product/api/query-keys';
-import { type Product, productSchema } from '@/features/product/model/product';
+import {
+  type AdminProductPage,
+  adminProductPageSchema,
+  type ProductListFilters,
+} from '@/features/product/model/product';
 import { api } from '@/lib/api/api';
 
-const productsSchema = z.array(productSchema);
+// GET /api/admin/products (API Contract of docs/specs/SHOP-7/plan.md): one page of
+// the admin list, newest first.
 
-// Transport: fetch + validate at the boundary (folder 07).
-export function getProducts(): Promise<Product[]> {
-  return api.get('/products', { schema: productsSchema });
-}
+/** Products per page of the admin list (S1.6, S1.11). */
+export const PRODUCTS_PAGE_SIZE = 20;
 
-// Reusable query definition (v5 `queryOptions`): one typed object shared by
-// useQuery, prefetchQuery, ensureQueryData… so the key and fn never drift apart.
-export function productsQueryOptions() {
-  return queryOptions({
-    queryKey: productKeys.lists(),
-    queryFn: getProducts,
+/** The largest offset the API takes: an `int` of Java. */
+const MAX_OFFSET = 2 ** 31 - 1;
+
+/**
+ * The last page whose offset fits the API (107 374 183). A page past it would get a
+ * 400 that Try again never fixes, so it is a wrong page, like "0" (S1.11).
+ */
+export const PRODUCTS_MAX_PAGE = Math.floor(MAX_OFFSET / PRODUCTS_PAGE_SIZE) + 1;
+
+function fetchPage(filters: ProductListFilters, page: number): Promise<AdminProductPage> {
+  const q = filters.q.trim();
+  return api.get('/admin/products', {
+    params: {
+      ...(q === '' ? {} : { q }),
+      // The URL holds the status in lower case; the API takes only upper case.
+      status: filters.status.toUpperCase(),
+      offset: (page - 1) * PRODUCTS_PAGE_SIZE,
+      limit: PRODUCTS_PAGE_SIZE,
+    },
+    schema: adminProductPageSchema,
   });
 }
 
-// Hook co-located with the fetcher (bulletproof-react). TanStack Query dedupes
-// identical query keys across component instances and caches the result —
-// the same benefit the Vercel guide credits to SWR (`client-swr-dedup`).
-export function useProducts() {
-  return useQuery(productsQueryOptions());
+/**
+ * The page of the filters. A page past the last one, as an old link after products
+ * were deleted, shows page 1 (S1.11): the result then has offset 0. So does a page
+ * past PRODUCTS_MAX_PAGE, which the URL already turns into page 1.
+ */
+export async function getProducts(filters: ProductListFilters): Promise<AdminProductPage> {
+  if (filters.page > PRODUCTS_MAX_PAGE) return fetchPage(filters, 1);
+  const result = await fetchPage(filters, filters.page);
+  const isPastLastPage = result.items.length === 0 && result.totalItems > 0 && filters.page > 1;
+  return isPastLastPage ? fetchPage(filters, 1) : result;
+}
+
+export function productsQueryOptions(filters: ProductListFilters) {
+  return queryOptions({
+    queryKey: productKeys.list(filters),
+    queryFn: () => getProducts(filters),
+    // Keep the rows on screen while the next filter or page loads (NFR6).
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useProducts(filters: ProductListFilters) {
+  return useQuery(productsQueryOptions(filters));
 }

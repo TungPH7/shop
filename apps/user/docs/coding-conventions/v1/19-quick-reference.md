@@ -9,7 +9,6 @@
 | Type / schema Zod / logic thuần của feature           | `features/<x>/model/`                           | §02, §08 |
 | Gọi backend (đọc dữ liệu)                             | `features/<x>/server/` + `import 'server-only'` | §08      |
 | Mutation client gọi được                              | `features/<x>/actions/` (`"use server"`)        | §09      |
-| Hook TanStack Query                                   | `features/<x>/api/`                             | §10      |
 | UI của feature                                        | `features/<x>/components/`                      | §02      |
 | UI dùng chung ≥2 feature                              | `src/components/`                               | §02      |
 | Hạ tầng (http, auth, errors, logger, seo, validation) | `src/lib/<domain>/`                             | §02      |
@@ -18,24 +17,25 @@
 | Endpoint cho client / webhook                         | `src/app/api/<path>/route.ts`                   | §06      |
 | Chuỗi hiển thị                                        | `messages/{en,vi}.json`                         | §11      |
 | Màu / spacing                                         | `src/styles/tokens.css` (semantic token)        | §12      |
+| Class dùng chung (nút, huy hiệu, thẻ, ô nhập…)        | `src/styles/components.css`                     | §12.6    |
 
 ## 19.2 "Dùng cái gì?"
 
-| Nhu cầu                   | Dùng                               | ❌ Không dùng                  |
-| ------------------------- | ---------------------------------- | ------------------------------ |
-| Đọc dữ liệu backend       | RSC + DAL                          | `fetch` trong Client Component |
-| Ghi dữ liệu               | Server Action                      | Route Handler + fetch tay      |
-| State share/bookmark được | nuqs (URL)                         | Redux                          |
-| State nhớ qua phiên       | Redux qua `~/stores/*`             | Import `react-redux` trực tiếp |
-| Fetch lại phía client     | TanStack Query ở `features/*/api`  | `useEffect` + `fetch`          |
-| Form đơn giản             | `<form action>` + `useActionState` | —                              |
-| Form phức tạp             | RHF + zodResolver                  | `<form action>`                |
-| Điều hướng                | `~/i18n/navigation`                | `next/link`, `next/navigation` |
-| Ghi log                   | `~/lib/logger`                     | `console.log`                  |
-| Báo lỗi                   | `captureError`                     | `console.error`                |
-| Đọc env                   | `~/config/env/{client,server}`     | `process.env` thô              |
-| Ảnh                       | `next/image`                       | `<img>`                        |
-| Invalidate sau mutation   | `updateTag('x')`                   | `revalidateTag` trong action   |
+| Nhu cầu                   | Dùng                                 | ❌ Không dùng                  |
+| ------------------------- | ------------------------------------ | ------------------------------ |
+| Đọc dữ liệu backend       | RSC + DAL                            | `fetch` trong Client Component |
+| Ghi dữ liệu               | Server Action                        | Route Handler + fetch tay      |
+| State share/bookmark được | `searchParams` + `~/i18n/navigation` | Redux                          |
+| State nhớ qua phiên       | Redux qua `~/stores/*`               | Import `react-redux` trực tiếp |
+| Dữ liệu mới sau khi tải   | Đổi URL hoặc `router.refresh()`      | `useEffect` + `fetch`          |
+| Form đơn giản             | `<form action>` + `useActionState`   | —                              |
+| Form phức tạp             | RHF + zodResolver                    | `<form action>`                |
+| Điều hướng                | `~/i18n/navigation`                  | `next/link`, `next/navigation` |
+| Ghi log                   | `~/lib/logger`                       | `console.log`                  |
+| Báo lỗi                   | `captureError`                       | `console.error`                |
+| Đọc env                   | `~/config/env/{client,server}`       | `process.env` thô              |
+| Ảnh                       | `next/image`                         | `<img>`                        |
+| Invalidate sau mutation   | `updateTag('x')`                     | `revalidateTag` trong action   |
 
 ## 19.3 Lệnh hay dùng
 
@@ -88,6 +88,7 @@ pnpm analyze             # bundle
 - [ ] Server Action đủ **4 bước**: validate → re-authz → delegate → invalidate
 - [ ] Dữ liệu từ ngoài đều qua Zod; DTO **tối thiểu**, không lộ field thừa
 - [ ] Không có `any`, không `console.*`, không hardcode màu, không barrel file
+- [ ] Màu, chữ, khoảng cách lấy từ token; class của `components.css` trước CSS mới (§12.6)
 - [ ] Không thêm `useMemo`/`useCallback` tay khi chưa đo (React Compiler lo)
 - [ ] Rule kiến trúc thay đổi → tài liệu convention cập nhật **trong cùng PR**
 

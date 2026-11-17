@@ -9,7 +9,7 @@ import { httpGet } from '~/lib/http/client';
 /**
  * DAL hồ sơ người dùng — `GET /profile` (`@ApiBearerAuth`) → user + role + permissions. `server-only`.
  *
- * ⭐ Bọc `cache()` (React): DEDUP trong CÙNG một request → nhiều `<Can>` + guard trên một trang chỉ
+ * ⭐ Bọc `cache()` (React): DEDUP trong CÙNG một request → nhiều guard trên một trang chỉ
  * gọi `/profile` MỘT lần (quan trọng vì backend rate-limit). Ngoài request (vd unit test) cache không
  * gom → mỗi lần gọi là một fetch độc lập (không rò state giữa test).
  *

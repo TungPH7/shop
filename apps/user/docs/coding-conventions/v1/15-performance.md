@@ -17,7 +17,7 @@
 1. **Chống request waterfall** — `Promise.all`, preload, streaming.
 2. **Giảm `"use client"`** — server-first đã giúp sẵn; mỗi island bớt đi là JS bớt đi.
 3. **Cache đúng chỗ** — `'use cache'` + `cacheLife` + `cacheTag` (→ §07).
-4. **Dedupe request phía client** — TanStack Query (→ §10).
+4. **Dedupe request** — `cache()` của React cho DAL trong một request (vd `getProfile`); client không fetch dữ liệu hiển thị (→ §10.4).
 5. **Bớt re-render** — React Compiler lo tự động.
 6. **Virtualize** danh sách rất dài.
 
@@ -49,11 +49,13 @@ const categories = await getCategories();
 
 ## 15.5 `next/font` — `[MUST]`
 
-Khai ở `src/config/fonts.ts`, dùng `next/font/google` (hiện: Inter variable).
+Khai ở `src/config/fonts.ts`, dùng `next/font/google`: **Be Vietnam Pro** 500, 600, 700, subset `latin`, `latin-ext`, `vietnamese` (mục 14 của plan SHOP-7, NFR5; [`docs/design-system/user.md`](../../../../../docs/design-system/user.md), mục Font).
 
 - Font được **self-host lúc build** → 0 request runtime tới Google, và CSP `font-src 'self'` là đủ.
-- **[MUST]** `display: 'swap'` + expose qua CSS variable (`variable: '--font-sans'`) để `globals.css` tham chiếu.
-- Metric fallback khớp sẵn → CLS = 0. ❌ Không tự nhúng `@font-face` từ CDN ngoài.
+- **[MUST]** `display: 'swap'` + expose qua CSS variable (`variable: '--font-sans'`); `--font` trong `tokens.css` đặt `--font-sans` trước font hệ thống.
+- **[MUST]** Chỉ ba độ đậm và ba subset trên. Mỗi độ đậm hay subset thêm là thêm file woff2: chín file hiện khoảng 77 KB, và `e2e/design-system.spec.ts` chặn tổng trên 150 KB.
+- **[MUST]** Giữ font dự phòng chỉnh cỡ (`adjustFontFallback`, mặc định bật: `'Be Vietnam Pro Fallback'` trên Arial có `size-adjust`), để lúc đổi font không dịch bố cục (CLS). ❌ Không truyền tùy chọn `fallback`: có nó, Turbopack bỏ font dự phòng chỉnh cỡ.
+- ❌ Không tự nhúng `@font-face` từ CDN ngoài.
 
 ## 15.6 `next/dynamic` — `[SHOULD]`
 

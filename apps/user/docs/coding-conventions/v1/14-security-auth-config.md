@@ -46,22 +46,22 @@ Backend ký JWT; **ta niêm phong cặp token vào cookie**:
 
 ## 14.4 Authorization — `[MUST]`
 
-| Lớp                         | Vai trò                 | Có phải ranh giới bảo mật?            |
-| --------------------------- | ----------------------- | ------------------------------------- |
-| `proxy.ts`                  | Routing / i18n          | ❌ **KHÔNG** (bài học CVE-2025-29927) |
-| Ẩn nút, `<Can>`, `disabled` | UX                      | ❌ Không                              |
-| **DAL + Server Action**     | Kiểm tra quyền thật     | ✅ Có                                 |
-| **Backend**                 | Chốt cuối, luôn 401/403 | ✅ Có                                 |
+| Lớp                     | Vai trò                 | Có phải ranh giới bảo mật?            |
+| ----------------------- | ----------------------- | ------------------------------------- |
+| `proxy.ts`              | Routing / i18n          | ❌ **KHÔNG** (bài học CVE-2025-29927) |
+| Ẩn nút, `disabled`      | UX                      | ❌ Không                              |
+| **DAL + Server Action** | Kiểm tra quyền thật     | ✅ Có                                 |
+| **Backend**             | Chốt cuối, luôn 401/403 | ✅ Có                                 |
 
 Primitives ở `~/lib/auth/` (auth là hạ tầng **cắt ngang**, không thuộc feature nào — nhờ vậy mọi feature gate được nút mà không vi phạm cấm-import-chéo):
 
 - `getCurrentUser()` — decode access token → `{ id, role }` | `null`. Rẻ, không gọi network. Dùng để re-authz trong Server Action.
 - `getProfile()` — `GET /profile`, DTO tối thiểu qua Zod, bọc `cache()` để dedup trong một request, **session-gated** (chưa đăng nhập → trả `null`, không gọi backend).
-- `hasPermission(method, path)` / `hasModule(module)` — vị từ **thuần**. Quyền đến **từ backend**, ❌ không hardcode ở frontend.
+- `hasModule(permissions, module)` (`~/lib/auth/permissions`) — vị từ **thuần**. Quyền đến **từ backend**, ❌ không hardcode ở frontend.
 - `requireUser()` / `requireModule(m)` — guard server-side, redirect thay vì "chớp trang rồi đá ra".
-- `<Can method path>` (`~/components/can.tsx`, Server Component) — ẩn/hiện ở mức element.
+- Guard ở mức element (`<Can method path>`, `hasPermission(method, path)`) — **tạm ngưng**: SHOP-45 gỡ chúng vì không còn chỗ dùng. `user` không có lệnh ghi sản phẩm (NFR8 của SHOP-7), nên chưa nút nào cần ẩn theo quyền. Dựng lại khi một Story cần, cùng PR với chỗ dùng đầu tiên.
 
-> **[MUST]** Component nào đọc cookie (guard, `getProfile`, `<Can>`, `AuthStatus`) **phải** nằm trong `<Suspense>` → shell tĩnh flush trước, redirect stream sau (→ §07).
+> **[MUST]** Component nào đọc cookie (guard, `getProfile`, `AuthStatus`, `AccountDetails`) **phải** nằm trong `<Suspense>` → shell tĩnh flush trước, redirect stream sau (→ §07).
 
 ## 14.5 Security headers & CSP — `[MUST]`
 

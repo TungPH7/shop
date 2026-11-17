@@ -1,7 +1,116 @@
 {
   "title": "Sản phẩm",
-  "loading": "Đang tải sản phẩm…",
-  "count_other": "{{count}} sản phẩm",
-  "empty": "Chưa có sản phẩm nào.",
-  "create": "Tạo sản phẩm"
+  "actions": {
+    "add": "Thêm sản phẩm",
+    "edit": "Sửa",
+    "editLabel": "Sửa {{name}}",
+    "delete": "Xóa",
+    "deleteLabel": "Xóa {{name}}"
+  },
+  "filters": {
+    "statusLabel": "Lọc theo trạng thái",
+    "all": "Tất cả",
+    "active": "Đang bán",
+    "hidden": "Ẩn",
+    "count_other": "{{count, number}} sản phẩm",
+    "searchLabel": "Tìm theo tên",
+    "searchPlaceholder": "Tìm theo tên sản phẩm…",
+    "clear": "Xóa bộ lọc"
+  },
+  "table": {
+    "label": "Danh sách sản phẩm",
+    "product": "Sản phẩm",
+    "price": "Giá bán",
+    "status": "Trạng thái",
+    "availability": "Tình trạng",
+    "actions": "Thao tác"
+  },
+  "status": {
+    "ACTIVE": "Đang bán",
+    "HIDDEN": "Ẩn"
+  },
+  "availability": {
+    "IN_STOCK": "Còn hàng",
+    "OUT_OF_STOCK": "Hết hàng"
+  },
+  "list": {
+    "loading": "Đang tải danh sách sản phẩm",
+    "noMatch": "Không có sản phẩm nào khớp",
+    "empty": "Chưa có sản phẩm nào.",
+    "error": "Không tải được danh sách sản phẩm.",
+    "retry": "Thử lại"
+  },
+  "delete": {
+    "title": "Xóa “{{name}}”?",
+    "cannotUndo": "Việc xóa không hoàn tác được.",
+    "hideHint": "Nếu chỉ muốn tạm ngừng bán, hãy chọn Ẩn.",
+    "cancel": "Hủy",
+    "confirm": "Xóa",
+    "deleting": "Đang xóa…",
+    "failed": "Không xóa được. Vui lòng thử lại.",
+    "done": "Đã xóa sản phẩm"
+  },
+  "form": {
+    "back": "Sản phẩm",
+    "addTitle": "Thêm sản phẩm",
+    "editTitle": "Sửa sản phẩm",
+    "subtitle": "Khách chỉ thấy sản phẩm ở trạng thái Đang bán.",
+    "name": {
+      "label": "Tên sản phẩm",
+      "placeholder": "vd. Áo thun cổ tròn"
+    },
+    "slug": {
+      "label": "Đường dẫn (slug)",
+      "hint": "Tự sinh từ tên. Nếu đã có, hệ thống thêm -2, -3…",
+      "changed": "Đường dẫn cũ /products/{{slug}} sẽ không mở được nữa."
+    },
+    "description": {
+      "label": "Mô tả (không bắt buộc)",
+      "hint": "Xuống dòng được giữ nguyên. Thẻ HTML hiện như chữ, không có tác dụng."
+    },
+    "price": {
+      "label": "Giá bán (₫)"
+    },
+    "compareAtPrice": {
+      "label": "Giá gốc (₫) (không bắt buộc)",
+      "hint": "Để trống nếu không giảm giá. Có giá gốc thì khách thấy giá gạch ngang và phần trăm giảm."
+    },
+    "status": {
+      "legend": "Trạng thái",
+      "hint": "Ẩn: khách không thấy sản phẩm và trang chi tiết trả 404."
+    },
+    "availability": {
+      "legend": "Tình trạng",
+      "hint": "Hết hàng vẫn hiện trong danh sách của khách."
+    },
+    "cancel": "Hủy",
+    "submitAdd": "Thêm sản phẩm",
+    "submitEdit": "Lưu thay đổi",
+    "saving": "Đang lưu…",
+    "added": "Đã thêm sản phẩm",
+    "saved": "Đã lưu sản phẩm",
+    "saveFailed": "Không lưu được. Vui lòng thử lại.",
+    "conflict": "Sản phẩm vừa được sửa ở nơi khác. Tải lại để xem bản mới nhất.",
+    "reload": "Tải lại",
+    "loading": "Đang tải sản phẩm",
+    "loadFailed": "Không tải được sản phẩm.",
+    "retry": "Thử lại",
+    "notFound": "Không tìm thấy sản phẩm này. Có thể nó đã bị xóa.",
+    "backToList": "Về danh sách sản phẩm",
+    "errors": {
+      "nameRequired": "Nhập tên sản phẩm",
+      "nameTooLong": "Tên tối đa 150 ký tự",
+      "slugFormat": "Chỉ dùng chữ thường a–z, số và dấu gạch ngang; không bắt đầu hay kết thúc bằng dấu gạch ngang.",
+      "slugTooLong": "Slug tối đa 100 ký tự",
+      "slugTaken": "Slug này đã được dùng",
+      "slugNotGenerated": "Các slug tự sinh từ tên này đều đã được dùng. Hãy tự nhập một slug.",
+      "descriptionTooLong": "Mô tả tối đa 5.000 ký tự",
+      "priceMin": "Giá bán phải lớn hơn 0",
+      "priceWhole": "Giá phải là số nguyên đồng",
+      "priceMax": "Giá tối đa 999.999.999 ₫",
+      "priceInvalid": "Nhập giá bằng số, như 250.000",
+      "compareAtPriceGreater": "Giá gốc phải lớn hơn giá bán",
+      "invalid": "Giá trị này không hợp lệ."
+    }
+  }
 }

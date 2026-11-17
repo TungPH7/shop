@@ -1,0 +1,18 @@
+# PR review (ai-orchestrator): relays every review of a PR to jira-sync, which follows this workflow's runs with
+# workflow_run (review of shop PR #21). GitHub takes a pull_request_review workflow from the PR itself, with the
+# repository's secrets, so this one holds no secret, no right and no code: jira-sync, from the default branch, reads the
+# review from GitHub.
+name: PR review
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions: {}
+
+jobs:
+  # The job id is the check run name, which lib/tracker/facts.mjs leaves out of CI.
+  pr-review-relay:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "jira-sync reads this review from the default branch"

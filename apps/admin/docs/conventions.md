@@ -101,7 +101,7 @@ pnpm format:check # Prettier kiểm tra (dùng trong CI)
 - **Typed paths:** mọi URL khai ở `@/config/paths.ts` (`as const`, kèm `getHref()` typed params). Tạo link **luôn** qua `paths.*.getHref(...)`; **không** magic string. (`config/` là shared → import được mọi nơi.)
 - **Lazy & code-split:** route phụ/nặng dùng `lazy: async () => ({ Component })` với **dynamic import chuỗi literal** → mỗi route một chunk. **Eager** cho critical path (Home) và component nhỏ luôn cần (404).
 - **App route mỏng:** route ở `app/` chỉ compose component của feature; UI + logic ở `features/<x>/components`.
-- **Params:** `useParams()` trả `string | undefined` → `invariant(param, …)` thu hẹp trước khi dùng.
+- **Params:** `useParams()` trả `string | undefined` → thu hẹp bằng `if (!param) throw new Error(…)` trước khi dùng (không `!`, không cần helper riêng; RT-007).
 - **404:** route `path: '*'` đặt **cuối**, nằm trong layout (vẫn có nav).
 - **Error cấp route:** `ErrorBoundary` (`useRouteError` + `isRouteErrorResponse`) ở route bố → không trắng trang. Error **toàn cục** là folder 12 (không làm trùng).
 - **UX điều hướng:** `useNavigation().state === 'loading'` → hiện indicator (`role="status"`) khi tải chunk lazy.
@@ -113,14 +113,14 @@ pnpm format:check # Prettier kiểm tra (dùng trong CI)
 - **Bề mặt:** gọi `api.get/post/put/patch/delete<T>()` → trả **thẳng `T`** (data), **không** leak `AxiosResponse` ra feature.
 - **Lỗi:** mọi lỗi **chuẩn hoá về `ApiError`** (`kind` ∈ network/timeout/canceled/validation/http/unknown + `status`/`code`/`details`) qua `normalizeError`; bắt bằng `isApiError`. **KHÔNG** hiển thị UI/toast trong interceptor (transport thuần; caller/Query/ErrorBoundary quyết cách hiện).
 - **Auth (DI seam):** gắn `Bearer` token + refresh qua `configureApiAuth()` (`auth-bridge`); `lib/api` **KHÔNG** import auth/redux (giữ layering + tránh cycle). **401 → single-flight refresh → retry một lần**; fail → `onUnauthorized()`. Auth thật = folder 10 cắm vào seam.
-- **Retry:** chỉ **idempotent** (GET/HEAD/OPTIONS/PUT/DELETE), statuses 408/429/5xx, **exp backoff + full jitter**, tôn trọng `Retry-After`; `MAX_RETRIES=2`. (Tự viết — minh bạch, không dep; `axios-retry` là lựa chọn thay thế.)
+- **Retry:** chỉ **request đọc** (GET/HEAD/OPTIONS; không bao giờ lệnh ghi, NFR19 của SHOP-7), statuses 408/429/5xx, **exp backoff + full jitter**, tôn trọng `Retry-After`; `MAX_RETRIES=2`. (Tự viết — minh bạch, không dep; `axios-retry` là lựa chọn thay thế.)
 - **Validate tại biên (type-at-boundary):** truyền **Zod `schema`** vào request → trả `T` đã validate; sai shape → `ApiError(kind:'validation')`.
 - **Model schema-first:** Zod schema là nguồn sự thật, `type = z.infer<...>`. Data access đặt ở **`features/<x>/api/*`** (service theo resource): fetch + validate, trả domain type. Folder 08 bọc bằng TanStack Query.
 
 ## 12. Server state (TanStack Query — enforce: review)
 
 - **Seam #1:** server state (data API) qua **TanStack Query**, tách hẳn client state (Redux — §13/folder 09). **KHÔNG** nhồi data API vào Redux store.
-- **QueryClient:** `createQueryClient` (factory, env-free) + `queryClient` (singleton) ở `src/lib/react-query/`. Defaults: `staleTime` 60s, `gcTime` 5m, **`retry: false`** (API layer §11 là nguồn retry duy nhất — tránh nhân đôi), `refetchOnWindowFocus: !DEV`, `refetchOnReconnect: true`, mutations `retry:false`.
+- **QueryClient:** `createQueryClient` (factory, env-free) + `queryClient` (singleton) ở `src/lib/react-query/`. Defaults: `staleTime` 60s, `gcTime` 5m, **`retry: false`** (API layer §11 là nguồn retry duy nhất — tránh nhân đôi), `refetchOnWindowFocus: !DEV`, `refetchOnReconnect: true`, mutations `retry: false` và `networkMode: 'always'` (NFR19, ST-004), lấy từ hằng `MUTATION_DEFAULTS`.
 - **Provider:** `QueryClientProvider` bọc `RouterProvider` trong `AppProvider`.
 - **Devtools:** `@tanstack/react-query-devtools` là **`devDependencies`**, render **lazy + chỉ `import.meta.env.DEV`** → tree-shaken khỏi prod (Vercel `bundle-dynamic-imports`).
 - **Query keys:** factory phân cấp ở `features/<x>/api/query-keys.ts` (`all`/`lists()`/`detail(id)`, `as const`) → invalidate chính xác theo cấp, không drift.
@@ -131,12 +131,12 @@ pnpm format:check # Prettier kiểm tra (dùng trong CI)
 
 ## 13. Client state (Redux Toolkit + nuqs — enforce: ESLint seam + review)
 
-- **Seam #2:** client/UI state qua **Redux Toolkit**; server state KHÔNG ở đây (§12). Store **chỉ** giữ state UI/đồng bộ (theme, sidebar…), không nhồi data API.
+- **Seam #2:** client/UI state qua **Redux Toolkit**; server state KHÔNG ở đây (§12). Store **chỉ** giữ state UI/đồng bộ (theme…), không nhồi data API.
 - **Cấu trúc `src/stores/` (shared):** `store.ts` (`makeStore` factory + `store` singleton + `RootState`/`AppDispatch`), `hooks.ts` (typed `useAppSelector`/`useAppDispatch` qua `.withTypes()`), `store-provider.tsx` (`StoreProvider` bọc react-redux `Provider`), `<domain>/<domain>-slice.ts` + `<domain>/use-<domain>.ts` (facade), `persistence.ts`.
-- **⭐ Domain-hook FACADE = seam:** component **chỉ** dùng facade (`useTheme`/`useSidebar`), **không bao giờ** import `react-redux`/`@reduxjs/toolkit` trực tiếp → đổi store impl (vd Zustand) chỉ sửa facade. **Enforce bằng ESLint** `no-restricted-imports` (chặn 2 lib đó ngoài `src/stores/**`). `StoreProvider` để app layer khỏi phải import react-redux.
+- **⭐ Domain-hook FACADE = seam:** component **chỉ** dùng facade (`useTheme`), **không bao giờ** import `react-redux`/`@reduxjs/toolkit` trực tiếp → đổi store impl (vd Zustand) chỉ sửa facade. **Enforce bằng ESLint** `no-restricted-imports` (chặn 2 lib đó ngoài `src/stores/**`). `StoreProvider` để app layer khỏi phải import react-redux.
 - **Slice (RTK 2.x):** `createSlice` + Immer (viết "mutating"), co-located `selectors` (đọc root tại `state[name]`); export `actions`/`selectors`/`reducer`. **KHÔNG** `createAsyncThunk` cho data fetching (đó là server state → Query). Store compose qua `reducer: { ... }`.
 - **Selector hẹp:** facade select primitive → component chỉ re-render khi đúng slice đó đổi (Vercel `rerender-defer-reads`).
-- **Persistence:** tự viết, **versioned + tối thiểu** (`{ v, ... }`), validate khi đọc bằng **Zod** (localStorage = external input → type-at-boundary); shape lạ / version cũ → bỏ qua, fallback default. Ghi **chỉ khi đổi** (subscribe). KHÔNG `redux-persist` (nặng, phải hack `serializableCheck`). State ephemeral (sidebar) **không** persist.
+- **Persistence:** tự viết, **versioned + tối thiểu** (`{ v, ... }`), validate khi đọc bằng **Zod** (localStorage = external input → type-at-boundary); shape lạ / version cũ → bỏ qua, fallback default. Ghi **chỉ khi đổi** (subscribe). KHÔNG `redux-persist` (nặng, phải hack `serializableCheck`). State ephemeral **không** persist.
 - **URL state = nuqs:** state nên ở URL (search/filter/pagination) dùng **nuqs** (`useQueryState` + `parseAsString.withDefault`), bọc trong facade (`useProductFilters`). `NuqsAdapter` (`nuqs/adapters/react-router/v7`) đặt trong `root-layout` (cần React Router context). Set rỗng → ghi `null` để xoá param (URL sạch).
 - **Provider order (`AppProvider`):** `StoreProvider` › `QueryClientProvider` › `RouterProvider`; `NuqsAdapter` trong layout.
 
@@ -145,8 +145,8 @@ pnpm format:check # Prettier kiểm tra (dùng trong CI)
 - **Token:** JWT access + refresh trong **localStorage** (`lib/auth/token-storage.ts`, shared) — khớp Bearer seam §11. Pub/sub + `useSyncExternalStore` (`useAccessToken`) để React phản ứng login/logout (localStorage không reactive trong tab). *(Tradeoff XSS; bản cứng = refresh httpOnly cookie + `withCredentials`, phụ thuộc BE — để deploy phase.)*
 - **Cắm seam api (§11):** `app/configure-auth.ts` gọi `configureApiAuth` **1 lần** lúc bootstrap (Vercel `advanced-init-once`): `getAccessToken`←storage, `refreshTokens`→`POST /auth/refresh-token` (**bare axios**, tránh đệ quy interceptor) + lưu token, `onUnauthorized`→clear + removeQueries + `/login`. 401 single-flight refresh đã có ở §11.
 - **currentUser = server state (TanStack Query), KHÔNG Redux/Context:** `useProfile` (`GET /profile` → user + `role.permissions[]`), `enabled` theo token (reactive). `isAuthenticated = !!profile` (verify bằng /profile, không chỉ "có token"). Login trả **chỉ token** → fetch profile riêng.
-- **Facade:** `useAuth()` (`user/isAuthenticated/isLoading/login/logout`) + `usePermission()` (`hasPermission(method,path)`/`hasModule(module)`). Logic check là **hàm thuần** ở `features/auth/lib/permission.ts` (testable); hook/guard chỉ bọc mỏng.
-- **RBAC 2 tầng (permission từ BE, KHÔNG hardcode FE):** route-level `ProtectedRoute` (chưa auth → `/login`) + `RequireModule({module})` (thiếu module → `/access-denied`); element-level `Can({method,path})` (ẩn UI). Compose lồng nhau: ProtectedRoute › RequireModule › page. `RequireModule` có prop → dùng `element` JSX (ngoại lệ có chủ đích của route-table thuần-data §10).
+- **Facade:** `useAuth()` (`user/isAuthenticated/isLoading/login/logout`) + `usePermission()` (`hasModule(module)`). Logic check là **hàm thuần** ở `features/auth/lib/permission.ts` (testable); hook/guard chỉ bọc mỏng.
+- **RBAC 2 tầng (permission từ BE, KHÔNG hardcode FE):** route-level `ProtectedRoute` (chưa auth → `/login`) + `RequireModule({module})` (thiếu module → `/access-denied`). Element-level `Can({method,path})` của template đã gỡ ở SHOP-42 (chỉ nút demo trên `/profile` dùng nó). Compose lồng nhau: ProtectedRoute › RequireModule › page. `RequireModule` có prop → dùng `element` JSX (ngoại lệ có chủ đích của route-table thuần-data §10).
 - **Cô lập contract:** model Zod (`User`/`Role`/`Permission{method,path,module}`) + api call gói ở `features/auth/` → swap backend chỉ sửa đây; validate response tại biên (§11). Học RBAC từ backend tham khảo nhưng implement FE chuẩn (Query + facade + pure helpers + Zod), KHÔNG bê pattern Context/manual-fetch của reference.
 
 ## 15. Forms (react-hook-form + zod resolver — enforce: review)
@@ -233,7 +233,7 @@ pnpm format:check # Prettier kiểm tra (dùng trong CI)
 
 - **Một resource = một bộ**: model Zod (single source) + `api/<operation>.ts` (1 file/thao tác: get-products/get-product/create/update/delete) + query hooks co-located (queryOptions + useMutation) + form (RHF + zodResolver) + route. Feature mới (Cart/Order) = copy bộ này.
 - **Mutation cache strategy**: create → `invalidateQueries(lists())`; update → `invalidateQueries(lists())` + `setQueryData(detail(id), updated)` (detail tươi ngay); delete → `invalidateQueries(lists())` + `removeQueries(detail(id))`. PUT = full replace → reuse `createProductSchema` (không update-schema riêng để lệch).
-- **⭐ Cross-feature composition**: feature KHÔNG import feature khác (`import-x/no-restricted-paths`). UI gated bằng feature khác (vd `<Can>` của auth trên trang product) → **compose ở APP layer** qua slot `actions?: ReactNode` (DI mức UI); feature nhận slot, vô can với feature kia. Đổi quyền = sửa app, không đụng feature.
+- **⭐ Cross-feature composition**: feature KHÔNG import feature khác (`import-x/no-restricted-paths`). UI gated bằng feature khác (vd `usePermission()` của auth quyết định nút trên trang product) → **compose ở APP layer** qua slot `actions?: ReactNode` (DI mức UI); feature nhận slot, vô can với feature kia. Đổi quyền = sửa app, không đụng feature.
 - **Destructive UI headless**: delete = inline two-step confirm (KHÔNG `window.confirm`) → testable + E2E-able + no UI lib.
 - **Feature E2E** (Playwright): mock API bằng `page.route` stateful, **anchor vào ORIGIN backend** (không `**/path` — sẽ nuốt SPA document navigation `page.goto`); seed auth bằng `addInitScript({ content })` (string, tránh DOM types ở spec node); test lỗi dùng status không-retry (400) để khỏi chờ backoff.
 

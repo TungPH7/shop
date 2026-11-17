@@ -9,7 +9,7 @@ import { raiseFlag } from '../tracker/sync.mjs';
 import { docsConditions, docsPullRequest, readDocsFacts } from './docs-pr.mjs';
 import { touchedPaths } from './diff-paths.mjs';
 import { matchesGlob } from './glob.mjs';
-import { acceptedRisks, checkDescription, openFindings, readReviewReport, stillBlocking } from './pull-request.mjs';
+import { acceptedRisks, checkDescription, findingId, openFindings, readReviewReport, stillBlocking } from './pull-request.mjs';
 
 const OPEN_PRS = { state: 'open', sort: 'created', direction: 'asc' };
 // GitHub's answers to a merge it will not make now: 405, the PR cannot be merged; 409, the head moved.
@@ -74,10 +74,17 @@ export async function runMergeGate({ github, mergeClient, docs, notify, gates, a
         log(`Waiting #${number}: GitHub refused the merge at ${decision.sha.slice(0, 7)} (${error.status}): ${error.message.replace(/^GitHub .*? returned \d+: /, '')}`);
       }
       // A base changed between that read and the merge call would have taken the PR elsewhere: say so as a failure,
-      // which turns the run red (review round 3 of shop PR #13).
+      // which turns the run red (review round 3 of shop PR #13). A read that fails does not stop the tag and the merge
+      // back of a release, which no later run would make: it is a failure of its own (review round 4).
       if (merged) {
-        const base = (await github.get(`/pulls/${number}`)).base?.ref;
-        if (base !== facts.pr.base.ref) throw new Error(`PR #${number} was merged into ${base}, not ${facts.pr.base.ref} as merge-gate read it: check that merge by hand`);
+        let base;
+        try {
+          base = (await github.get(`/pulls/${number}`)).base?.ref;
+        } catch (error) {
+          failures.push({ number, error });
+          log(`Failed #${number}: could not read PR #${number} again after the merge (${error.message}): check by hand that it went into ${facts.pr.base.ref}`);
+        }
+        if (base !== undefined && base !== facts.pr.base.ref) throw new Error(`PR #${number} was merged into ${base}, not ${facts.pr.base.ref} as merge-gate read it: check that merge by hand`);
       }
       if (merged && decision.release) await afterRelease({ writer, github, sha: merged.sha, ...decision.release, log });
     } catch (error) {
@@ -222,7 +229,7 @@ function describe(number, { action, reason, missing, paths, docs, note, base }, 
 }
 
 // The PR of a release branch into main.
-const isReleasePr = (pr) => parseBranch(pr.head.ref)?.kind === 'release' && pr.base.ref === 'main';
+export const isReleasePr = (pr) => parseBranch(pr.head.ref)?.kind === 'release' && pr.base.ref === 'main';
 
 // The head and the base of a PR are branches of this very repository, not of a fork.
 const sameRepo = (pr) => Boolean(pr.head.repo?.full_name) && pr.head.repo.full_name === pr.base.repo?.full_name;
@@ -407,8 +414,12 @@ export function reportGaps(reviews, head, at, roles, bot, { approvers = [], on }
     const latest = mine[index];
     if (!latest) return [`${role} report ${at}`];
     if (!latest.ok) return [`readable ${role} report ${at} (${latest.problems.join('; ')})`];
-    const open = stillBlocking(openFindings(mine.slice(0, index + 1)).at(-1), accepted).length;
-    if (open > 0) return [`${role} report ${at} without Critical or High findings (${open} open${problems.length > 0 ? `; ${problems.join('; ')}` : ''})`];
+    const all = openFindings(mine.slice(0, index + 1)).at(-1);
+    // A Critical cannot be accepted: an acceptance that names one says so (review round 4 of shop PR #13).
+    const critical = all.filter(({ severity }) => severity === 'Critical').map(findingId).filter((id) => accepted.has(id));
+    const notes = [...problems, ...critical.map((id) => `Accept risk: ${id} names a Critical, which cannot be accepted`)];
+    const open = stillBlocking(all, accepted).length;
+    if (open > 0) return [`${role} report ${at} without Critical or High findings (${open} open${notes.length > 0 ? `; ${notes.join('; ')}` : ''})`];
     return [];
   });
 }

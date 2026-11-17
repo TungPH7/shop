@@ -7,6 +7,7 @@ import { NuqsTestingAdapter } from 'nuqs/adapters/testing';
 import { I18nextProvider } from 'react-i18next';
 import { MemoryRouter, RouterProvider } from 'react-router';
 
+import { MUTATION_DEFAULTS } from '@/lib/react-query/query-client';
 import { type AppStore, makeStore, type RootState } from '@/stores/store';
 import { StoreProvider } from '@/stores/store-provider';
 
@@ -14,12 +15,13 @@ import { testI18n } from './test-i18n';
 
 // Fresh, isolated QueryClient per test — retry off (no waiting on failures) and
 // no GC so cache stays put across assertions. Mirrors createQueryClient (folder
-// 08) minus env / global handlers.
+// 08) minus env / global handlers; writes take the same MUTATION_DEFAULTS, so a
+// test of an offline browser sees what the app does (NFR19).
 export function createTestQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: Infinity },
-      mutations: { retry: false },
+      mutations: { ...MUTATION_DEFAULTS },
     },
   });
 }
@@ -30,16 +32,21 @@ function BaseProviders({
   children,
   store,
   queryClient,
+  search = '',
 }: {
   children: ReactNode;
   store: AppStore;
   queryClient: QueryClient;
+  /** The query string nuqs starts from; it keeps its own updates in memory. */
+  search?: string;
 }) {
   return (
     <StoreProvider store={store}>
       <QueryClientProvider client={queryClient}>
         <I18nextProvider i18n={testI18n}>
-          <NuqsTestingAdapter>{children}</NuqsTestingAdapter>
+          <NuqsTestingAdapter searchParams={search} hasMemory>
+            {children}
+          </NuqsTestingAdapter>
         </I18nextProvider>
       </QueryClientProvider>
     </StoreProvider>
@@ -50,7 +57,7 @@ export interface RenderWithProvidersOptions extends Omit<RenderOptions, 'wrapper
   preloadedState?: Partial<RootState>;
   store?: AppStore;
   queryClient?: QueryClient;
-  /** Initial URL for the in-memory router. */
+  /** Initial URL for the in-memory router; nuqs starts from its query string. */
   route?: string;
 }
 
@@ -75,7 +82,11 @@ export function renderWithProviders(
 ): RenderResultWithStore {
   function Wrapper({ children }: PropsWithChildren) {
     return (
-      <BaseProviders store={store} queryClient={queryClient}>
+      <BaseProviders
+        store={store}
+        queryClient={queryClient}
+        search={new URL(route, 'http://localhost').search}
+      >
         <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
       </BaseProviders>
     );

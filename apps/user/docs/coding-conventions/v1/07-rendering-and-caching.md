@@ -26,12 +26,12 @@ export async function getProducts(query: ProductQuery) {
 }
 ```
 
-**⚠️ Luật cô lập — `[MUST]`:** trong scope `'use cache'` **không được** đọc request-time:
+**⚠️ Luật cô lập — `[MUST]`:** trong scope `'use cache'` **không được** đọc request-time. Luật chỉ cấm đọc **bên trong** scope cache; đọc ở đâu bên ngoài thì theo chương của từng loại (như `searchParams` đọc trong `<Suspense>`, §10.5):
 
 | ❌ Cấm trong scope cache    | ✅ Cách làm đúng                                  |
 | --------------------------- | ------------------------------------------------- |
 | `cookies()` / `headers()`   | Đọc **ngoài**, truyền vào qua tham số             |
-| `params` / `searchParams`   | Đọc ở page, truyền **args** xuống                 |
+| `params` / `searchParams`   | Đọc ngoài scope cache, truyền **args** xuống      |
 | `new Date()` / giờ hiện tại | Truyền timestamp vào như args                     |
 | `Math.random()`             | Sinh ngoài, truyền vào                            |
 | `getTranslations()`         | Giải i18n ở orchestrator, truyền **string** xuống |
@@ -69,9 +69,9 @@ Mọi thứ đọc request-time **phải** nằm trong `<Suspense>`, nếu khôn
 
 - `cookies()` / `headers()` / `connection()`
 - `searchParams`
-- Component đọc session: guard, `getProfile`, `<Can>`, `AuthStatus`
+- Component đọc session: guard, `getProfile`, `AuthStatus`, `AccountDetails`
 - **Server Action gắn vào `<form action>`** (⚠️ chỉ `next dev` bắt lỗi này; `build` bỏ qua → **bắt buộc verify bằng `pnpm dev`**, không chỉ build)
-- Provider client-state đọc random/request-time (Redux, nuqs, TanStack)
+- Provider client-state đọc random/request-time (Redux `StoreProvider`)
 
 ```tsx
 // ✅ shell tĩnh + hole động

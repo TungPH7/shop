@@ -33,7 +33,7 @@ Cấm `utils.ts`, `helpers.ts`, `common.ts`, `misc.ts`, `types.ts` kiểu túi �
 |---|---|---|
 | Route component (tầng app) | `<tên>-route.tsx` | `product-detail-route.tsx` |
 | Layout | `<tên>-layout.tsx` | `root-layout.tsx` |
-| Redux slice | `<domain>-slice.ts` | `ui-slice.ts` |
+| Redux slice | `<domain>-slice.ts` | `theme-slice.ts` |
 | Facade hook | `use-<domain>.ts` | `use-theme.ts` |
 | Query key factory | `query-keys.ts` / `<domain>-keys.ts` | `query-keys.ts` |
 | Test | `<file được test>.test.ts(x)` | `product-list.test.tsx` |

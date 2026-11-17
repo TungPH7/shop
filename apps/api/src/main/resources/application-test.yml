@@ -10,6 +10,8 @@ spring:
       maximum-pool-size: 5
       minimum-idle: 1
       connection-timeout: 5000
+      data-source-properties:
+        currentSchema: "app"
   jpa:
     hibernate:
       ddl-auto: "validate"

@@ -1,90 +1,108 @@
-import { z } from 'zod';
+import * as z from 'zod';
 
 /**
- * Schema ở BIÊN: chỉ khai các field ta THỰC SỰ dùng → Zod tự loại mọi field nội bộ backend
- * (`createdById`/`updatedById`/`deletedById`/`variants`/`productTranslations`/timestamps…) =
- * bước "DTO tối thiểu" ngay tại boundary (data-security: chỉ giữ field UI cần).
- *
- * ⭐ Folder 20: THÊM `images` vì UI giờ hiển thị ảnh (next/image) → DTO TIẾN HOÁ theo nhu cầu UI
- * (giống mở rộng `profileSchema` ở folder 16), KHÔNG phải nhồi sẵn. `.default([])` → fixture/cũ thiếu
- * field vẫn parse (an toàn ngược). variants/createdById/… VẪN bị loại — nguyên tắc "tối thiểu" còn nguyên.
- *
- * Nguồn sự thật = backend NestJS thật `ProductSchema` (xem
- * `10_dtd/Nestjs-Super/ecom/src/shared/models/shared-product.model.ts`): `id:number`,
- * `basePrice/virtualPrice:number` (VND, KHÔNG phải cents), `images:string[]` … (khác hẳn schema giả định guide React).
+ * The products of the store, as the api of the customer returns them (plan of SHOP-7, API Contract, "API của khách"):
+ * `GET /api/products/{slug}` (US6a), `GET /api/products` (US5a, US5b) and `GET /api/sitemap/products` (US6c). The api
+ * returns only products that are on sale (NFR9), so the store has no status. Each schema keeps only the fields the pages
+ * use (coding conventions 8.4).
  */
-const backendProductSchema = z.object({
-  id: z.number(),
+
+export const productAvailabilitySchema = z.enum(['IN_STOCK', 'OUT_OF_STOCK']);
+
+export type ProductAvailability = z.infer<typeof productAvailabilitySchema>;
+
+/** A price in whole dong (NFR14): never a fraction. */
+const priceSchema = z.number().int().nonnegative();
+
+export const storeProductSummarySchema = z.object({
+  id: z.uuid(),
   name: z.string(),
-  basePrice: z.number(),
-  virtualPrice: z.number(),
-  images: z.array(z.string()).default([]),
+  slug: z.string(),
+  price: priceSchema,
+  compareAtPrice: priceSchema.nullable(),
+  availability: productAvailabilitySchema,
 });
 
-/** Envelope phân trang: `GET /products` → `{ data, totalItems, page, limit, totalPages }`. */
-export const productListResponseSchema = z.object({
-  data: z.array(backendProductSchema),
-  totalItems: z.number(),
-  page: z.number(),
-  limit: z.number(),
-  totalPages: z.number(),
+export type StoreProductSummary = z.infer<typeof storeProductSummarySchema>;
+
+export const storeProductSchema = storeProductSummarySchema.extend({
+  description: z.string().nullable(),
+  updatedAt: z.iso.datetime(),
 });
 
-type BackendProduct = z.infer<typeof backendProductSchema>;
+export type StoreProduct = z.infer<typeof storeProductSchema>;
 
-/** DTO domain (tối thiểu — đúng cái UI cần). Tiền VND (đồng), KHÔNG phải cents. */
-export interface Product {
-  id: number;
-  name: string;
-  priceVnd: number;
-  originalPriceVnd: number;
-  /** Folder 20 — danh sách URL ảnh (đã strip mọi field nội bộ khác). Có thể rỗng/placeholder. */
-  images: string[];
-}
+export const sitemapEntrySchema = z.object({
+  slug: z.string(),
+  updatedAt: z.iso.datetime(),
+});
 
-/** Kết quả DAL danh sách (folder 13): DTO[] + meta phân trang lấy từ envelope backend. */
-export interface ProductListResult {
-  items: Product[];
-  page: number;
-  totalPages: number;
-  totalItems: number;
-}
+export type SitemapEntry = z.infer<typeof sitemapEntrySchema>;
 
-/** Map fat backend object → DTO tối thiểu. Hàm THUẦN → test trực tiếp. */
-export function mapToProduct(raw: BackendProduct): Product {
-  return {
-    id: raw.id,
-    name: raw.name,
-    priceVnd: raw.basePrice,
-    originalPriceVnd: raw.virtualPrice,
-    images: raw.images,
-  };
-}
+const countSchema = z.number().int().nonnegative();
 
-// Host ảnh "giả" mà backend demo trả về (URL không load được). Khớp CHÍNH XÁC hostname (không phải hậu tố).
-const PLACEHOLDER_IMAGE_HOSTS = new Set(['example.com', 'example.org', 'example.net']);
-
-/**
- * Nguồn ảnh cho card sản phẩm (folder 20). Backend demo trả URL ẢNH GIẢ (`https://example.com/imgN.jpg`,
- * không load được) → nếu ảnh đầu KHÔNG phải absolute-URL hợp lệ HOẶC trỏ host placeholder, rơi về ảnh
- * placeholder TẤT ĐỊNH theo `id` (picsum) để có ảnh thật minh hoạ next/image. Backend trả ảnh CDN THẬT thì
- * đi thẳng (nhớ thêm host đó vào `images.remotePatterns` ở next.config). Hàm THUẦN → test được.
- */
-export function productImageSrc(product: Pick<Product, 'id' | 'images'>): string {
-  const first = product.images[0];
-  if (first && URL.canParse(first) && !PLACEHOLDER_IMAGE_HOSTS.has(new URL(first).hostname)) {
-    return first;
-  }
-  return `https://picsum.photos/seed/tungph7-${product.id}/600/400`;
+/** `Page<T>` of the API Contract: `totalItems` counts every match of the filter, not only this page. */
+export function pageSchema<T extends z.ZodType>(item: T) {
+  return z.object({
+    items: z.array(item),
+    totalItems: countSchema,
+    offset: countSchema,
+    limit: countSchema,
+  });
 }
 
 /**
- * Format VND **deterministic** (tự nhóm hàng nghìn bằng regex, KHÔNG `Intl`/`toLocaleString` để
- * tránh phụ thuộc ICU giữa Node/browser → test khẳng định chuỗi chính xác): 800000 → "800.000 ₫".
+ * A slug the api can hold: `^[a-z0-9-]+$` since V3, compared without case (`citext`). Anything else, such as `..`, is no
+ * product, so the DAL answers it without a request.
  */
-export function formatPriceVnd(amount: number): string {
-  const grouped = Math.round(amount)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  return `${grouped} ₫`;
+export function isStoreSlug(slug: string): boolean {
+  return /^[a-z0-9-]+$/i.test(slug);
+}
+
+const vnd = new Intl.NumberFormat('vi-VN', {
+  style: 'currency',
+  currency: 'VND',
+  maximumFractionDigits: 0,
+});
+
+/** 1250000 → "1.250.000 ₫". The space before ₫ is U+00A0, on the vi and the en pages alike (SPEC, Code Style). */
+export function formatPrice(amount: number): string {
+  return vnd.format(amount);
+}
+
+/** Rounded down, at least 1: 1.250.000 against 1.500.000 is 16. Integers before the division, so no float error. */
+export function discountPercent(price: number, compareAtPrice: number): number {
+  return Math.max(1, Math.floor(((compareAtPrice - price) * 100) / compareAtPrice));
+}
+
+/** The longest meta description of S5 (AC27). */
+const META_DESCRIPTION_LENGTH = 160;
+
+/**
+ * The description of a product as S5 tells it, unchanged, or `null` when it has none: missing, empty or only spaces,
+ * as a product written before descriptions were checked can have. The one rule of "no description" for the whole of S5:
+ * the page then shows no description block, and the meta description and the JSON-LD (AC27) use the sentence of the
+ * site.
+ */
+export function descriptionOf(description: string | null): string | null {
+  return description?.trim() ? description : null;
+}
+
+/** Characters as a reader sees them: a letter with its marks, an emoji joined with ZWJ or a flag is one. */
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/**
+ * The meta description of S5 (AC27): the first 160 characters of the description, each run of line breaks and spaces
+ * folded into one space. Characters are graphemes, so a letter is never cut from its marks, even decomposed (NFD), and
+ * an emoji, a ZWJ sequence or a flag is never cut in half. `null` when there is no description (`descriptionOf`), and
+ * the page then uses its own sentence. HTML stays text: the Metadata API of Next escapes it (NFR11).
+ */
+export function metaDescriptionOf(description: string | null): string | null {
+  const present = descriptionOf(description);
+  if (present === null) return null;
+  const folded = present.replace(/\s+/g, ' ').trim();
+  return Array.from(graphemes.segment(folded), ({ segment }) => segment)
+    .slice(0, META_DESCRIPTION_LENGTH)
+    .join('')
+    .trimEnd();
 }

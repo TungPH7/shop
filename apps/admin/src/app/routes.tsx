@@ -31,10 +31,17 @@ export const routes: RouteObject[] = [
         },
       },
       {
-        path: paths.productDetail.path,
+        path: paths.productNew.path,
         lazy: async () => {
-          const { ProductDetailRoute } = await import('@/app/routes/products/product-detail-route');
-          return { Component: ProductDetailRoute };
+          const { ProductNewRoute } = await import('@/app/routes/products/product-new-route');
+          return { Component: ProductNewRoute };
+        },
+      },
+      {
+        path: paths.productEdit.path,
+        lazy: async () => {
+          const { ProductEditRoute } = await import('@/app/routes/products/product-edit-route');
+          return { Component: ProductEditRoute };
         },
       },
       {
@@ -80,14 +87,6 @@ export const routes: RouteObject[] = [
                 lazy: async () => {
                   const { AdminRoute } = await import('@/app/routes/admin/admin-route');
                   return { Component: AdminRoute };
-                },
-              },
-              {
-                path: paths.productEdit.path,
-                lazy: async () => {
-                  const { ProductEditRoute } =
-                    await import('@/app/routes/admin/product-edit-route');
-                  return { Component: ProductEditRoute };
                 },
               },
             ],
