@@ -6,9 +6,12 @@ import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 import javax.sql.DataSource;
+
+import jakarta.persistence.EntityManager;
 
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -20,6 +23,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.simple.JdbcClient;
 
 import com.tungph7.learnpostgres.AbstractContainerBaseTest;
+import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 import com.tungph7.learnpostgres.feature.product.domain.ProductSort;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Criteria;
@@ -27,8 +31,8 @@ import com.tungph7.learnpostgres.feature.product.repository.ProductQueryReposito
 
 /**
  * NFR2: with 10,000 products, the median of 5 runs of each kind of list — search, filter, each
- * sort, any page — is at most 200 ms, both statements included. V4 adds no index for these lists;
- * this test decides whether a later migration needs one (ADR-0002).
+ * sort, any page — and of the detail is at most 200 ms, both statements of a list included. V4 adds
+ * no index for these lists; this test decides whether a later migration needs one (ADR-0002).
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
@@ -45,6 +49,8 @@ class ProductQueryPerformanceIntegrationTest extends AbstractContainerBaseTest {
       LoggerFactory.getLogger(ProductQueryPerformanceIntegrationTest.class);
 
   @Autowired ProductQueryRepository repository;
+  @Autowired ProductRepository products;
+  @Autowired EntityManager em;
   @Autowired DataSource dataSource;
 
   @Test
@@ -81,6 +87,30 @@ class ProductQueryPerformanceIntegrationTest extends AbstractContainerBaseTest {
             (kind, millis) -> assertThat(millis).as(kind).isLessThanOrEqualTo(MAX_MEDIAN_MILLIS));
     assertThat(repository.findPage(kinds.get("store, search, relevance")).items()).hasSize(24);
     assertThat(repository.findPage(kinds.get("admin, all")).totalItems()).isEqualTo(PRODUCTS);
+  }
+
+  /**
+   * NFR2 asks the same of the detail of a product (SHOP-53): the store reads it in one query on the
+   * slug, ignoring case.
+   */
+  @Test
+  void findBySlugIgnoringCase_with10000Products_takesAtMost200MillisecondsAtTheMedian() {
+    insertProducts();
+    String slug = "PERF-5000";
+    products.findBySlugIgnoringCase(slug); // warm-up: JIT and the buffers of the database
+    long[] nanos = new long[RUNS];
+    for (int i = 0; i < RUNS; i++) {
+      em.clear(); // each run reads the row, as each request has a persistence context of its own
+      long start = System.nanoTime();
+      Optional<Product> product = products.findBySlugIgnoringCase(slug);
+      nanos[i] = System.nanoTime() - start;
+      assertThat(product).map(Product::getSlug).contains("perf-5000");
+    }
+    Arrays.sort(nanos);
+    long median = nanos[RUNS / 2] / 1_000_000;
+    LOG.info("NFR2, detail, median in ms of {} runs with {} products: {}", RUNS, PRODUCTS, median);
+
+    assertThat(median).isLessThanOrEqualTo(MAX_MEDIAN_MILLIS);
   }
 
   private long medianMillis(Criteria criteria) {

@@ -5,6 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.lang.reflect.Method;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -13,7 +14,11 @@ import java.util.UUID;
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.assertj.core.api.InstanceOfAssertFactories;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.core.MethodParameter;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -212,6 +217,48 @@ class GlobalExceptionHandlerTest {
 
     assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
     assertThat(resp.getBody().getProperties()).containsEntry("code", "DATA_INTEGRITY_VIOLATION");
+  }
+
+  /**
+   * SHOP-53, NFR12: a NOT NULL or CHECK violation comes with {@code Failing row contains (…)}, the
+   * values of the row, such as the name and the description. The log line names the constraint
+   * only.
+   */
+  @Test
+  @ExtendWith(OutputCaptureExtension.class)
+  void handleDataIntegrity_logsTheConstraintNameOfHibernate_andNoValueOfTheRow(
+      CapturedOutput output) {
+    DataIntegrityViolationException ex =
+        new DataIntegrityViolationException(
+            "could not execute statement",
+            new ConstraintViolationException(
+                "could not execute statement",
+                new SQLException(
+                    "ERROR: new row for relation \"products\" violates check constraint"
+                        + " \"products_price_vnd_valid\"\n  Detail: Failing row contains"
+                        + " (Ao thun SHOP53, mo-ta-shop53)."),
+                "products_price_vnd_valid"));
+
+    handler.handleDataIntegrity(ex, request());
+
+    assertThat(output.getOut())
+        .contains("constraint=products_price_vnd_valid")
+        .doesNotContain("Ao thun SHOP53")
+        .doesNotContain("mo-ta-shop53");
+  }
+
+  @Test
+  @ExtendWith(OutputCaptureExtension.class)
+  void handleDataIntegrity_ofAnUnnamedConstraint_logsNoMessageOfTheDriver(CapturedOutput output) {
+    DataIntegrityViolationException ex =
+        new DataIntegrityViolationException(
+            "wrapper", new RuntimeException("Failing row contains (Ao thun SHOP53)."));
+
+    handler.handleDataIntegrity(ex, request());
+
+    assertThat(output.getOut())
+        .contains("code=DATA_INTEGRITY_VIOLATION constraint=unknown")
+        .doesNotContain("Ao thun SHOP53");
   }
 
   @Test

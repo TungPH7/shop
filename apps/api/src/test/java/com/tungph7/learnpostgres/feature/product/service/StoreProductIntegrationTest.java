@@ -46,12 +46,12 @@ import tools.jackson.databind.node.ObjectNode;
  * only {@code ACTIVE} products, newest first with {@code id DESC} as the last key (NFR18), pages
  * that never repeat or skip a product, and a status parameter ignored (NFR9).
  *
- * <p>Each connection has {@code currentSchema=app}, as the URL of {@code application.yml} sets it
- * for the deployed app. That {@code search_path} leaves out {@code public}, where the {@code
- * citext} operators are; the default {@code app, public} of the test role would hide a slug
- * compared as {@code text}, with case.
+ * <p>Each connection has {@code currentSchema=app}, which {@code application-test.yml} sets for
+ * every test, as the URL of {@code application.yml} does for the deployed app. That {@code
+ * search_path} leaves out {@code public}, where the {@code citext} operators are, so a slug
+ * compared as {@code text}, with case, would fail here as on the servers.
  */
-@SpringBootTest(properties = "spring.datasource.hikari.data-source-properties.currentSchema=app")
+@SpringBootTest
 @AutoConfigureMockMvc
 class StoreProductIntegrationTest extends AbstractContainerBaseTest {
 

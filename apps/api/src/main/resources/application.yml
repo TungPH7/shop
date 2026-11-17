@@ -24,6 +24,7 @@ spring:
         socketTimeout: 60
         loginTimeout: 10
         tcpKeepAlive: true
+        logServerErrorDetail: false
   jpa:
     open-in-view: false
     hibernate:
