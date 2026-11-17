@@ -2,15 +2,30 @@ import { randomInt } from 'node:crypto';
 
 import { expect, request, type APIRequestContext } from '@playwright/test';
 
+import { isLocal } from './env';
+
 // The products of the E2E tests of user (plan of SHOP-7, Architecture Decisions 16; NFR23). user only reads the
 // catalog, so a test creates and deletes its products through the admin API, /api/admin/products, on the /api of the
-// admin app: E2E_ADMIN_URL on an environment, the admin app Playwright starts here otherwise. On an environment, basic
-// auth goes to the origin of admin only, as playwright.config.ts does for each app.
+// admin app: E2E_ADMIN_URL on an environment, the admin app Playwright starts here otherwise. A test tagged @local runs
+// on the apps started here even on an environment, so it reaches the admin started here too: `adminUrlFor(baseURL)`
+// gives the admin of the catalog the page reads (QA of SHOP-28). On an environment, basic auth goes to the origin of
+// admin only, as playwright.config.ts does for each app.
 
 const OFFSET = Number(process.env.AO_PORT_OFFSET ?? 0) || 0;
 
+/** The admin app Playwright starts here, on its port moved by the offset of the run. */
+export const localAdminUrl = `http://localhost:${5173 + OFFSET}`;
+
 /** The admin app: its /api reaches the api. */
-export const adminUrl = process.env.E2E_ADMIN_URL || `http://localhost:${5173 + OFFSET}`;
+export const adminUrl = process.env.E2E_ADMIN_URL || localAdminUrl;
+
+/**
+ * The admin app whose api the page at `baseURL` reads: the one started here for a page started here, such as in the
+ * user-local project of a run on an environment; the admin of the environment otherwise.
+ */
+export function adminUrlFor(baseURL: string | undefined): string {
+  return isLocal(baseURL) ? localAdminUrl : adminUrl;
+}
 
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
@@ -39,14 +54,15 @@ type AdminProductSummary = { id: string; name: string; createdAt: string };
 
 type AdminProductPage = { items: AdminProductSummary[]; totalItems: number };
 
-/** A request context on the admin app. Dispose of it when done. */
-export function adminApi(): Promise<APIRequestContext> {
+/** A request context on an admin app, that of the environment by default. Dispose of it when done. */
+export function adminApi(url: string = adminUrl): Promise<APIRequestContext> {
   const username = process.env.E2E_HTTP_USER;
   const password = process.env.E2E_HTTP_PASSWORD;
   return request.newContext({
-    baseURL: adminUrl,
-    ...(username && password
-      ? { httpCredentials: { username, password, origin: new URL(adminUrl).origin } }
+    baseURL: url,
+    // The basic auth of an environment never goes to the apps started here.
+    ...(username && password && !isLocal(url)
+      ? { httpCredentials: { username, password, origin: new URL(url).origin } }
       : {}),
   });
 }
