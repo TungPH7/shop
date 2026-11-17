@@ -25,9 +25,19 @@ Không `createAsyncThunk` để fetch. Không slice `products` chứa danh sách
 
 `createQueryClient()` (không đọc env, dùng cho test) và `queryClient` (singleton cho app), đặt ở `src/lib/react-query/`.
 
-### ST-004 [MUST] `retry: false` ở QueryClient
+### ST-004 [MUST] `retry: false` ở QueryClient; lệnh ghi lấy `networkMode: 'always'` từ đó
 
 Tầng api đã retry (`API-007`). Bật cả hai ⇒ request nhân lên theo cấp số nhân.
+
+Mọi lệnh ghi (`useMutation`) lấy `networkMode: 'always'` từ `defaultOptions.mutations` của `createQueryClient()`; hook ghi **không** đặt lại option này. Với mặc định `'online'`, khi trình duyệt báo offline Query tạm dừng lệnh ghi: form hay hộp thoại đứng ở "Đang lưu…" thay vì hiện lỗi, rồi tự gửi khi có mạng lại, tức một lần tự thử lại mà NFR19 của SPEC SHOP-7 cấm. Gửi ngay thì lệnh ghi lỗi ngay, vào lỗi của màn hình. Lệnh đọc giữ mặc định. `createTestQueryClient()` chép cùng default để test chạy như app.
+
+✅
+```ts
+export function useCreateProduct() {
+  return useMutation({ mutationFn: createProduct, meta: { skipGlobalError: true } });
+}
+```
+❌ `useMutation({ mutationFn: createProduct, networkMode: 'always' })` — lặp lại default ở từng hook; hook nào quên thì lệnh ghi lại tạm dừng khi offline.
 
 ### ST-005 [MUST] Query key khai bằng factory phân cấp, không viết tay tại chỗ
 
