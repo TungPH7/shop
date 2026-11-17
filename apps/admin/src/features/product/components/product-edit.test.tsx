@@ -1,4 +1,4 @@
-import { focusManager, onlineManager } from '@tanstack/react-query';
+import { focusManager, onlineManager, type QueryClient } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Route, Routes } from 'react-router';
@@ -91,9 +91,23 @@ async function loaded() {
   return screen.findByRole('heading', { level: 1, name: 'Edit product' });
 }
 
-/** Gives a refetch the time to start, then checks that none did: one GET, no skeleton. */
-async function expectNoReload(get: { calls: () => number }) {
-  await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+/**
+ * Fires `event`, then checks that nothing loads again. On focus or on reconnect the
+ * QueryClient first awaits resumePausedMutations, then refetches: awaiting the same
+ * call after it is the point where a refetch would already be fetching, so no fixed
+ * wait is needed (TE-012).
+ */
+async function expectNoReloadOn(
+  event: () => void,
+  queryClient: QueryClient,
+  get: { calls: () => number },
+) {
+  await act(async () => {
+    event();
+    await queryClient.resumePausedMutations();
+  });
+
+  expect(queryClient.isFetching()).toBe(0);
   expect(get.calls()).toBe(1);
   expect(screen.queryByLabelText('Loading the product')).not.toBeInTheDocument();
 }
@@ -326,33 +340,37 @@ describe('ProductEdit', () => {
   // swap the form for the skeleton and drop what was typed.
   it('AC13 keeps what was typed when the window gets the focus back, loading nothing', async () => {
     const get = fakeGet();
-    const { user } = renderEdit();
+    const { user, queryClient } = renderEdit();
     await loaded();
     await user.clear(field.name());
     await user.type(field.name(), 'Áo thun đang sửa');
 
-    act(() => {
-      focusManager.setFocused(false);
-      focusManager.setFocused(true);
-    });
-
-    await expectNoReload(get);
+    await expectNoReloadOn(
+      () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+      },
+      queryClient,
+      get,
+    );
     expect(field.name()).toHaveValue('Áo thun đang sửa');
   });
 
   it('AC13 keeps what was typed when the network comes back, loading nothing', async () => {
     const get = fakeGet();
-    const { user } = renderEdit();
+    const { user, queryClient } = renderEdit();
     await loaded();
     await user.clear(field.name());
     await user.type(field.name(), 'Áo thun đang sửa');
 
-    act(() => {
-      onlineManager.setOnline(false);
-      onlineManager.setOnline(true);
-    });
-
-    await expectNoReload(get);
+    await expectNoReloadOn(
+      () => {
+        onlineManager.setOnline(false);
+        onlineManager.setOnline(true);
+      },
+      queryClient,
+      get,
+    );
     expect(field.name()).toHaveValue('Áo thun đang sửa');
   });
 
