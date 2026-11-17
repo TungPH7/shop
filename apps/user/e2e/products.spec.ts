@@ -679,10 +679,9 @@ test.describe('AC23 no product', () => {
       const { totalItems } = (await response.json()) as { totalItems: number };
       // The test hides and deletes no product it did not create (NFR23), so it needs a catalog with none on sale.
       // The local database, or tests running beside this one, may hold some.
-      test.skip(
-        totalItems > 0,
-        `reason: ${totalItems} product(s) on sale in the catalog of ${adminUrlFor(baseURL)}, which ${baseURL} reads; AC23 needs none`,
-      );
+      const onSale = `${totalItems} product(s) on sale in the catalog of ${adminUrlFor(baseURL)}, which ${baseURL} reads`;
+      // The policy job reads the reason on the line of the skip itself.
+      test.skip(totalItems > 0, `reason: ${onSale}; AC23 needs none`);
 
       await expect(async () => {
         await page.goto('/vi/products');
