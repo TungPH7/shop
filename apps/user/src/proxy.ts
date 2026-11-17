@@ -10,17 +10,17 @@ import { isStoreSlug } from '~/features/product/model/product';
 import { routing } from '~/i18n/routing';
 
 /**
- * Proxy — **Next 16** đổi tên `middleware.ts` → `proxy.ts` (next-intl hỗ trợ chính thức:
- * "proxy.ts was called middleware.ts up until Next.js 16", nội dung file y hệt). Hai việc:
+ * Proxy: Next 16 renamed `middleware.ts` to `proxy.ts` (next-intl supports it: "proxy.ts was called middleware.ts up
+ * until Next.js 16", same content). Two jobs:
  *
- * 1. Định tuyến ngôn ngữ bằng **middleware của next-intl** (`createMiddleware`, folder 09) — lo:
- *    thương lượng locale theo `Accept-Language`, redirect URL thiếu locale (`/` → `/en`), nhớ lựa
- *    chọn qua cookie, sinh alternate-links cho SEO.
- * 2. 404 thật của trang chi tiết sản phẩm (AC26, `proxy` bên dưới): mỗi lần TẢI trang
- *    `/{locale}/products/{slug}`, gọi `HEAD /api/products/{slug}` tới api (tối đa 5 s) trước khi render.
+ * 1. Locale routing with the **middleware of next-intl** (`createMiddleware`, folder 09): it negotiates the locale from
+ *    `Accept-Language`, redirects a URL without a locale (`/` → `/en`), remembers the choice in a cookie and adds the
+ *    alternate links for SEO.
+ * 2. The real 404 of the product detail page (AC26, `proxy` below): on each page load of
+ *    `/{locale}/products/{slug}`, it sends `HEAD /api/products/{slug}` to the api (at most 5 s) before the render.
  *
- * ⚠️ KHÔNG phải security boundary (CVE-2025-29927): authz THẬT verify ở DAL (folder 11/15).
- * Node runtime; không DB; chỉ một lệnh HEAD có thời hạn, và chỉ cho lần tải trang sản phẩm.
+ * ⚠️ Not a security boundary (CVE-2025-29927): the real authorization is checked in the DAL (folder 11/15).
+ * Node runtime; no database; only one HEAD with a time limit, and only for a page load of a product page.
  */
 const intl = createMiddleware(routing);
 

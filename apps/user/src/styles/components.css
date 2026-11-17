@@ -846,8 +846,10 @@ select.input option {
 
 /* While the products load (S4.5, loading): 8 skeleton cards, in a list that reaches past the bottom of the screen, as
    the 24 cards of the first load do. Under a shorter list the footer showed, and the products then pushed it down: a
-   layout shift of 0.05 to 0.11 on wide screens (CLS of NFR4, QA of SHOP-25). lvh, the largest viewport, so the footer
-   stays below it with or without the address bar of a phone; the rows keep their size at the top. */
+   layout shift of 0.0456 at 1440×900 with a cold cache, 0 with this rule (SHOP-58; CLS of NFR4). The 0.114 QA of
+   SHOP-25 measured on Development is more than the footer, about 42 px high, can shift, and QA of SHOP-58 could not
+   reproduce it. lvh, the largest viewport, so the footer stays below it with or without the address bar of a phone;
+   the rows keep their size at the top. */
 .product-grid[aria-busy='true'] {
   align-content: start;
   min-height: 100lvh;
