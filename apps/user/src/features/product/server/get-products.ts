@@ -40,7 +40,8 @@ export type StoreProductList = {
  * Decisions 8). The cache holds a block, not a page, of one search and one order: the first four loads of 24 share the
  * first block, so Load more on them is served from the cache and the products already shown stay where they are. Its
  * key is the folded words, never the keyword as typed: `A`, `á` and `a!`, one search at the api, are one entry here
- * too (review of PR #62). A throw is not cached.
+ * too (review of PR #62). In an order other than relevance, which alone ranks the words as a phrase, the words come
+ * sorted (`termsFor`), so `ao thun` and `thun ao` are one entry too (review of PR #64). A throw is not cached.
  */
 async function getStoreProductBlock(terms: string, sort: ProductSort, offset: number) {
   'use cache';
@@ -52,6 +53,16 @@ async function getStoreProductBlock(terms: string, sort: ProductSort, offset: nu
   params.set('offset', String(offset));
   params.set('limit', String(BLOCK_SIZE));
   return httpGet(`/api/products?${params.toString()}`, storeProductPageSchema);
+}
+
+/**
+ * The words the api is asked for `q` in the order `sort`: the folded words (`foldKeyword`), as typed for relevance,
+ * which ranks a name that holds them as a phrase first, and sorted for another order, which matches each word wherever
+ * it is and so does not depend on their order.
+ */
+function termsFor(q: string, sort: ProductSort): string {
+  const terms = foldKeyword(q);
+  return sort === 'relevance' ? terms : terms.split(' ').sort().join(' ');
 }
 
 /**
@@ -81,7 +92,7 @@ async function getStoreProductBlock(terms: string, sort: ProductSort, offset: nu
  * to make if the catalog grows that large.
  */
 export async function getStoreProducts(query: ProductQuery): Promise<StoreProductList> {
-  const terms = foldKeyword(query.q);
+  const terms = termsFor(query.q, query.sort);
   if (query.q !== '' && terms === '') return { items: [], totalItems: 0, complete: true };
 
   const wanted = query.page * PAGE_SIZE;

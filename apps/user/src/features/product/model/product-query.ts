@@ -40,6 +40,11 @@ const pageSchema = z
  * Spaces as the api reads them, and more: JavaScript's `\s` lacks U+0085 and U+001C–U+001F, which the api strips, so
  * every control character counts as a space here. A keyword of control characters alone is then no search, never one
  * the api refuses (AC22).
+ *
+ * One difference with `ProductSearchTerms.of` of the api, on purpose: a run of control characters that are not spaces
+ * there, such as U+0001, is one space here before the cut at 100, where the api keeps each one and counts it. So a
+ * keyword holding them keeps a few more of its characters here than the api would keep of it. The page never sends this keyword: it asks the api
+ * its folded words (`foldKeyword`), so this cut is the one that decides the search.
  */
 const SPACES = /[\p{Cc}\s]+/gu;
 
@@ -90,7 +95,7 @@ export function apiSortOf(sort: ProductSort): (typeof API_SORTS)[ProductSort] {
   return API_SORTS[sort];
 }
 
-const COMBINING_MARKS = /[̀-ͯ]/g;
+const COMBINING_MARKS = /[\u0300-\u036f]/g;
 const NOT_LETTER_OR_DIGIT = /[^a-z0-9]+/g;
 
 /**

@@ -168,14 +168,15 @@ describe('getStoreProducts', () => {
     expect(asked).toEqual([{ sort: 'NEWEST', offset: '0', limit: '96' }]);
   });
 
+  // Relevance keeps the words in the order typed; another order does not depend on it, so its words go in one order.
   test.each([
-    ['relevance', 'RELEVANCE'],
-    ['price-asc', 'PRICE_ASC'],
-    ['price-desc', 'PRICE_DESC'],
-    ['newest', 'NEWEST'],
+    ['relevance', 'RELEVANCE', 'ao thun 100'],
+    ['price-asc', 'PRICE_ASC', '100 ao thun'],
+    ['price-desc', 'PRICE_DESC', '100 ao thun'],
+    ['newest', 'NEWEST', '100 ao thun'],
   ] as const)(
     'asks every block of a search sorted by %s with the folded keyword and %s (AC18, AC20, AC22)',
-    async (sort, apiSort) => {
+    async (sort, apiSort, terms) => {
       const asked: Record<string, string>[] = [];
       server.use(
         http.get(URL_, ({ request }) => {
@@ -194,8 +195,8 @@ describe('getStoreProducts', () => {
       const result = await getStoreProducts({ q: 'áo thun & 100%', sort, page: 5 });
 
       expect(asked).toEqual([
-        { q: 'ao thun 100', sort: apiSort, offset: '0', limit: '96' },
-        { q: 'ao thun 100', sort: apiSort, offset: '96', limit: '96' },
+        { q: terms, sort: apiSort, offset: '0', limit: '96' },
+        { q: terms, sort: apiSort, offset: '96', limit: '96' },
       ]);
       expect(result.items).toHaveLength(120);
     },
@@ -219,6 +220,38 @@ describe('getStoreProducts', () => {
       expect(asked).toEqual([{ q: 'a', sort: 'RELEVANCE', offset: '0', limit: '96' }]);
     },
   );
+
+  test.each(['price-asc', 'price-desc', 'newest'] as const)(
+    'asks the api the same block for "ao thun" and "thun ao" sorted by %s (cache key)',
+    async (sort) => {
+      const asked: string[] = [];
+      server.use(
+        http.get(URL_, ({ request }) => {
+          asked.push(new URL(request.url).searchParams.get('q') ?? '');
+          return HttpResponse.json({ items: catalog(3), totalItems: 3, offset: 0, limit: 96 });
+        }),
+      );
+
+      await getStoreProducts({ q: 'ao thun', sort, page: 1 });
+      await getStoreProducts({ q: 'Thun áo', sort, page: 1 });
+
+      expect(asked).toEqual(['ao thun', 'ao thun']);
+    },
+  );
+
+  test('keeps the words in the order typed for relevance, which ranks the phrase as typed first', async () => {
+    const asked: string[] = [];
+    server.use(
+      http.get(URL_, ({ request }) => {
+        asked.push(new URL(request.url).searchParams.get('q') ?? '');
+        return HttpResponse.json({ items: catalog(3), totalItems: 3, offset: 0, limit: 96 });
+      }),
+    );
+
+    await getStoreProducts({ q: 'thun ao', sort: 'relevance', page: 1 });
+
+    expect(asked).toEqual(['thun ao']);
+  });
 
   test.each(['%', '!!!', '–'])(
     'returns no product without asking the api for %j, a keyword with no word (NFR10)',
