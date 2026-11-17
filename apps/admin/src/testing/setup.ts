@@ -39,6 +39,12 @@ class ResizeObserverStub {
 }
 vi.stubGlobal('ResizeObserver', ResizeObserverStub);
 
+// jsdom lays nothing out and has no scrollIntoView, which the banner of S2.5 calls to
+// come into view. A no-op; a test that checks the scroll sets its own.
+Element.prototype.scrollIntoView = function scrollIntoView() {
+  /* no-op */
+};
+
 // MSW: mock the network for the whole suite; fail loudly on any unhandled request
 // so a missing handler is obvious instead of a silent hang.
 beforeAll(() => {

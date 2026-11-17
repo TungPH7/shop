@@ -311,6 +311,24 @@ describe('ProductEdit', () => {
     await screen.findByText('The product list');
   });
 
+  it('AC13 brings the conflict banner into view, the focus staying on Save (S2.5)', async () => {
+    // jsdom lays nothing out, and has no scrollIntoView: record which element asks.
+    const scrolled: Element[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    fakeGet();
+    fakePut(() => problem(409, 'OPTIMISTIC_LOCK_CONFLICT'));
+    const { user } = renderEdit();
+    await loaded();
+
+    await user.click(save());
+
+    const banner = await screen.findByRole('alert');
+    expect(scrolled).toEqual([banner]);
+    expect(save()).toHaveFocus();
+  });
+
   it('AC13 sends the version of the reload after Reload', async () => {
     fakeGet(
       () => HttpResponse.json(shirt),

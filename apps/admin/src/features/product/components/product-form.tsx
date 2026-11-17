@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FocusEvent, useState } from 'react';
+import { type ChangeEvent, type FocusEvent, useEffect, useRef, useState } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Controller, useForm, useWatch } from 'react-hook-form';
@@ -85,6 +85,12 @@ export function ProductForm(props: ProductFormProps) {
   const update = useUpdateProduct();
   const isPending = create.isPending || update.isPending;
   const [banner, setBanner] = useState<Banner>(null);
+  const bannerRef = useRef<HTMLDivElement>(null);
+  // The banner sits over the fields, off screen while the person is at Save: bring it
+  // into view. Scrolling moves no focus, which stays where it is (S2.5).
+  useEffect(() => {
+    if (banner !== null) bannerRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [banner]);
   // Edit mode checks a slug only when it is not the saved one (NFR16). The page mounts
   // a new form for each version it loads, so the product never changes under the form.
   const [schema] = useState(() =>
@@ -197,7 +203,7 @@ export function ProductForm(props: ProductFormProps) {
 
         {/* role=alert reads the banner out; focus stays where it is (S2.5). */}
         {banner === null ? null : (
-          <div className="banner banner--error" role="alert">
+          <div ref={bannerRef} className="banner banner--error" role="alert">
             <AlertIcon />
             <p>{t(banner === 'conflict' ? 'form.conflict' : 'form.saveFailed')}</p>
             {banner === 'conflict' && props.product !== undefined ? (
