@@ -98,9 +98,9 @@ public class StoreProductController {
   @Operation(
       summary = "List the products of the sitemap",
       description =
-          "The slug and last update of the ACTIVE products, in the order of their ids, so that a"
-              + " product added between two blocks goes to the last one. A status parameter is"
-              + " ignored. An invalid offset or limit is a 400 INVALID_PARAMETER naming it.")
+          "The slug and last update of the ACTIVE products, in the order of their ids, which has"
+              + " no ties. A status parameter is ignored. An invalid offset or limit is a 400"
+              + " INVALID_PARAMETER naming it.")
   @ApiResponse(responseCode = "200", description = "OK")
   @ApiResponse(
       responseCode = "400",

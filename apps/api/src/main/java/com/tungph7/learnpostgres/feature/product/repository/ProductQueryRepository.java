@@ -189,8 +189,10 @@ public class ProductQueryRepository {
   /**
    * One block of the {@code ACTIVE} products of the sitemap, in the order of their ids, and the
    * number of {@code ACTIVE} products: two statements (NFR2). The status is a constant of the SQL,
-   * so no caller can list a hidden product (NFR9). UUIDv7 ids grow with time, so a product added
-   * while {@code user} reads the blocks goes to the last block and moves no other product.
+   * so no caller can list a hidden product (NFR9). The id is unique, so the order has no ties and
+   * the blocks neither repeat nor skip a product while none is added or removed (NFR18). A new
+   * product, with a UUIDv7 id, goes after every UUIDv7 id; a product from before {@code v0.3.0} may
+   * have a random UUIDv4 id anywhere in the order.
    *
    * @param offset the products to skip, 0 or more
    * @param limit the products of the block, 1 to {@value #MAX_SITEMAP_LIMIT}
