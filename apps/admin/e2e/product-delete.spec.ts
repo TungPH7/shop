@@ -23,8 +23,6 @@ const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const API = '/api/admin/products';
 /** NFR7: a change of admin shows on the pages of the customer within 60 s. */
 const STORE_DELAY_MS = 60_000;
-const MOCKS_THE_API =
-  'reason: fails the DELETE of the product API in the browser, which the SPEC forbids on an environment';
 
 const runId = newRunId();
 let created: E2eProduct[] = [];
@@ -177,7 +175,7 @@ test.describe('US4 delete a product', () => {
     request,
     baseURL,
   }) => {
-    test.skip(!isLocal(baseURL), MOCKS_THE_API);
+    test.skip(!isLocal(baseURL), 'reason: mocks the product API, local apps only');
     const jeans = await createProduct(request, runId, { name: 'Quần jean nam' });
     created = [jeans];
     const deletes = await failDeletes(page, jeans.id);
@@ -230,7 +228,7 @@ test.describe('US4 delete a product', () => {
       request,
       baseURL,
     }) => {
-      test.skip(!isLocal(baseURL), MOCKS_THE_API);
+      test.skip(!isLocal(baseURL), 'reason: mocks the product API, local apps only');
       const jeans = await createProduct(request, runId, { name: 'Quần jean nam' });
       created = [jeans];
       await page.emulateMedia({ colorScheme });
