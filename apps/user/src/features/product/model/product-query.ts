@@ -38,3 +38,21 @@ export function parseProductQuery(
 export function productsHref(query: ProductQuery): string {
   return query.page === DEFAULT_PAGE ? '/products' : `/products?page=${query.page}`;
 }
+
+/** What S4 shows of `query`: products shown, products on sale, and whether every block needed was read. */
+export type ProductsShown = { shown: number; totalItems: number; complete: boolean };
+
+/**
+ * Where Load more (S4.10) goes from `query`, or null when every product is shown and there is no Load more.
+ *
+ * - After a failed block, the page of the URL again: the button is Try again.
+ * - While products are left, the page after the whole loads of 24 shown.
+ */
+export function nextProductsHref(
+  query: ProductQuery,
+  { shown, totalItems, complete }: ProductsShown,
+): string | null {
+  if (!complete) return productsHref(query);
+  if (shown >= totalItems) return null;
+  return productsHref({ ...query, page: Math.ceil(shown / PAGE_SIZE) + 1 });
+}
