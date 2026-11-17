@@ -297,7 +297,7 @@ public class GlobalExceptionHandler {
 
     ErrorCode code;
     String detail;
-    if (ConstraintViolations.PRODUCT_SLUG_UNIQUE.equalsIgnoreCase(constraint)) {
+    if (ConstraintViolations.isViolationOf(ex, ConstraintViolations.PRODUCT_SLUG_UNIQUE)) {
       code = ErrorCode.PRODUCT_SLUG_DUPLICATED;
       detail = "Product slug already exists.";
     } else {
