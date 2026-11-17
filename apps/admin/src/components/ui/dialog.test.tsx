@@ -11,12 +11,13 @@ stubDialog();
 
 interface HarnessProps {
   onCancel?: () => void;
+  onDelete?: () => void;
   isBusy?: boolean;
   error?: string;
 }
 
 // A row button that opens the dialog, as S1.8 opens S3.
-function DeleteHarness({ onCancel, isBusy, error }: HarnessProps) {
+function DeleteHarness({ onCancel, onDelete, isBusy, error }: HarnessProps) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -37,7 +38,7 @@ function DeleteHarness({ onCancel, isBusy, error }: HarnessProps) {
           if (isBusy !== true) setOpen(false);
         }}
         action={
-          <button type="button" className="btn btn--danger">
+          <button type="button" className="btn btn--danger" onClick={onDelete}>
             Delete
           </button>
         }
@@ -166,10 +167,12 @@ describe('Dialog', () => {
   });
 
   it('runs the action of the caller', async () => {
-    const { user } = await openDialog();
+    const onDelete = vi.fn();
+    const { user } = await openDialog({ onDelete });
 
     await user.click(screen.getByRole('button', { name: 'Delete' }));
 
+    expect(onDelete).toHaveBeenCalledOnce();
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
   });
 
@@ -212,5 +215,17 @@ describe('Dialog', () => {
     dialog.close();
 
     expect(dialog).toHaveAttribute('open');
+  });
+
+  it('puts focus back on Cancel when it opens again after a close by the browser while busy', async () => {
+    await openDialog({ isBusy: true });
+    const dialog = getDialog();
+    // A browser that reopens a modal focuses its first focusable element, the Close
+    // button, which is aria-disabled while busy (S3.1 wants the first focus on Cancel).
+    screen.getByRole('button', { name: 'Close' }).focus();
+
+    dialog.close();
+
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus();
   });
 });
