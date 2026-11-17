@@ -107,8 +107,15 @@ export function productsHref({ q, sort, page }: ProductQuery): string {
  * of the new one: relevance for a search. The search form sends the same fields without JavaScript (ProductFilters).
  */
 export function searchHref(query: ProductQuery, typed: string): string {
-  const chosen = query.sort === defaultSort(query.q) ? undefined : query.sort;
-  return productsHref(parseProductQuery({ q: typed, sort: chosen }));
+  return productsHref(parseProductQuery({ q: typed, sort: chosenSortOf(query) ?? undefined }));
+}
+
+/**
+ * The sort the visitor chose in `query`, or null when it is the default of its keyword: the one sort a new search
+ * keeps (S4.3), in the URL and in the hidden field of the search form.
+ */
+export function chosenSortOf(query: ProductQuery): ProductSort | null {
+  return query.sort === defaultSort(query.q) ? null : query.sort;
 }
 
 /** Where the sort S4.4 goes with `sort`: the first 24 products of the same search in that order. */

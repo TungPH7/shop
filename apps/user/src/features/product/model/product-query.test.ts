@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 
 import {
   apiSortOf,
+  chosenSortOf,
   nextProductsHref,
   PAGE_SIZE,
   parseProductQuery,
@@ -167,6 +168,18 @@ describe('searchHref', () => {
     expect(searchHref({ q: '', sort: 'newest', page: 1 }, '  ÁO   THUN ')).toBe(
       '/products?q=%C3%81O+THUN',
     );
+  });
+});
+
+describe('chosenSortOf', () => {
+  test('gives no sort when the query has the default sort of its keyword', () => {
+    expect(chosenSortOf({ q: '', sort: 'newest', page: 1 })).toBeNull();
+    expect(chosenSortOf({ q: 'ao', sort: 'relevance', page: 2 })).toBeNull();
+  });
+
+  test('gives the sort the visitor chose, one other than the default of the keyword', () => {
+    expect(chosenSortOf({ q: '', sort: 'price-asc', page: 1 })).toBe('price-asc');
+    expect(chosenSortOf({ q: 'ao', sort: 'newest', page: 1 })).toBe('newest');
   });
 });
 

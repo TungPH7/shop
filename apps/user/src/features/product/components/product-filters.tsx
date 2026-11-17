@@ -14,6 +14,7 @@ import { useLocale, useTranslations } from 'next-intl';
 
 import { SearchIcon } from '~/components/ui/icons';
 import {
+  chosenSortOf,
   MAX_KEYWORD_LENGTH,
   parseProductQuery,
   searchHref,
@@ -55,7 +56,7 @@ export function ProductFilters({ query }: { query: ProductQuery }) {
   }, [query.q]);
 
   // A sort the visitor chose: in the URL, so in the form; the default of the search is not.
-  const chosenSort = parseProductQuery({ q: query.q }).sort === query.sort ? null : query.sort;
+  const chosenSort = chosenSortOf(query);
 
   const search = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
