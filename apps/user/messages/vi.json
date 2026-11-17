@@ -128,6 +128,15 @@
     "metaTitle": "Sản phẩm",
     "metaDescription": "Duyệt sản phẩm được lấy phía server qua Data Access Layer, validate ở biên và cache để tối ưu hiệu năng.",
     "title": "Sản phẩm",
+    "searchLabel": "Tìm theo tên",
+    "searchPlaceholder": "Tìm sản phẩm…",
+    "sortLabel": "Sắp xếp",
+    "sort": {
+      "newest": "Mới nhất",
+      "price-asc": "Giá thấp đến cao",
+      "price-desc": "Giá cao đến thấp",
+      "relevance": "Liên quan nhất"
+    },
     "list": "Danh sách sản phẩm",
     "originalPrice": "Giá gốc:",
     "discount": "Giảm",
@@ -136,7 +145,9 @@
     "loadMore": "Xem thêm",
     "loading": "Đang tải…",
     "loadMoreError": "Không tải thêm được. Vui lòng thử lại.",
-    "empty": "Chưa có sản phẩm nào."
+    "empty": "Chưa có sản phẩm nào.",
+    "noResults": "Không tìm thấy sản phẩm nào cho “{q}”",
+    "clearSearch": "Xóa tìm kiếm"
   },
   "ProductDetail": {
     "back": "Sản phẩm",

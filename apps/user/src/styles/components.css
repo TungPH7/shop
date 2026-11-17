@@ -749,6 +749,69 @@ select.input option {
   max-width: none;
 }
 
+/* S4.3 and S4.4 (SHOP-30): the search pill on the left, as wide as the one of the reference (420px), and the sort on
+   the right of the same row; under 768px, one above the other, each across the page. */
+.product-filters {
+  display: flex;
+  gap: var(--space-3) var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4-5);
+}
+
+.product-filters__search {
+  flex: 1 1 auto;
+  max-width: 26.25rem;
+}
+
+.product-filters__sort {
+  display: flex;
+  flex: none;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.product-filters__sort-label {
+  margin: 0;
+  color: var(--muted-foreground);
+  white-space: nowrap;
+}
+
+.product-filters__sort .input {
+  width: auto;
+}
+
+/* While the products load: the place of the two fields, 44 high. */
+.product-filters__skeleton {
+  height: 44px;
+  border-radius: var(--r-ctl);
+}
+
+.product-filters__sort.product-filters__skeleton {
+  width: 15rem;
+  border-radius: var(--r-field);
+}
+
+@media (width < 768px) {
+  .product-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .product-filters__search {
+    max-width: none;
+  }
+
+  .product-filters__sort .input {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .product-filters__sort.product-filters__skeleton {
+    width: auto;
+  }
+}
+
 /* S4.5: 1 column under 640px, 2 from 640, 3 from 1024, 4 from 1440; 16 apart. 24 cards a load fill every row. */
 .product-grid {
   display: grid;
@@ -866,11 +929,20 @@ a.product-card:hover {
   height: 24px;
 }
 
-/* S4.7 without a search: no product yet. */
+/* S4.7: no product yet, or none for the keyword, with Clear search S4.8 under it while searching. */
 .product-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: center;
   margin: var(--space-6) 0;
   color: var(--muted-foreground);
   text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.product-empty p {
+  margin: 0;
 }
 
 /* S4.9 and S4.10: the progress line in --hint, centred above Load more; the error line above the button. */
