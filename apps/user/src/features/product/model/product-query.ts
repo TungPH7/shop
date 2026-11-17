@@ -90,6 +90,29 @@ export function apiSortOf(sort: ProductSort): (typeof API_SORTS)[ProductSort] {
   return API_SORTS[sort];
 }
 
+const COMBINING_MARKS = /[̀-ͯ]/g;
+const NOT_LETTER_OR_DIGIT = /[^a-z0-9]+/g;
+
+/**
+ * The words of the keyword `q` as the api searches them (ADR-0002, `ProductSearchTerms`): folded as
+ * `ProductSearchTerms.fold` and `app.search_fold` fold, step for step (NFD, no combining mark U+0300–U+036F, `đ` and
+ * `Đ` to `d`, lower case, each run of characters other than a–z and 0–9 one space), each word once in the order of
+ * its first time, joined by one space. Empty when `q` has no word, as `%` or `!!!`, which matches no product.
+ *
+ * `A`, `á` and `a!` are one search at the api, and so one search here: what the page asks the api and caches. The
+ * field and S4.7 show the keyword as typed.
+ */
+export function foldKeyword(q: string): string {
+  const folded = q
+    .normalize('NFD')
+    .replace(COMBINING_MARKS, '')
+    .replace(/[đĐ]/g, 'd')
+    .toLowerCase()
+    .replace(NOT_LETTER_OR_DIGIT, ' ')
+    .trim();
+  return folded === '' ? '' : [...new Set(folded.split(' '))].join(' ');
+}
+
 /** The path of S4 for `query`, without its locale and without the defaults: for a link or the router. */
 export function productsHref({ q, sort, page }: ProductQuery): string {
   const params = new URLSearchParams();

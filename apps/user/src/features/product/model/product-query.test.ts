@@ -3,6 +3,7 @@ import { describe, expect, test } from 'vitest';
 import {
   apiSortOf,
   chosenSortOf,
+  foldKeyword,
   nextProductsHref,
   PAGE_SIZE,
   parseProductQuery,
@@ -169,6 +170,38 @@ describe('searchHref', () => {
       '/products?q=%C3%81O+THUN',
     );
   });
+});
+
+describe('foldKeyword', () => {
+  // The cases of ProductSearchTermsTest of the api, which folds as app.search_fold does (ADR-0002).
+  test.each([
+    ['Áo thun cổ tròn', 'ao thun co tron'],
+    ['ĐẦM Maxi đỏ 2026', 'dam maxi do 2026'],
+    ['Quần jean (Nam) – Slim', 'quan jean nam slim'],
+    ['  Bao   tay len  ', 'bao tay len'],
+    ["100% cotton_x\\y'z", '100 cotton x y z'],
+    ['jean-nam/2026', 'jean nam 2026'],
+  ])('folds %j as the api does: %j', (q, folded) => {
+    expect(foldKeyword(q)).toBe(folded);
+  });
+
+  test.each(['A', 'a', 'á', 'Á', 'a!', '!a', 'ả', '(a)', 'a a'])(
+    'folds the variant %j of one search into the same words',
+    (q) => {
+      expect(foldKeyword(q)).toBe('a');
+    },
+  );
+
+  test('keeps each word once, in the order of its first time', () => {
+    expect(foldKeyword('thun Áo THUN ao co')).toBe('thun ao co');
+  });
+
+  test.each(['%', '_', '\\', "'", '!!!', '%%__', '–', '"\';--'])(
+    'folds %j, a keyword with no word, into no word',
+    (q) => {
+      expect(foldKeyword(q)).toBe('');
+    },
+  );
 });
 
 describe('chosenSortOf', () => {
