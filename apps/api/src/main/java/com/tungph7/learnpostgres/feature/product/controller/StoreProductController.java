@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.tungph7.learnpostgres.feature.product.domain.ProductSort;
 import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
 import com.tungph7.learnpostgres.feature.product.dto.SitemapEntry;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProduct;
@@ -57,25 +58,43 @@ public class StoreProductController {
   }
 
   /**
-   * One page of the {@code ACTIVE} products, newest first. An invalid parameter is a 400 {@code
-   * INVALID_PARAMETER} that names it (NFR3); an unknown one, such as {@code status}, is ignored.
+   * One page of the {@code ACTIVE} products that match {@code q}, in the order of {@code sort}
+   * (SHOP-29). An invalid parameter is a 400 {@code INVALID_PARAMETER} that names it (NFR3), and so
+   * is {@code sort=RELEVANCE} with no keyword; an unknown one, such as {@code status}, is ignored.
    */
   @GetMapping(path = BASE_PATH, produces = MediaType.APPLICATION_JSON_VALUE)
   @Operation(
       summary = "List the products of the store",
       description =
-          "Only ACTIVE products, newest first, with id as the last key so a page never repeats or"
-              + " skips a product. A status parameter is ignored. An invalid offset or limit is a"
-              + " 400 INVALID_PARAMETER naming it.")
+          "Only ACTIVE products. q matches products whose name has a word starting with each word"
+              + " of q, ignoring accents and case; a blank q is no search, and a q with no letter"
+              + " or digit matches no product. sort defaults to RELEVANCE when q has a word, else"
+              + " NEWEST; id is always the last key, so a page never repeats or skips a product."
+              + " A status parameter is ignored. An invalid offset, limit or sort, or RELEVANCE"
+              + " with no q, is a 400 INVALID_PARAMETER naming it.")
   @ApiResponse(responseCode = "200", description = "OK")
   @ApiResponse(
       responseCode = "400",
-      description = "INVALID_PARAMETER: a parameter of the wrong type or out of range",
+      description =
+          "INVALID_PARAMETER: a parameter of the wrong type or out of range, or sort RELEVANCE"
+              + " with no q",
       content =
           @Content(
               mediaType = "application/problem+json",
               schema = @Schema(ref = "#/components/schemas/ProblemDetail")))
   public ProductPage<StoreProductSummary> list(
+      @Parameter(
+              description =
+                  "Keyword, cut at 100 characters; each word matches the start of a word of the"
+                      + " name, ignoring accents and case. Blank is no search")
+          @RequestParam(name = "q", required = false)
+          String q,
+      @Parameter(
+              description =
+                  "Order: NEWEST, PRICE_ASC or PRICE_DESC (then newest), or RELEVANCE (only with"
+                      + " q). Defaults to RELEVANCE when q has a word, else NEWEST")
+          @RequestParam(name = "sort", required = false)
+          ProductSort sort,
       @Parameter(description = "Products to skip, 0 or more")
           @RequestParam(name = "offset", defaultValue = "0")
           @Min(0)
@@ -85,7 +104,7 @@ public class StoreProductController {
           @Min(1)
           @Max(ProductQueryRepository.MAX_LIMIT)
           int limit) {
-    return service.list(offset, limit);
+    return service.list(q, sort, offset, limit);
   }
 
   /**

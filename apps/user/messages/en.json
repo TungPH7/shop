@@ -128,6 +128,15 @@
     "metaTitle": "Products",
     "metaDescription": "Browse products fetched server-side through the Data Access Layer, validated at the boundary and cached for performance.",
     "title": "Products",
+    "searchLabel": "Search by name",
+    "searchPlaceholder": "Search products…",
+    "sortLabel": "Sort by",
+    "sort": {
+      "newest": "Newest",
+      "price-asc": "Price: low to high",
+      "price-desc": "Price: high to low",
+      "relevance": "Most relevant"
+    },
     "list": "Product list",
     "originalPrice": "Original price:",
     "discount": "Off",
@@ -136,7 +145,9 @@
     "loadMore": "Load more",
     "loading": "Loading…",
     "loadMoreError": "Couldn't load more. Please try again.",
-    "empty": "No products yet."
+    "empty": "No products yet.",
+    "noResults": "No products found for “{q}”",
+    "clearSearch": "Clear search"
   },
   "ProductDetail": {
     "back": "Products",

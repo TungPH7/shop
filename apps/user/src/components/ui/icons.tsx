@@ -1,7 +1,8 @@
 import { type SVGProps } from 'react';
 
-// The icons of the navigation bar (S4.1, SHOP-11): 16px line icons in currentColor, decorative, so aria-hidden. The
-// control that holds one always keeps its words as its name. Inline SVG: user has no icon library (NFR13).
+// The icons of the navigation bar (S4.1, SHOP-11) and of the search S4.3 (SHOP-30): 16px line icons in currentColor,
+// decorative, so aria-hidden. The control that holds one always keeps its words as its name, as the search field keeps
+// its hidden label. Inline SVG: user has no icon library (NFR13).
 type IconProps = Omit<SVGProps<SVGSVGElement>, 'children'>;
 
 function Icon({ children, ...props }: IconProps & { children: React.ReactNode }) {
@@ -63,6 +64,15 @@ export function SignOutIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+    </Icon>
+  );
+}
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-3.5-3.5" />
     </Icon>
   );
 }

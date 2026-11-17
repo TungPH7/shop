@@ -23,7 +23,10 @@ import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -44,7 +47,10 @@ import tools.jackson.databind.node.ObjectNode;
  * ({@code citext}), and one same 404 for a slug that never existed, a hidden product and a deleted
  * one (NFR9), and both operations in {@code /v3/api-docs}. {@code GET /api/products} (SHOP-26):
  * only {@code ACTIVE} products, newest first with {@code id DESC} as the last key (NFR18), pages
- * that never repeat or skip a product, and a status parameter ignored (NFR9).
+ * that never repeat or skip a product, and a status parameter ignored (NFR9). {@code q} and {@code
+ * sort} (SHOP-29): the search of AC18, the orders of AC19 and AC20, a keyword with no word that
+ * matches nothing (NFR10), and the 400 of a sort that is unknown or is {@code RELEVANCE} with no
+ * keyword.
  *
  * <p>Each connection has {@code currentSchema=app}, which {@code application-test.yml} sets for
  * every test, as the URL of {@code application.yml} does for the deployed app. That {@code
@@ -307,6 +313,193 @@ class StoreProductIntegrationTest extends AbstractContainerBaseTest {
   }
 
   // ============================================================
+  // GET list: q and sort (SHOP-29)
+  // ============================================================
+
+  @ParameterizedTest(name = "q={0}")
+  @ValueSource(strings = {"ao thun", "ÁO THUN", "Áo Thun", "  áo   thun  "})
+  @DisplayName("AC18 finds a name by its words, ignoring accents, case and spaces")
+  void ac18_findsANameByItsWords_ignoringAccentsCaseAndSpaces(String q) throws Exception {
+    listed("Áo thun cổ tròn", "ACTIVE", 1);
+    listed("Bao tay len", "ACTIVE", 2);
+    listed("Quần jean nam", "ACTIVE", 3);
+
+    mockMvc
+        .perform(get("/api/products").param("q", q))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[*].name").value(contains("Áo thun cổ tròn")))
+        .andExpect(jsonPath("$.totalItems").value(1));
+  }
+
+  @Test
+  @DisplayName("AC18 matches the start of a word only, so ao does not find Bao tay len")
+  void ac18_matchesTheStartOfAWordOnly() throws Exception {
+    listed("Áo thun cổ tròn", "ACTIVE", 1);
+    listed("Bao tay len", "ACTIVE", 2);
+    listed("Quần jean nam", "ACTIVE", 3);
+
+    mockMvc
+        .perform(get("/api/products").param("q", "ao"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[*].name").value(contains("Áo thun cổ tròn")))
+        .andExpect(jsonPath("$.totalItems").value(1));
+  }
+
+  @Test
+  @DisplayName("AC19 with a keyword and no sort, lists the most relevant first")
+  void ac19_withAKeywordAndNoSort_listsTheMostRelevantFirst() throws Exception {
+    listed("Áo thun cổ tròn", "ACTIVE", 1);
+    listed("Combo 3 áo thun", "ACTIVE", 2);
+    listed("Áo khoác thun nỉ", "ACTIVE", 3);
+    listed("Quần jean nam", "ACTIVE", 4);
+
+    mockMvc
+        .perform(get("/api/products").param("q", "ao thun"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.items[*].name")
+                .value(contains("Áo thun cổ tròn", "Combo 3 áo thun", "Áo khoác thun nỉ")))
+        .andExpect(jsonPath("$.totalItems").value(3));
+  }
+
+  @Test
+  @DisplayName("AC19 RELEVANCE puts the phrase at the start first, then at a word, then the rest")
+  void ac19_relevance_putsThePhraseAtTheStartFirst_thenAtAWordStart_thenTheRest() throws Exception {
+    listed("Áo thun cổ tròn", "ACTIVE", 1);
+    listed("Combo 3 áo thun", "ACTIVE", 2);
+    listed("Áo khoác thun nỉ", "ACTIVE", 3);
+
+    mockMvc
+        .perform(get("/api/products").param("q", "ao thun").param("sort", "RELEVANCE"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.items[*].name")
+                .value(contains("Áo thun cổ tròn", "Combo 3 áo thun", "Áo khoác thun nỉ")));
+  }
+
+  @Test
+  @DisplayName("AC19 RELEVANCE lists the newest first within a group")
+  void ac19_relevance_listsTheNewestFirstWithinAGroup() throws Exception {
+    listed("Áo thun cổ tròn", "ACTIVE", 1);
+    listed("Áo thun ba lỗ", "ACTIVE", 2);
+    listed("Áo khoác thun nỉ", "ACTIVE", 3);
+
+    mockMvc
+        .perform(get("/api/products").param("q", "ao thun").param("sort", "RELEVANCE"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.items[*].name")
+                .value(contains("Áo thun ba lỗ", "Áo thun cổ tròn", "Áo khoác thun nỉ")));
+  }
+
+  @Test
+  @DisplayName("AC20 PRICE_ASC lists the lowest price first, and the newer of two equal prices")
+  void ac20_priceAsc_listsTheLowestPriceFirst_andTheNewerOfTwoEqualPrices() throws Exception {
+    listedAt("Áo khoác dạ", 1, 900_000L);
+    listedAt("Mũ len", 2, 90_000L);
+    listedAt("Quần jean nam", 3, 450_000L);
+    listedAt("Áo thun cổ tròn", 4, 450_000L);
+    listed("Bao tay len", "HIDDEN", 5);
+
+    mockMvc
+        .perform(get("/api/products").param("sort", "PRICE_ASC"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.items[*].name")
+                .value(contains("Mũ len", "Áo thun cổ tròn", "Quần jean nam", "Áo khoác dạ")))
+        .andExpect(jsonPath("$.items[*].price").value(contains(90_000, 450_000, 450_000, 900_000)));
+  }
+
+  @Test
+  @DisplayName("AC20 PRICE_DESC lists the highest price first, and the newer of two equal prices")
+  void ac20_priceDesc_listsTheHighestPriceFirst_andTheNewerOfTwoEqualPrices() throws Exception {
+    listedAt("Áo khoác dạ", 1, 900_000L);
+    listedAt("Mũ len", 2, 90_000L);
+    listedAt("Quần jean nam", 3, 450_000L);
+    listedAt("Áo thun cổ tròn", 4, 450_000L);
+
+    mockMvc
+        .perform(get("/api/products").param("sort", "PRICE_DESC"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.items[*].name")
+                .value(contains("Áo khoác dạ", "Áo thun cổ tròn", "Quần jean nam", "Mũ len")));
+  }
+
+  @Test
+  @DisplayName("AC20 NEWEST lists the product created last first")
+  void ac20_newest_listsTheProductCreatedLastFirst() throws Exception {
+    listedAt("Áo khoác dạ", 1, 900_000L);
+    listedAt("Mũ len", 2, 90_000L);
+    listedAt("Quần jean nam", 3, 450_000L);
+
+    mockMvc
+        .perform(get("/api/products").param("sort", "NEWEST"))
+        .andExpect(status().isOk())
+        .andExpect(
+            jsonPath("$.items[*].name").value(contains("Quần jean nam", "Mũ len", "Áo khoác dạ")));
+  }
+
+  @Test
+  @DisplayName("AC20 RELEVANCE with no keyword is a 400 naming sort")
+  void ac20_relevanceWithNoKeyword_returns400NamingSort() throws Exception {
+    listed("Áo thun cổ tròn", "ACTIVE", 1);
+
+    mockMvc
+        .perform(get("/api/products").param("sort", "RELEVANCE").param("q", "  "))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.parameter").value("sort"));
+  }
+
+  @Test
+  void list_withASortAndAKeyword_sortsOnlyTheProductsThatMatch() throws Exception {
+    listedAt("Áo khoác dạ", 1, 900_000L);
+    listedAt("Mũ len", 2, 90_000L);
+    listedAt("Áo thun cổ tròn", 3, 200_000L);
+
+    mockMvc
+        .perform(get("/api/products").param("q", "ao").param("sort", "PRICE_ASC"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[*].name").value(contains("Áo thun cổ tròn", "Áo khoác dạ")))
+        .andExpect(jsonPath("$.totalItems").value(2));
+  }
+
+  @Test
+  void list_withAKeyword_neverShowsAHiddenProduct() throws Exception {
+    listed("Áo thun cổ tròn", "ACTIVE", 1);
+    listed("Áo thun ẩn", "HIDDEN", 2);
+
+    mockMvc
+        .perform(get("/api/products").param("q", "ao thun").param("status", "HIDDEN"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items[*].name").value(contains("Áo thun cổ tròn")))
+        .andExpect(jsonPath("$.totalItems").value(1));
+  }
+
+  @ParameterizedTest(name = "q={0}")
+  @ValueSource(strings = {"%", "_", "!!!", "\\"})
+  void list_withAKeywordOfNoWord_matchesNoProduct(String q) throws Exception {
+    listed("Áo thun cổ tròn", "ACTIVE", 1);
+    listed("Giảm 50% _ hôm nay", "ACTIVE", 2);
+
+    mockMvc
+        .perform(get("/api/products").param("q", q))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.items").isEmpty())
+        .andExpect(jsonPath("$.totalItems").value(0));
+  }
+
+  @Test
+  void list_withAnUnknownSort_returns400NamingSort() throws Exception {
+    mockMvc
+        .perform(get("/api/products").param("sort", "CHEAPEST"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.parameter").value("sort"));
+  }
+
+  // ============================================================
   // GET sitemap (SHOP-32)
   // ============================================================
 
@@ -399,7 +592,11 @@ class StoreProductIntegrationTest extends AbstractContainerBaseTest {
     mockMvc
         .perform(get("/v3/api-docs"))
         .andExpect(status().isOk())
-        .andExpect(jsonPath(path + ".parameters[*].name").value(hasItems("offset", "limit")))
+        .andExpect(
+            jsonPath(path + ".parameters[*].name").value(hasItems("q", "sort", "offset", "limit")))
+        .andExpect(
+            jsonPath(path + ".parameters[?(@.name == 'sort')].schema.enum[*]")
+                .value(contains("NEWEST", "PRICE_ASC", "PRICE_DESC", "RELEVANCE")))
         .andExpect(
             jsonPath(path + ".parameters[?(@.name == 'limit')].schema.minimum").value(contains(1)))
         .andExpect(
@@ -493,6 +690,15 @@ class StoreProductIntegrationTest extends AbstractContainerBaseTest {
    * with each insert, as UUIDv7 do.
    */
   private UUID listed(String name, String status, int minutes) {
+    return listed(name, status, minutes, 200_000L);
+  }
+
+  /** An {@code ACTIVE} product of a list, as {@link #listed}, with this price. */
+  private UUID listedAt(String name, int minutes, long price) {
+    return listed(name, "ACTIVE", minutes, price);
+  }
+
+  private UUID listed(String name, String status, int minutes, long price) {
     sequence++;
     UUID id = new UUID(0x019a_0000_0000_7000L, 0x8000_0000_0000_0000L | sequence);
     Timestamp createdAt = Timestamp.from(UPDATED_AT.plus(Duration.ofMinutes(minutes)));
@@ -502,12 +708,13 @@ class StoreProductIntegrationTest extends AbstractContainerBaseTest {
                     """
                     INSERT INTO app.products
                         (id, name, slug, price_vnd, status, availability, created_at, updated_at)
-                    VALUES (:id, :name, :slug, 200000, :status, 'IN_STOCK', :createdAt,
+                    VALUES (:id, :name, :slug, :price, :status, 'IN_STOCK', :createdAt,
                             :createdAt)
                     """)
                 .param("id", id)
                 .param("name", name)
                 .param("slug", "p-" + sequence)
+                .param("price", price)
                 .param("status", status)
                 .param("createdAt", createdAt)
                 .update());

@@ -6,6 +6,7 @@ import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.tungph7.learnpostgres.common.error.BadRequestException;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.error.NotFoundException;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
@@ -20,6 +21,7 @@ import com.tungph7.learnpostgres.feature.product.repository.ProductQueryReposito
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Result;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.SitemapResult;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
+import com.tungph7.learnpostgres.feature.product.repository.ProductSearchTerms;
 
 /**
  * The products of the store, as shoppers see them (SHOP-7, API Contract of the plan, ADR-0003):
@@ -34,6 +36,10 @@ public class StoreProductService {
    */
   static final String NOT_FOUND = "Product not found.";
 
+  /** The detail of the 400 of {@code sort=RELEVANCE} with no keyword (API Contract of SHOP-7). */
+  static final String RELEVANCE_NEEDS_A_KEYWORD =
+      "Parameter 'sort' can be RELEVANCE only with a keyword in 'q'.";
+
   private final ProductRepository repository;
   private final ProductQueryRepository queryRepository;
 
@@ -43,16 +49,34 @@ public class StoreProductService {
   }
 
   /**
-   * One page of the {@code ACTIVE} products, newest first with {@code id DESC} as the last key
-   * (NFR18), and their total. It runs the two statements of {@link ProductQueryRepository} (NFR2).
+   * One page of the {@code ACTIVE} products that match the keyword, in the order of {@code sort}
+   * with {@code id DESC} as the last key (NFR18), and their total. It runs the two statements of
+   * {@link ProductQueryRepository} (NFR2), or none for a keyword with no word, such as {@code %},
+   * which matches no product (NFR10).
    *
+   * @param q the keyword as sent, read by {@link ProductSearchTerms}: {@code null} or blank is no
+   *     search
+   * @param sort the order, or {@code null} for the default: {@link ProductSort#RELEVANCE} when the
+   *     keyword has a word, else {@link ProductSort#NEWEST}
    * @param offset the products to skip, 0 or more
    * @param limit the products of the page, 1 to {@value ProductQueryRepository#MAX_LIMIT}
+   * @throws BadRequestException {@code INVALID_PARAMETER} naming {@code sort}, when {@code sort} is
+   *     {@link ProductSort#RELEVANCE} and there is no search
    */
-  public ProductPage<StoreProductSummary> list(int offset, int limit) {
+  public ProductPage<StoreProductSummary> list(String q, ProductSort sort, int offset, int limit) {
+    ProductSearchTerms search = ProductSearchTerms.of(q).orElse(null);
+    if (sort == ProductSort.RELEVANCE && search == null) {
+      throw new BadRequestException(ErrorCode.INVALID_PARAMETER, RELEVANCE_NEEDS_A_KEYWORD)
+          .putProperty("parameter", "sort");
+    }
     Result result =
         queryRepository.findPage(
-            new Criteria(null, Set.of(ProductStatus.ACTIVE), ProductSort.NEWEST, offset, limit));
+            new Criteria(
+                search,
+                Set.of(ProductStatus.ACTIVE),
+                sort != null ? sort : defaultSort(search),
+                offset,
+                limit));
     return new ProductPage<>(
         result.items().stream().map(StoreProductSummary::from).toList(),
         result.totalItems(),
@@ -97,6 +121,11 @@ public class StoreProductService {
   @Transactional(readOnly = true)
   public boolean isVisible(String slug) {
     return findActive(slug).isPresent();
+  }
+
+  /** The order when the request names none: the most relevant first only for a real search. */
+  private static ProductSort defaultSort(ProductSearchTerms search) {
+    return search != null && !search.matchesNothing() ? ProductSort.RELEVANCE : ProductSort.NEWEST;
   }
 
   private Optional<Product> findActive(String slug) {

@@ -1,6 +1,7 @@
 package com.tungph7.learnpostgres.feature.product.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -21,6 +22,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -30,6 +32,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import com.tungph7.learnpostgres.common.error.BadRequestException;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.error.GlobalExceptionHandler;
 import com.tungph7.learnpostgres.common.error.NotFoundException;
@@ -37,6 +40,7 @@ import com.tungph7.learnpostgres.common.error.ProblemDetailFactory;
 import com.tungph7.learnpostgres.common.logging.LoggingProperties;
 import com.tungph7.learnpostgres.common.security.TestSecurityConfig;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
+import com.tungph7.learnpostgres.feature.product.domain.ProductSort;
 import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
 import com.tungph7.learnpostgres.feature.product.dto.SitemapEntry;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProduct;
@@ -52,7 +56,9 @@ import tools.jackson.databind.ObjectMapper;
  * PRODUCT_NOT_FOUND}, and a {@code HEAD} with no body. {@code GET /api/products} (SHOP-26): the
  * defaults and limits of {@code offset} and {@code limit}, the 400 {@code INVALID_PARAMETER} of
  * each invalid one (NFR3), a status parameter ignored (NFR9) and the field names of {@code
- * Page<StoreProductSummary>}. The service is a mock: which products a shopper sees, and the three
+ * Page<StoreProductSummary>}. {@code q} and {@code sort} (SHOP-29): both passed to the service as
+ * sent, a 400 {@code INVALID_PARAMETER} naming {@code sort} for an unknown sort and for {@code
+ * RELEVANCE} with no keyword. The service is a mock: which products a shopper sees, and the three
  * 404 compared on the database, are in {@code StoreProductIntegrationTest}.
  */
 @WebMvcTest(StoreProductController.class)
@@ -194,7 +200,7 @@ class StoreProductControllerWebMvcTest {
 
   @Test
   void list_withNoParameter_startsAtTheFirstProductTwentyFourAtATime() throws Exception {
-    when(service.list(0, 24)).thenReturn(new ProductPage<>(List.of(), 0, 0, 24));
+    when(service.list(null, null, 0, 24)).thenReturn(new ProductPage<>(List.of(), 0, 0, 24));
 
     mockMvc
         .perform(get(LIST_URL))
@@ -204,52 +210,115 @@ class StoreProductControllerWebMvcTest {
         .andExpect(jsonPath("$.offset").value(0))
         .andExpect(jsonPath("$.limit").value(24));
 
-    verify(service).list(0, 24);
+    verify(service).list(null, null, 0, 24);
   }
 
   @Test
   void list_passesTheOffsetAndTheLimitToTheService() throws Exception {
-    when(service.list(anyInt(), anyInt())).thenReturn(new ProductPage<>(List.of(), 0, 96, 100));
+    when(service.list(any(), any(), anyInt(), anyInt()))
+        .thenReturn(new ProductPage<>(List.of(), 0, 96, 100));
 
     mockMvc
         .perform(get(LIST_URL).param("offset", "96").param("limit", "100"))
         .andExpect(status().isOk());
 
-    verify(service).list(96, 100);
+    verify(service).list(null, null, 96, 100);
   }
 
   @Test
   void list_withTheSmallestLimit_returns200() throws Exception {
-    when(service.list(anyInt(), anyInt())).thenReturn(new ProductPage<>(List.of(), 0, 0, 1));
+    when(service.list(any(), any(), anyInt(), anyInt()))
+        .thenReturn(new ProductPage<>(List.of(), 0, 0, 1));
 
     mockMvc.perform(get(LIST_URL).param("limit", "1")).andExpect(status().isOk());
 
-    verify(service).list(0, 1);
+    verify(service).list(null, null, 0, 1);
   }
 
   @Test
   void list_ignoresAStatusParameter() throws Exception {
-    when(service.list(anyInt(), anyInt())).thenReturn(new ProductPage<>(List.of(), 0, 0, 24));
+    when(service.list(any(), any(), anyInt(), anyInt()))
+        .thenReturn(new ProductPage<>(List.of(), 0, 0, 24));
 
     mockMvc.perform(get(LIST_URL).param("status", "HIDDEN")).andExpect(status().isOk());
 
-    verify(service).list(0, 24);
+    verify(service).list(null, null, 0, 24);
   }
 
   @Test
   void list_ignoresAnUnknownParameter() throws Exception {
-    when(service.list(anyInt(), anyInt())).thenReturn(new ProductPage<>(List.of(), 0, 0, 24));
+    when(service.list(any(), any(), anyInt(), anyInt()))
+        .thenReturn(new ProductPage<>(List.of(), 0, 0, 24));
 
     mockMvc
-        .perform(get(LIST_URL).param("page", "abc").param("sort", "WHATEVER"))
+        .perform(get(LIST_URL).param("page", "abc").param("order", "WHATEVER"))
         .andExpect(status().isOk());
 
-    verify(service).list(0, 24);
+    verify(service).list(null, null, 0, 24);
+  }
+
+  // ============================================================
+  // GET list: q and sort (SHOP-29)
+  // ============================================================
+
+  @Test
+  void list_passesTheKeywordAsTypedToTheService() throws Exception {
+    when(service.list(any(), any(), anyInt(), anyInt()))
+        .thenReturn(new ProductPage<>(List.of(), 0, 0, 24));
+
+    mockMvc.perform(get(LIST_URL).param("q", "  Áo  THUN ")).andExpect(status().isOk());
+
+    verify(service).list("  Áo  THUN ", null, 0, 24);
+  }
+
+  @ParameterizedTest(name = "sort={0}")
+  @EnumSource(ProductSort.class)
+  void list_passesEachSortToTheService(ProductSort sort) throws Exception {
+    when(service.list(any(), any(), anyInt(), anyInt()))
+        .thenReturn(new ProductPage<>(List.of(), 0, 0, 24));
+
+    mockMvc
+        .perform(get(LIST_URL).param("q", "ao thun").param("sort", sort.name()))
+        .andExpect(status().isOk());
+
+    verify(service).list("ao thun", sort, 0, 24);
+  }
+
+  @Test
+  void list_withAnEmptySort_leavesTheDefaultToTheService() throws Exception {
+    when(service.list(any(), any(), anyInt(), anyInt()))
+        .thenReturn(new ProductPage<>(List.of(), 0, 0, 24));
+
+    mockMvc.perform(get(LIST_URL).param("q", "ao").param("sort", "")).andExpect(status().isOk());
+
+    verify(service).list("ao", null, 0, 24);
+  }
+
+  @Test
+  void list_withRelevanceAndNoKeyword_returns400NamingSort() throws Exception {
+    when(service.list(any(), any(), anyInt(), anyInt()))
+        .thenThrow(
+            new BadRequestException(
+                    ErrorCode.INVALID_PARAMETER, "Sort RELEVANCE needs a keyword in 'q'.")
+                .putProperty("parameter", "sort"));
+
+    mockMvc
+        .perform(get(LIST_URL).param("sort", "RELEVANCE"))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.status").value(400))
+        .andExpect(jsonPath("$.code").value("INVALID_PARAMETER"))
+        .andExpect(jsonPath("$.parameter").value("sort"))
+        .andExpect(jsonPath("$.instance").value(LIST_URL))
+        .andExpect(jsonPath("$.correlationId").exists())
+        .andExpect(jsonPath("$.timestamp").exists());
+
+    verify(service).list(null, ProductSort.RELEVANCE, 0, 24);
   }
 
   @Test
   void list_returnsThePageAsTheApiContractWritesIt() throws Exception {
-    when(service.list(anyInt(), anyInt()))
+    when(service.list(any(), any(), anyInt(), anyInt()))
         .thenReturn(new ProductPage<>(List.of(sampleSummary()), 30, 24, 24));
 
     mockMvc
@@ -269,7 +338,7 @@ class StoreProductControllerWebMvcTest {
 
   @Test
   void list_returnsExactlyTheFieldsOfPageAndStoreProductSummary() throws Exception {
-    when(service.list(anyInt(), anyInt()))
+    when(service.list(any(), any(), anyInt(), anyInt()))
         .thenReturn(new ProductPage<>(List.of(sampleSummary()), 1, 0, 24));
 
     String body =
@@ -289,7 +358,7 @@ class StoreProductControllerWebMvcTest {
 
   @Test
   void list_withNoCompareAtPrice_writesItAsNull() throws Exception {
-    when(service.list(anyInt(), anyInt()))
+    when(service.list(any(), any(), anyInt(), anyInt()))
         .thenReturn(
             new ProductPage<>(
                 List.of(
@@ -325,7 +394,10 @@ class StoreProductControllerWebMvcTest {
         Arguments.of("limit", "0", "below 1"),
         Arguments.of("limit", "101", "above 100"),
         Arguments.of("limit", "-5", "negative"),
-        Arguments.of("limit", "abc", "not a number"));
+        Arguments.of("limit", "abc", "not a number"),
+        Arguments.of("sort", "WHATEVER", "not a sort"),
+        Arguments.of("sort", "price-asc", "the form of the user URL"),
+        Arguments.of("sort", "newest", "lower case"));
   }
 
   @ParameterizedTest(name = "{0}={1} ({2})")

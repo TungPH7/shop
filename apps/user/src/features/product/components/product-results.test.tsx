@@ -15,7 +15,7 @@ import vi_ from '../../../../messages/vi.json';
 const { getStoreProducts, locale, router } = vi.hoisted(() => ({
   getStoreProducts: vi.fn(),
   locale: { current: 'vi' },
-  router: { replace: vi.fn(), refresh: vi.fn() },
+  router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn() },
 }));
 vi.mock('~/features/product/server/get-products', () => ({ getStoreProducts }));
 vi.mock('next-intl/server', () => ({
@@ -33,6 +33,7 @@ vi.mock('~/i18n/navigation', () => ({
     <a href={`/${locale.current}${href}`} {...props} />
   ),
   useRouter: () => router,
+  getPathname: ({ href, locale }: { href: string; locale: string }) => `/${locale}${href}`,
 }));
 
 import { ProductResults, ProductResultsSkeleton } from './product-results';
@@ -78,16 +79,51 @@ describe('<ProductResults />', () => {
   });
 
   test.each([
-    [{}, 1],
-    [{ page: '3' }, 3],
-    [{ page: 'abc' }, 1],
-    [{ page: '0' }, 1],
-  ])('reads the products of %j as page %i', async (searchParams, page) => {
+    [{}, { q: '', sort: 'newest', page: 1 }],
+    [{ page: '3' }, { q: '', sort: 'newest', page: 3 }],
+    [
+      { page: 'abc', sort: 'cheapest' },
+      { q: '', sort: 'newest', page: 1 },
+    ],
+    [
+      { q: 'ao', page: '0' },
+      { q: 'ao', sort: 'relevance', page: 1 },
+    ],
+    [
+      { q: ' ao ', sort: 'price-asc', page: '2' },
+      { q: 'ao', sort: 'price-asc', page: 2 },
+    ],
+    [{ sort: 'relevance' }, { q: '', sort: 'newest', page: 1 }],
+  ])('reads the products of %j as %j (AC22)', async (searchParams, query) => {
     getStoreProducts.mockResolvedValue(list(24, 100));
 
     await renderResults(searchParams);
 
-    expect(getStoreProducts).toHaveBeenCalledWith({ page });
+    expect(getStoreProducts).toHaveBeenCalledWith(query);
+  });
+
+  test('shows the search and the sort of the URL above the grid (S4.3, S4.4)', async () => {
+    getStoreProducts.mockResolvedValue(list(24, 30));
+
+    await renderResults({ q: 'ao', sort: 'price-asc' });
+
+    const field = screen.getByRole('searchbox', { name: 'Tìm theo tên' });
+    expect(field).toHaveValue('ao');
+    expect(screen.getByRole('combobox', { name: 'Sắp xếp' })).toHaveValue('price-asc');
+    expect(field.compareDocumentPosition(screen.getByRole('list'))).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  test('keeps the search and the sort in the URL of Load more (AC22)', async () => {
+    getStoreProducts.mockResolvedValue(list(24, 30));
+
+    const { user } = await renderResults({ q: 'ao', sort: 'price-asc' });
+    await user.click(screen.getByRole('button', { name: 'Xem thêm' }));
+
+    expect(router.replace).toHaveBeenCalledWith('/products?q=ao&sort=price-asc&page=2', {
+      scroll: false,
+    });
   });
 
   test.each([
@@ -153,10 +189,43 @@ describe('<ProductResults />', () => {
       await renderResults({}, lang);
 
       expect(screen.getByRole('status')).toHaveTextContent(empty);
+      expect(screen.queryByRole('link')).toBeNull();
       expect(screen.queryByRole('list')).toBeNull();
       expect(screen.queryByRole('button')).toBeNull();
     },
   );
+
+  test.each([
+    ['vi', 'Không tìm thấy sản phẩm nào cho “xyz”', 'Xóa tìm kiếm'],
+    ['en', 'No products found for “xyz”', 'Clear search'],
+  ] as const)(
+    'says no product matches the keyword in %s, with a link that clears the search (S4.7, S4.8, AC23)',
+    async (lang, noResults, clear) => {
+      getStoreProducts.mockResolvedValue(list(0, 0));
+
+      await renderResults({ q: 'xyz' }, lang);
+
+      expect(screen.getByRole('status')).toHaveTextContent(noResults);
+      expect(screen.getByRole('link', { name: clear })).toHaveAttribute(
+        'href',
+        `/${lang}/products`,
+      );
+      expect(screen.getByRole('searchbox')).toHaveValue('xyz');
+      expect(screen.queryByRole('list')).toBeNull();
+      expect(screen.queryByRole('button')).toBeNull();
+    },
+  );
+
+  test('shows the keyword as words in the message, never as markup', async () => {
+    getStoreProducts.mockResolvedValue(list(0, 0));
+
+    await renderResults({ q: '<b>áo</b>' });
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Không tìm thấy sản phẩm nào cho “<b>áo</b>”',
+    );
+    expect(screen.getByRole('status').querySelector('b')).toBeNull();
+  });
 
   test('throws the error of the api to the error boundary, never an empty list (NFR26)', async () => {
     const error = Object.assign(new Error('Request failed with status 503'), { kind: 'http' });
@@ -174,5 +243,14 @@ describe('<ProductResultsSkeleton />', () => {
     expect(grid).toHaveAttribute('aria-busy', 'true');
     expect(within(grid).getAllByRole('listitem')).toHaveLength(8);
     expect(grid.textContent).toBe('');
+  });
+
+  test('keeps the place of the search and the sort while they load, with no field to type into yet', () => {
+    const { container } = renderWithProviders(<ProductResultsSkeleton />, { locale: 'vi' });
+
+    const row = container.querySelector('.product-filters');
+    expect(row).toHaveAttribute('aria-hidden', 'true');
+    expect(row?.querySelectorAll('.skeleton')).toHaveLength(2);
+    expect(screen.queryByRole('searchbox')).toBeNull();
   });
 });

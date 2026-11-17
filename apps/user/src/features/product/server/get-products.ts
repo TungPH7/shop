@@ -7,7 +7,12 @@ import {
   storeProductSummarySchema,
   type StoreProductSummary,
 } from '~/features/product/model/product';
-import { PAGE_SIZE, type ProductQuery } from '~/features/product/model/product-query';
+import {
+  apiSortOf,
+  PAGE_SIZE,
+  type ProductQuery,
+  type ProductSort,
+} from '~/features/product/model/product-query';
 import { httpGet } from '~/lib/http/client';
 import { captureError } from '~/lib/monitoring/capture-error';
 
@@ -17,30 +22,38 @@ const BLOCK_SIZE = 96;
 const storeProductPageSchema = pageSchema(storeProductSummarySchema);
 
 export type StoreProductList = {
-  /** The first `page × 24` products on sale, newest first, each once. */
+  /** The first `page × 24` products on sale that match the search, in the order of the query, each once. */
   items: StoreProductSummary[];
-  /** How many products are on sale, for "Viewed 24 of 30 products" (S4.9). */
+  /** How many products on sale match the search, for "Viewed 24 of 30 products" (S4.9). */
   totalItems: number;
   /** `false`: a block after the first failed, and `items` holds only the whole loads of 24 read before it. */
   complete: boolean;
 };
 
 /**
- * One block of 96 products on sale from `offset`: `GET /api/products`, newest first (plan of SHOP-7, API Contract).
+ * One block of 96 products on sale from `offset`: `GET /api/products` (plan of SHOP-7, API Contract), with the keyword
+ * `q` when there is one and the order `sort`, always named so the api never picks a default of its own.
  *
  * `cacheLife('catalog')`: data at most 25 s old on the server, a dynamic hole outside the prerender (Architecture
- * Decisions 8). The cache holds a block, not a page: the first four loads of 24 share the first block, so Load more on
- * them is served from the cache and the products already shown stay where they are. A throw is not cached.
+ * Decisions 8). The cache holds a block, not a page, of one keyword and one order: the first four loads of 24 share the
+ * first block, so Load more on them is served from the cache and the products already shown stay where they are. A
+ * throw is not cached.
  */
-async function getStoreProductBlock(offset: number) {
+async function getStoreProductBlock(q: string, sort: ProductSort, offset: number) {
   'use cache';
   cacheLife('catalog');
 
-  return httpGet(`/api/products?offset=${offset}&limit=${BLOCK_SIZE}`, storeProductPageSchema);
+  const params = new URLSearchParams();
+  if (q !== '') params.set('q', q);
+  params.set('sort', apiSortOf(sort));
+  params.set('offset', String(offset));
+  params.set('limit', String(BLOCK_SIZE));
+  return httpGet(`/api/products?${params.toString()}`, storeProductPageSchema);
 }
 
 /**
- * The products of S4 for `query`: `page × 24` products on sale, read in blocks of 96 (Architecture Decisions 10).
+ * The products of S4 for `query`: `page × 24` products on sale that match its keyword, in its order, read in blocks of
+ * 96 (Architecture Decisions 10).
  *
  * - A product read twice, because the catalog moved between two blocks, is kept once (NFR18).
  * - Reading stops at the number of products on sale, so `page=999999` reads the catalog once and no further (NFR3); and
@@ -69,7 +82,7 @@ export async function getStoreProducts(query: ProductQuery): Promise<StoreProduc
   for (let offset = 0; ; offset += BLOCK_SIZE) {
     let block: Awaited<ReturnType<typeof getStoreProductBlock>>;
     try {
-      block = await getStoreProductBlock(offset);
+      block = await getStoreProductBlock(query.q, query.sort, offset);
     } catch (error) {
       if (offset === 0) throw error;
       captureError(error, { feature: 'product-list', offset });

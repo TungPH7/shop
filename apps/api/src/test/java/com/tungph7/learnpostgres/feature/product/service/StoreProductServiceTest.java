@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -19,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import com.tungph7.learnpostgres.common.error.BadRequestException;
 import com.tungph7.learnpostgres.common.error.BusinessException;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.error.NotFoundException;
@@ -41,7 +43,9 @@ import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
 /**
  * {@link StoreProductService}: a shopper sees a product only while it is {@code ACTIVE}, and a
  * hidden product is the same 404 as a slug that never existed (NFR9). The list asks the query
- * repository for {@code ACTIVE} products only, newest first (SHOP-26).
+ * repository for {@code ACTIVE} products only, newest first (SHOP-26); with a keyword, its folded
+ * words, most relevant first unless {@code sort} names another order, and {@code RELEVANCE} with no
+ * keyword is a 400 naming {@code sort} (SHOP-29).
  */
 class StoreProductServiceTest {
 
@@ -143,7 +147,7 @@ class StoreProductServiceTest {
   void list_asksForActiveProductsOnly_newestFirst_withNoSearch() {
     when(queryRepository.findPage(any())).thenReturn(new Result(List.of(), 0));
 
-    service.list(48, 24);
+    service.list(null, null, 48, 24);
 
     ArgumentCaptor<Criteria> criteria = ArgumentCaptor.forClass(Criteria.class);
     verify(queryRepository).findPage(criteria.capture());
@@ -157,7 +161,7 @@ class StoreProductServiceTest {
     Row second = row(OTHER_ID, "Bao tay len", "bao-tay-len", 90_000L, null);
     when(queryRepository.findPage(any())).thenReturn(new Result(List.of(first, second), 30));
 
-    ProductPage<StoreProductSummary> page = service.list(0, 24);
+    ProductPage<StoreProductSummary> page = service.list(null, null, 0, 24);
 
     assertThat(page.items())
         .containsExactly(
@@ -181,11 +185,97 @@ class StoreProductServiceTest {
   void list_returnsTheTotalOfTheRepository_andTheOffsetAndLimitOfTheRequest() {
     when(queryRepository.findPage(any())).thenReturn(new Result(List.of(), 30));
 
-    ProductPage<StoreProductSummary> page = service.list(24, 24);
+    ProductPage<StoreProductSummary> page = service.list(null, null, 24, 24);
 
     assertThat(page.totalItems()).isEqualTo(30);
     assertThat(page.offset()).isEqualTo(24);
     assertThat(page.limit()).isEqualTo(24);
+  }
+
+  // ============================================================
+  // list: q and sort (SHOP-29)
+  // ============================================================
+
+  @Test
+  void list_withAKeywordAndNoSort_searchesItsFoldedWords_mostRelevantFirst() {
+    Criteria criteria = criteriaOf("  Áo  THUN ", null);
+
+    assertThat(criteria.search().words()).containsExactly("ao", "thun");
+    assertThat(criteria.sort()).isEqualTo(ProductSort.RELEVANCE);
+    assertThat(criteria.statuses()).containsExactly(ProductStatus.ACTIVE);
+  }
+
+  @Test
+  void list_withABlankKeywordAndNoSort_isNoSearch_newestFirst() {
+    Criteria criteria = criteriaOf(" \t ", null);
+
+    assertThat(criteria.search()).isNull();
+    assertThat(criteria.sort()).isEqualTo(ProductSort.NEWEST);
+  }
+
+  @Test
+  void list_withAKeywordOfNoWordAndNoSort_searchesForNothing_newestFirst() {
+    Criteria criteria = criteriaOf("%", null);
+
+    assertThat(criteria.search().matchesNothing()).isTrue();
+    assertThat(criteria.sort()).isEqualTo(ProductSort.NEWEST);
+  }
+
+  @Test
+  void list_withAKeywordAndASort_keepsTheSort() {
+    Criteria criteria = criteriaOf("ao", ProductSort.PRICE_ASC);
+
+    assertThat(criteria.search().words()).containsExactly("ao");
+    assertThat(criteria.sort()).isEqualTo(ProductSort.PRICE_ASC);
+  }
+
+  @Test
+  void list_withASortAndNoKeyword_keepsTheSort() {
+    Criteria criteria = criteriaOf(null, ProductSort.PRICE_DESC);
+
+    assertThat(criteria.search()).isNull();
+    assertThat(criteria.sort()).isEqualTo(ProductSort.PRICE_DESC);
+  }
+
+  @Test
+  void list_withRelevanceAndAKeywordOfNoWord_isAllowed() {
+    Criteria criteria = criteriaOf("!!!", ProductSort.RELEVANCE);
+
+    assertThat(criteria.search().matchesNothing()).isTrue();
+    assertThat(criteria.sort()).isEqualTo(ProductSort.RELEVANCE);
+  }
+
+  @Test
+  void list_withRelevanceAndNoKeyword_throwsInvalidParameterNamingSort() {
+    assertThatThrownBy(() -> service.list(null, ProductSort.RELEVANCE, 0, 24))
+        .isInstanceOf(BadRequestException.class)
+        .satisfies(
+            e -> {
+              BusinessException error = (BusinessException) e;
+              assertThat(error.getCode()).isEqualTo(ErrorCode.INVALID_PARAMETER);
+              assertThat(error.getProperties()).isEqualTo(Map.of("parameter", "sort"));
+            });
+    verifyNoInteractions(queryRepository);
+  }
+
+  @Test
+  void list_withRelevanceAndABlankKeyword_throwsInvalidParameterNamingSort() {
+    assertThatThrownBy(() -> service.list("   ", ProductSort.RELEVANCE, 0, 24))
+        .isInstanceOf(BadRequestException.class)
+        .extracting(e -> ((BusinessException) e).getProperties())
+        .isEqualTo(Map.of("parameter", "sort"));
+    verifyNoInteractions(queryRepository);
+  }
+
+  /** The criteria the service asks the repository for, for this keyword and sort. */
+  private Criteria criteriaOf(String q, ProductSort sort) {
+    when(queryRepository.findPage(any())).thenReturn(new Result(List.of(), 0));
+
+    service.list(q, sort, 0, 24);
+
+    ArgumentCaptor<Criteria> criteria = ArgumentCaptor.forClass(Criteria.class);
+    verify(queryRepository).findPage(criteria.capture());
+    return criteria.getValue();
   }
 
   // ============================================================
