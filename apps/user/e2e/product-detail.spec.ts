@@ -3,6 +3,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 
 import {
   adminApi,
+  adminUrlFor,
   createProduct,
   deleteProduct,
   deleteStaleProducts,
@@ -32,8 +33,8 @@ const created: CreatedProduct[] = [];
 const TWO_LINES = 'Áo thun cotton 100%.\nCổ tròn, tay ngắn.';
 const HTML_DESCRIPTION = '<b>Mới</b><script>alert(1)</script>';
 
-test.beforeAll(async () => {
-  api = await adminApi();
+test.beforeAll(async ({}, testInfo) => {
+  api = await adminApi(adminUrlFor(testInfo.project.use.baseURL));
   await deleteStaleProducts(api);
   const create = async (input: ProductInput) => {
     const product = await createProduct(api, input);

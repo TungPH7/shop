@@ -3,6 +3,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 
 import {
   adminApi,
+  adminUrlFor,
   createProduct,
   deleteProduct,
   deleteStaleProducts,
@@ -43,8 +44,8 @@ const created: CreatedProduct[] = [];
 /** A slug no product ever had: the run id keeps it apart from every product of other runs. */
 const neverExisted = `khong-co-san-pham-${runId}`;
 
-test.beforeAll(async () => {
-  api = await adminApi();
+test.beforeAll(async ({}, testInfo) => {
+  api = await adminApi(adminUrlFor(testInfo.project.use.baseURL));
   await deleteStaleProducts(api);
   onSale = await createProduct(api, { name: 'Mũ lưỡi trai', price: 150000 });
   created.push(onSale);

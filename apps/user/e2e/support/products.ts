@@ -16,8 +16,8 @@ const OFFSET = Number(process.env.AO_PORT_OFFSET ?? 0) || 0;
 /** The admin app Playwright starts here, on its port moved by the offset of the run. */
 export const localAdminUrl = `http://localhost:${5173 + OFFSET}`;
 
-/** The admin app: its /api reaches the api. */
-export const adminUrl = process.env.E2E_ADMIN_URL || localAdminUrl;
+/** The admin app of the environment: its /api reaches the api. */
+const adminUrl = process.env.E2E_ADMIN_URL || localAdminUrl;
 
 /**
  * The admin app whose api the page at `baseURL` reads: the one started here for a page started here, such as in the
@@ -54,8 +54,11 @@ type AdminProductSummary = { id: string; name: string; createdAt: string };
 
 type AdminProductPage = { items: AdminProductSummary[]; totalItems: number };
 
-/** A request context on an admin app, that of the environment by default. Dispose of it when done. */
-export function adminApi(url: string = adminUrl): Promise<APIRequestContext> {
+/**
+ * A request context on the admin app at `url`. There is no default: a spec passes `adminUrlFor` of the baseURL of its
+ * project, so it never asks the admin of another environment than the page it opens. Dispose of it when done.
+ */
+export function adminApi(url: string): Promise<APIRequestContext> {
   const username = process.env.E2E_HTTP_USER;
   const password = process.env.E2E_HTTP_PASSWORD;
   return request.newContext({

@@ -3,6 +3,7 @@ import { expect, test, type APIRequestContext, type Page } from '@playwright/tes
 
 import {
   adminApi,
+  adminUrlFor,
   createProduct,
   deleteProduct,
   deleteStaleProducts,
@@ -64,8 +65,8 @@ test.describe('accessibility (axe, WCAG A/AA)', () => {
     let api: APIRequestContext;
     const created: CreatedProduct[] = [];
 
-    test.beforeAll(async () => {
-      api = await adminApi();
+    test.beforeAll(async ({}, testInfo) => {
+      api = await adminApi(adminUrlFor(testInfo.project.use.baseURL));
       await deleteStaleProducts(api);
       created.push(await createProduct(api, { name: 'Áo khoác gió', price: 450000 }));
       created.push(

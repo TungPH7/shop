@@ -59,11 +59,14 @@ const COPY = {
 type Locale = keyof typeof COPY;
 
 let api: APIRequestContext;
+/** The admin of the catalog the pages of the project read, set once in beforeAll. */
+let catalogAdmin: string;
 
 // The admin of the catalog the pages of the project read: the one started here for user-local, whose tests run on the
 // apps started here; that of the environment otherwise (QA of SHOP-28).
 test.beforeAll(async ({}, testInfo) => {
-  api = await adminApi(adminUrlFor(testInfo.project.use.baseURL));
+  catalogAdmin = adminUrlFor(testInfo.project.use.baseURL);
+  api = await adminApi(catalogAdmin);
   await deleteStaleProducts(api);
 });
 
@@ -679,7 +682,7 @@ test.describe('AC23 no product', () => {
       const { totalItems } = (await response.json()) as { totalItems: number };
       // The test hides and deletes no product it did not create (NFR23), so it needs a catalog with none on sale.
       // The local database, or tests running beside this one, may hold some.
-      const onSale = `${totalItems} product(s) on sale in the catalog of ${adminUrlFor(baseURL)}, which ${baseURL} reads`;
+      const onSale = `${totalItems} product(s) on sale in the catalog of ${catalogAdmin}, which ${baseURL} reads`;
       // The policy job reads the reason on the line of the skip itself.
       test.skip(totalItems > 0, `reason: ${onSale}; AC23 needs none`);
 
