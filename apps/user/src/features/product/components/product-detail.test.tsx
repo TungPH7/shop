@@ -132,6 +132,17 @@ describe('<ProductDetail />', () => {
 
     expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
   });
+
+  // The meta description and the JSON-LD take a description of spaces for none (descriptionOf); so does the page.
+  test('hides the description block when the description is only spaces', () => {
+    const { container } = renderWithProviders(
+      <ProductDetail product={{ ...shirt, description: ' \n\t ' }} />,
+      { locale: 'vi' },
+    );
+
+    expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
+    expect(container.querySelector('.product-detail__about')).toBeNull();
+  });
 });
 
 describe('<ProductDetailSkeleton />', () => {

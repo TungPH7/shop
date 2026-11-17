@@ -80,8 +80,9 @@ const META_DESCRIPTION_LENGTH = 160;
 
 /**
  * The description of a product as S5 tells it, unchanged, or `null` when it has none: missing, empty or only spaces,
- * as a product written before descriptions were checked can have. The one rule of "no description" for the meta
- * description and the JSON-LD (AC27), which both then use the sentence of the site.
+ * as a product written before descriptions were checked can have. The one rule of "no description" for the whole of S5:
+ * the page then shows no description block, and the meta description and the JSON-LD (AC27) use the sentence of the
+ * site.
  */
 export function descriptionOf(description: string | null): string | null {
   return description?.trim() ? description : null;

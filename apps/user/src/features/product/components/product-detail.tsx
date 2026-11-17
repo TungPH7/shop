@@ -1,7 +1,12 @@
 import { useTranslations } from 'next-intl';
 
 import { PlaceholderTile } from '~/components/ui/placeholder-tile';
-import { discountPercent, formatPrice, type StoreProduct } from '~/features/product/model/product';
+import {
+  descriptionOf,
+  discountPercent,
+  formatPrice,
+  type StoreProduct,
+} from '~/features/product/model/product';
 import { Link } from '~/i18n/navigation';
 
 /**
@@ -9,11 +14,13 @@ import { Link } from '~/i18n/navigation';
  * page reads the product and gives it here. Styles: `.product-detail` in src/styles/components.css.
  *
  * The name and the description are text nodes, never HTML: `<b>` or `<script>` in them shows as typed (AC25, NFR11).
- * The description keeps the line breaks of the person who typed it through `white-space: pre-line`.
+ * The description keeps the line breaks of the person who typed it through `white-space: pre-line`; one of spaces only
+ * is none, as for the meta description (`descriptionOf`).
  */
 export function ProductDetail({ product }: { product: StoreProduct }) {
   const t = useTranslations('ProductDetail');
-  const { compareAtPrice, description } = product;
+  const { compareAtPrice } = product;
+  const description = descriptionOf(product.description);
   const inStock = product.availability === 'IN_STOCK';
 
   return (
@@ -49,7 +56,7 @@ export function ProductDetail({ product }: { product: StoreProduct }) {
               {t(inStock ? 'inStock' : 'outOfStock')}
             </span>
           </p>
-          {description && (
+          {description !== null && (
             <div className="product-detail__about">
               <h2>{t('description')}</h2>
               <p className="product-detail__description">{description}</p>
