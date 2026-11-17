@@ -8,34 +8,65 @@ import { Link, useNavigate } from 'react-router';
 import { InputField, TextAreaField } from '@/components/ui/field';
 import { SegmentedChoice } from '@/components/ui/segmented-control';
 import { paths } from '@/config/paths';
-import { createProductErrorOf, useCreateProduct } from '@/features/product/api/create-product';
-import { formatPrice } from '@/features/product/model/product';
+import {
+  type CreateProductError,
+  createProductErrorOf,
+  useCreateProduct,
+} from '@/features/product/api/create-product';
+import {
+  type UpdateProductError,
+  updateProductErrorOf,
+  useUpdateProduct,
+} from '@/features/product/api/update-product';
+import { type AdminProduct, formatPrice } from '@/features/product/model/product';
 import {
   type CreateProductInput,
   DESCRIPTION_MAX_LENGTH,
+  isSameSlug,
   NAME_MAX_LENGTH,
   parsePriceInput,
+  productEditSchema,
   productFormDefaults,
   productFormSchema,
+  productFormValuesOf,
   type ProductFormValues,
   slugFromName,
 } from '@/features/product/model/product-form';
 import type productEn from '@/lib/i18n/locales/en/product.json';
 import { notify } from '@/lib/notifications/notification-store';
 
-// S2 of docs/specs/SHOP-7/design.md in add mode (US2): the back link (S2.2), the title
-// (S2.3), the card (S2.4) with the banner (S2.5), the fields (S2.6–S2.12) and the
-// buttons (S2.13, S2.14). Outside ProtectedRoute: until the login Epic, the basic auth
-// of the host guards admin.
+// S2 of docs/specs/SHOP-7/design.md, in add mode (US2) or edit mode (US3): the back
+// link (S2.2), the title (S2.3), the card (S2.4) with the banner (S2.5), the fields
+// (S2.6–S2.12) and the buttons (S2.13, S2.14). Outside ProtectedRoute: until the login
+// Epic, the basic auth of the host guards admin.
 //
 // The schema checks every field on save; the api is the final check, and its errors go
 // under their field ("Cách admin hiện lỗi" of the API Contract). Saved, the form goes
-// back to the list and says "Đã thêm sản phẩm" (S1.12).
+// back to the list and says "Đã thêm sản phẩm" or "Đã lưu sản phẩm" (S1.12).
+//
+// In edit mode the slug never follows the name, and a slug other than the saved one
+// shows the warning of S2.7. The PUT sends the version the form was opened with: a 409
+// conflict keeps every field as typed, and only Reload loads the latest version
+// (AC13), through the page that loaded the product.
 
 type FormErrorKey = keyof typeof productEn.form.errors;
 
 const STATUSES = ['ACTIVE', 'HIDDEN'] as const;
 const AVAILABILITIES = ['IN_STOCK', 'OUT_OF_STOCK'] as const;
+
+/** S2 in add mode, or in edit mode for `product`. */
+export type ProductFormProps =
+  | { product?: undefined }
+  | {
+      product: AdminProduct;
+      /** The product is gone: the not-found state of S2.3. */
+      onMissing: () => void;
+      /** Reload of the conflict banner: loads the latest version (AC13). */
+      onReload: () => void;
+    };
+
+/** The banner of S2.5 over the fields, if any. */
+type Banner = 'saveFailed' | 'conflict' | null;
 
 function AlertIcon() {
   return (
@@ -46,11 +77,19 @@ function AlertIcon() {
   );
 }
 
-export function ProductForm() {
+export function ProductForm(props: ProductFormProps) {
+  const { product } = props;
   const { t } = useTranslation('product');
   const navigate = useNavigate();
-  const { mutateAsync, isPending } = useCreateProduct();
-  const [saveFailed, setSaveFailed] = useState(false);
+  const create = useCreateProduct();
+  const update = useUpdateProduct();
+  const isPending = create.isPending || update.isPending;
+  const [banner, setBanner] = useState<Banner>(null);
+  // Edit mode checks a slug only when it is not the saved one (NFR16). The page mounts
+  // a new form for each version it loads, so the product never changes under the form.
+  const [schema] = useState(() =>
+    product === undefined ? productFormSchema : productEditSchema(product.slug),
+  );
   const {
     register,
     control,
@@ -60,36 +99,63 @@ export function ProductForm() {
     setError,
     formState: { errors },
   } = useForm<ProductFormValues, unknown, CreateProductInput>({
-    resolver: zodResolver(productFormSchema),
-    defaultValues: productFormDefaults,
+    resolver: zodResolver(schema),
+    defaultValues: product === undefined ? productFormDefaults : productFormValuesOf(product),
   });
-  const [name, description, slugEdited] = useWatch({
+  const [name, slug, description, slugEdited] = useWatch({
     control,
-    name: ['name', 'description', 'slugEdited'],
+    name: ['name', 'slug', 'description', 'slugEdited'],
   });
+  // S2.7: the old link of the product stops working once the new slug is saved.
+  const slugWarning =
+    product === undefined || isSameSlug(slug, product.slug)
+      ? undefined
+      : t('form.slug.changed', { slug: product.slug });
 
   function errorText(message: string | undefined): string | undefined {
     return message === undefined ? undefined : t(`form.errors.${message as FormErrorKey}`);
   }
 
-  async function save(input: CreateProductInput) {
-    setSaveFailed(false);
-    try {
-      await mutateAsync(input);
-    } catch (error) {
-      const failure = createProductErrorOf(error, input);
-      if (failure.kind === 'fields') {
+  function showFailure(failure: CreateProductError | UpdateProductError) {
+    switch (failure.kind) {
+      case 'fields':
         failure.fields.forEach((field, index) => {
           setError(field, { type: 'server', message: 'invalid' }, { shouldFocus: index === 0 });
         });
-      } else if (failure.kind === 'slugTaken' || failure.kind === 'slugNotGenerated') {
+        return;
+      case 'slugTaken':
+      case 'slugNotGenerated':
         setError('slug', { type: 'server', message: failure.kind }, { shouldFocus: true });
+        return;
+      case 'conflict':
+        setBanner('conflict');
+        return;
+      case 'notFound':
+        if (props.product !== undefined) props.onMissing();
+        return;
+      case 'general':
+        setBanner('saveFailed');
+    }
+  }
+
+  async function save(input: CreateProductInput) {
+    setBanner(null);
+    try {
+      if (product === undefined) {
+        await create.mutateAsync(input);
       } else {
-        setSaveFailed(true);
+        await update.mutateAsync({
+          id: product.id,
+          input: { ...input, slug: input.slug ?? product.slug, version: product.version },
+        });
       }
+    } catch (error) {
+      showFailure(
+        product === undefined ? createProductErrorOf(error, input) : updateProductErrorOf(error),
+      );
       return;
     }
-    notify.success(t('form.added'));
+    notify.success(t(product === undefined ? 'form.added' : 'form.saved'));
     void navigate(paths.products.getHref());
   }
 
@@ -125,16 +191,26 @@ export function ProductForm() {
         }}
       >
         <header className="product-form__header">
-          <h1>{t('form.addTitle')}</h1>
+          <h1>{t(product === undefined ? 'form.addTitle' : 'form.editTitle')}</h1>
           <p className="product-form__subtitle">{t('form.subtitle')}</p>
         </header>
 
-        {saveFailed ? (
+        {/* role=alert reads the banner out; focus stays where it is (S2.5). */}
+        {banner === null ? null : (
           <div className="banner banner--error" role="alert">
             <AlertIcon />
-            <p>{t('form.saveFailed')}</p>
+            <p>{t(banner === 'conflict' ? 'form.conflict' : 'form.saveFailed')}</p>
+            {banner === 'conflict' && props.product !== undefined ? (
+              <button
+                type="button"
+                className="btn btn--secondary btn--sm banner__action"
+                onClick={props.onReload}
+              >
+                {t('form.reload')}
+              </button>
+            ) : null}
           </div>
-        ) : null}
+        )}
 
         <InputField
           label={t('form.name.label')}
@@ -144,7 +220,8 @@ export function ProductForm() {
           error={errorText(errors.name?.message)}
           counter={{ count: name.trim().length, max: NAME_MAX_LENGTH }}
           {...register('name', {
-            // The slug follows the name until the admin types it (S2.7).
+            // The slug follows the name until the admin types it (S2.7); in edit mode it
+            // counts as typed from the start, so it never follows.
             onChange: (event: ChangeEvent<HTMLInputElement>) => {
               if (!getValues('slugEdited')) setValue('slug', slugFromName(event.target.value));
             },
@@ -157,11 +234,12 @@ export function ProductForm() {
           autoComplete="off"
           spellCheck={false}
           hint={slugEdited ? undefined : t('form.slug.hint')}
+          warning={slugWarning}
           error={errorText(errors.slug?.message)}
           {...register('slug', {
-            // Emptied, the slug is generated again: the form sends slug null.
+            // Add mode: emptied, the slug is generated again, and the form sends slug null.
             onChange: (event: ChangeEvent<HTMLInputElement>) => {
-              setValue('slugEdited', event.target.value !== '');
+              if (product === undefined) setValue('slugEdited', event.target.value !== '');
             },
           })}
         />
@@ -239,7 +317,9 @@ export function ProductForm() {
             aria-busy={isPending || undefined}
             aria-disabled={isPending || undefined}
           >
-            {isPending ? t('form.saving') : t('form.submitAdd')}
+            {isPending
+              ? t('form.saving')
+              : t(product === undefined ? 'form.submitAdd' : 'form.submitEdit')}
           </button>
         </div>
       </form>

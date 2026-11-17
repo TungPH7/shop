@@ -63,9 +63,8 @@ export function useUpdateProduct() {
     networkMode: 'always',
     // The form shows every error itself (S2.3, S2.5, S2.7): no global toast on top.
     meta: { skipGlobalError: true },
-    onSuccess: (product) => {
-      queryClient.setQueryData(productKeys.detail(product.id), product);
-      return queryClient.invalidateQueries({ queryKey: productKeys.lists() });
-    },
+    // The list shows the new name, price and labels. The product itself loads anew
+    // each time the form opens (productQueryOptions).
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: productKeys.lists() }),
   });
 }
