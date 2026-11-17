@@ -107,6 +107,42 @@ describe('getStoreProducts', () => {
     expect(result.totalItems).toBe(150);
   });
 
+  test('stops after the block that ends the catalog, when that block is full (NFR3)', async () => {
+    // 192 products: the second block holds 96, as asked, so only the total tells there is no third block.
+    const asked = serve(catalog(192));
+
+    const result = await getStoreProducts({ page: 999999 });
+
+    expect(asked).toEqual([
+      { offset: 0, limit: 96 },
+      { offset: 96, limit: 96 },
+    ]);
+    expect(ids(result.items)).toEqual(ids(catalog(192)));
+    expect(result).toMatchObject({ totalItems: 192, complete: true });
+  });
+
+  test('counts the products it read when it read the whole catalog but one came twice (NFR18)', async () => {
+    // The first block was cached before a product was added: the 96th product of that block heads the second, read
+    // after it. The api counts 192, yet the catalog as read holds 191 products, and offering a Load more for the one
+    // left would never end.
+    const second = [product(96), ...catalog(191).slice(96)];
+    const asked: number[] = [];
+    server.use(
+      http.get(URL_, ({ request }) => {
+        const offset = Number(new URL(request.url).searchParams.get('offset'));
+        asked.push(offset);
+        const items = offset === 0 ? catalog(96) : second;
+        return HttpResponse.json({ items, totalItems: 192, offset, limit: 96 });
+      }),
+    );
+
+    const result = await getStoreProducts({ page: 999999 });
+
+    expect(asked).toEqual([0, 96]);
+    expect(ids(result.items)).toEqual(ids(catalog(191)));
+    expect(result).toMatchObject({ totalItems: 191, complete: true });
+  });
+
   test('stops at a block shorter than asked, and counts what it read, when the catalog shrank since the total was counted', async () => {
     const asked = serve(catalog(100), 400);
 
