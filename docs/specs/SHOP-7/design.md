@@ -219,7 +219,7 @@ blocks:
       vi: "Nhãn “Đường dẫn (slug)”, phần đầu cố định “/products/”"
       en: "Label “URL slug”, fixed prefix “/products/”"
     behavior: "Thêm: ô tự điền từ tên khi gõ tên (`Đầm maxi đỏ` ra `dam-maxi-do`) cho tới khi quản trị viên tự sửa ô. Khi chưa sửa tay, dòng gợi ý “Tự sinh từ tên. Nếu đã có, hệ thống thêm -2, -3…” (en “Generated from the name. If taken, -2, -3… is added.”) và form để `api` tự sinh slug, nên slug lưu có thể là `-2`. Sửa: không đổi theo tên, hiện slug đã lưu"
-    validation: "Chữ thường a–z, số và dấu gạch ngang đơn; không bắt đầu hay kết thúc bằng gạch ngang; tối đa 100 ký tự. Lỗi định dạng: “Chỉ dùng chữ thường a–z, số và dấu gạch ngang; không bắt đầu hay kết thúc bằng dấu gạch ngang.” (en “Use lowercase a–z, digits and hyphens only, with no hyphen at the start or end.”). Lỗi dài: “Slug tối đa 100 ký tự” (en “Slug must be 100 characters or fewer”). Trùng slug tự gõ: “Slug này đã được dùng” (en “This slug is already in use”), ngay dưới ô, không lưu"
+    validation: "Chữ thường a–z, số và dấu gạch ngang đơn; không bắt đầu hay kết thúc bằng gạch ngang; tối đa 100 ký tự. Lỗi định dạng: “Chỉ dùng chữ thường a–z, số và dấu gạch ngang; không bắt đầu hay kết thúc bằng dấu gạch ngang.” (en “Use lowercase a–z, digits and hyphens only, with no hyphen at the start or end.”). Lỗi dài: “Slug tối đa 100 ký tự” (en “Slug must be 100 characters or fewer”). Trùng slug tự gõ: “Slug này đã được dùng” (en “This slug is already in use”), ngay dưới ô, không lưu. Slug để trống (tự sinh) mà `api` trả 409 vì mọi slug tự sinh từ tên, tới `-1000`, đều đã có: “Các slug tự sinh từ tên này đều đã được dùng. Hãy tự nhập một slug.” (en “Every slug made from this name is taken. Type a slug yourself.”), ngay dưới ô, không lưu, focus về ô Slug; không dùng “Slug này đã được dùng” vì quản trị viên chưa gõ slug"
     states:
       slug-changed: "Chế độ sửa, slug khác slug đã lưu: dòng cảnh báo ngay dưới ô, màu warn kèm biểu tượng, “Đường dẫn cũ /products/ao-thun-co-tron sẽ không mở được nữa.” (en “The old link /products/ao-thun-co-tron will stop working.”). Mất đi khi gõ lại slug cũ"
     a11y: "Cảnh báo role=status; lỗi như [6]"
@@ -248,7 +248,7 @@ blocks:
     content:
       vi: "Nhãn “Giá gốc (₫) (không bắt buộc)”, gợi ý “Để trống nếu không giảm giá. Có giá gốc thì khách thấy giá gạch ngang và phần trăm giảm.”"
       en: "Label “Compare-at price (₫) (optional)”, hint “Leave empty if there's no discount. With a compare-at price, customers see it struck through with the percentage off.”"
-    validation: "Nếu có: số nguyên, lớn hơn giá bán, tối đa 999.999.999, cùng cách nhập như [9]. Lỗi: “Giá gốc phải lớn hơn giá bán” (en “Compare-at price must be greater than the price”)"
+    validation: "Nếu có: số nguyên, lớn hơn giá bán, tối đa 999.999.999, cùng cách nhập như [9]. Lỗi: “Giá gốc phải lớn hơn giá bán” (en “Compare-at price must be greater than the price”). Gõ chữ hay ký tự không phải số, như `abc` hay `25k`: “Nhập giá bằng số, như 250.000” (en “Enter the price as a number, like 250.000”)"
     ac: [AC6, AC9]
   11:
     name: Chọn Trạng thái
@@ -283,6 +283,7 @@ blocks:
       en: "Add product (add mode), Save changes (edit mode)"
     behavior: "Nút chính. Kiểm cả form: có lỗi thì không gửi, hiện lỗi dưới từng ô sai, giữ nguyên những gì đã nhập, focus về ô sai đầu tiên. Hợp lệ thì gửi; thành công về S1 và hiện S1.12. Nút luôn bấm được, trừ lúc đang lưu, vì AC6 cần hiện lỗi ở từng ô sau khi lưu; nền như nút chính (nút “Create draft” ở ảnh 02 không có nền, không lấy làm mẫu)"
     states:
+      api-invalid: "`api` trả 400 nêu trường sai mà form không tự bắt được (Tên, Slug, Mô tả, Giá bán, Giá gốc): dưới mỗi trường đó hiện “Giá trị này không hợp lệ.” (en “This value isn't valid.”), giữ nguyên những gì đã nhập, focus về trường đứng đầu theo thứ tự trên form, không theo thứ tự `api` trả. Trạng thái và Tình trạng không có dòng lỗi: `api` từ chối chúng, hay một 400 không nêu trường nào, thì hiện lỗi chung ở [5]"
       saving: "Chữ “Đang lưu…” (en “Saving…”), khóa nút, aria-busy=true"
     ac: [AC5, AC9]
 ```
