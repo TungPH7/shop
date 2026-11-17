@@ -1,7 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import { type APIRequestContext, expect, type Locator, type Page, test } from '@playwright/test';
 
-import { userRequest } from './support/env';
+import { isLocal, userRequest } from './support/env';
 import {
   createProduct,
   deleteProducts,
@@ -15,13 +15,16 @@ import {
 // api, here or on Development, and the product page of the user app after a delete.
 // Each test deletes the products of its run, made through the API, named
 // `… E2E <runId>`. The tests run one after the other, so a search for the run sees the
-// products of one test only.
+// products of one test only. The tests that fail the DELETE in the browser run only on the
+// apps started here: the SPEC forbids a mock of the product API on an environment.
 test.describe.configure({ mode: 'default' });
 
 const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 const API = '/api/admin/products';
 /** NFR7: a change of admin shows on the pages of the customer within 60 s. */
 const STORE_DELAY_MS = 60_000;
+const MOCKS_THE_API =
+  'reason: fails the DELETE of the product API in the browser, which the SPEC forbids on an environment';
 
 const runId = newRunId();
 let created: E2eProduct[] = [];
@@ -52,6 +55,17 @@ function rowOf(page: Page, name: string): Locator {
     .getByRole('table', { name: 'Product list' })
     .locator('tbody tr')
     .filter({ has: page.getByText(name, { exact: true }) });
+}
+
+/** Fails each DELETE of the product in the browser, as a lost connection would. */
+async function failDeletes(page: Page, id: string): Promise<{ count: number }> {
+  const deletes = { count: 0 };
+  await page.route(`**${API}/${id}`, async (route) => {
+    if (route.request().method() !== 'DELETE') return route.fallback();
+    deletes.count += 1;
+    return route.abort('connectionreset');
+  });
+  return deletes;
 }
 
 /** The HTTP status of a page load of the product detail page of the user app. */
@@ -126,6 +140,8 @@ test.describe('US4 delete a product', () => {
     await page.getByRole('button', { name: `Delete ${jeans.name}` }).click();
     const dialog = page.getByRole('alertdialog', { name: `Delete “${jeans.name}”?` });
 
+    // The 60 s of NFR7 count from the delete, not from the checks of admin below.
+    const deletedAt = Date.now();
     await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
 
     await expect(page.getByRole('status').filter({ hasText: 'Product deleted' })).toBeVisible();
@@ -136,8 +152,9 @@ test.describe('US4 delete a product', () => {
     await page.reload();
     await expect(page.getByText('No matching products')).toBeVisible();
 
+    const left = Math.max(1, STORE_DELAY_MS - (Date.now() - deletedAt));
     await expect
-      .poll(() => storeStatus(jeans.slug), { timeout: STORE_DELAY_MS, intervals: [2_000] })
+      .poll(() => storeStatus(jeans.slug), { timeout: left, intervals: [2_000] })
       .toBe(404);
 
     const again = await request.post(API, {
@@ -158,15 +175,12 @@ test.describe('US4 delete a product', () => {
   test('keeps S3 open with its error when the DELETE fails, and sends it once (NFR19)', async ({
     page,
     request,
+    baseURL,
   }) => {
+    test.skip(!isLocal(baseURL), MOCKS_THE_API);
     const jeans = await createProduct(request, runId, { name: 'Quần jean nam' });
     created = [jeans];
-    let deletes = 0;
-    await page.route(`**${API}/${jeans.id}`, async (route) => {
-      if (route.request().method() !== 'DELETE') return route.fallback();
-      deletes += 1;
-      return route.abort('connectionreset');
-    });
+    const deletes = await failDeletes(page, jeans.id);
     await openList(page);
     await page.getByRole('button', { name: `Delete ${jeans.name}` }).click();
     const dialog = page.getByRole('alertdialog');
@@ -175,7 +189,7 @@ test.describe('US4 delete a product', () => {
 
     await expect(dialog.getByRole('alert')).toHaveText("Couldn't delete. Please try again.");
     await expect(dialog).toBeVisible();
-    expect(deletes).toBe(1);
+    expect(deletes.count).toBe(1);
     await expect(page.getByRole('status').filter({ hasText: 'Product deleted' })).toHaveCount(0);
     expect((await findProducts(request, `e2e ${runId}`)).map((item) => item.id)).toEqual([
       jeans.id,
@@ -199,26 +213,35 @@ test.describe('US4 delete a product', () => {
   });
 
   for (const colorScheme of ['light', 'dark'] as const) {
-    test(`S3 has no WCAG A/AA violation in the ${colorScheme} theme, with and without its error`, async ({
-      page,
-      request,
-    }) => {
+    test(`S3 has no WCAG A/AA violation in the ${colorScheme} theme`, async ({ page, request }) => {
       const jeans = await createProduct(request, runId, { name: 'Quần jean nam' });
       created = [jeans];
       await page.emulateMedia({ colorScheme });
       await openList(page);
+
+      await page.getByRole('button', { name: `Delete ${jeans.name}` }).click();
+
+      await expect(page.getByRole('alertdialog')).toBeVisible();
+      expect((await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
+    });
+
+    test(`S3 with its error S3.6 has no WCAG A/AA violation in the ${colorScheme} theme`, async ({
+      page,
+      request,
+      baseURL,
+    }) => {
+      test.skip(!isLocal(baseURL), MOCKS_THE_API);
+      const jeans = await createProduct(request, runId, { name: 'Quần jean nam' });
+      created = [jeans];
+      await page.emulateMedia({ colorScheme });
+      await failDeletes(page, jeans.id);
+      await openList(page);
       await page.getByRole('button', { name: `Delete ${jeans.name}` }).click();
       const dialog = page.getByRole('alertdialog');
-      await expect(dialog).toBeVisible();
 
-      expect((await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
-
-      await page.route(`**${API}/${jeans.id}`, (route) =>
-        route.request().method() === 'DELETE' ? route.abort('connectionreset') : route.fallback(),
-      );
       await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
-      await expect(dialog.getByRole('alert')).toBeVisible();
 
+      await expect(dialog.getByRole('alert')).toBeVisible();
       expect((await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze()).violations).toEqual([]);
     });
   }
