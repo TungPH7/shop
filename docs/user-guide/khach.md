@@ -78,7 +78,7 @@ Bấm **Xem tất cả sản phẩm** để về danh sách.
 
 ## 7. Ngôn ngữ và giao diện
 
-![Danh sách sản phẩm ở giao diện Tối](images/khach-5-giao-dien-toi.png)
+![Danh sách sản phẩm ở giao diện tối: nút Hệ thống đang chọn, và máy đang để chế độ tối](images/khach-5-giao-dien-toi.png)
 
 - **Ngôn ngữ:** bấm **EN** hay **VI** ở góc phải. Đường dẫn đổi giữa `/en/…` và `/vi/…`. Giá vẫn viết kiểu `1.250.000 ₫`.
 - **Giao diện:** bấm **Sáng**, **Tối** hay **Hệ thống**. **Hệ thống** theo cài đặt sáng hay tối của máy bạn.
@@ -92,7 +92,8 @@ Bấm **Xem tất cả sản phẩm** để về danh sách.
 |---|---|---|
 | "Không tìm thấy sản phẩm nào cho “…”" | Không sản phẩm đang bán nào khớp từ khóa | Kiểm tra chính tả, hay gõ ít từ hơn. Bấm **Xóa tìm kiếm** để xem lại cả danh sách |
 | "Chưa có sản phẩm nào." | Cửa hàng chưa có sản phẩm đang bán | Quay lại sau |
-| "Không tải thêm được. Vui lòng thử lại." | Mất mạng lúc bấm **Xem thêm** | Kiểm tra mạng, rồi bấm **Xem thêm** lần nữa. Các sản phẩm đã hiện vẫn còn |
+| "Không tải thêm được. Vui lòng thử lại." ngay trên nút **Xem thêm** | Cửa hàng chưa đọc được các sản phẩm tiếp theo. Các sản phẩm đã hiện vẫn còn | Bấm **Xem thêm** lần nữa. Vẫn lỗi thì tải lại trang sau vài phút |
+| Trang báo không có kết nối Internet của trình duyệt, sau khi bấm **Xem thêm** hay một liên kết | Máy bạn đang mất mạng. Các sản phẩm đã hiện tạm biến mất | Khi có mạng lại, tải lại trang (phím F5). Đường dẫn giữ từ khóa, kiểu sắp xếp và các sản phẩm bạn đã xem |
 | Trang "Không tìm thấy sản phẩm" | Xem mục 6 | Bấm **Xem tất cả sản phẩm** |
 | "Tạm thời không tải được sản phẩm" | Cửa hàng đang gặp sự cố | Tải lại trang sau vài phút |
 | "Đã xảy ra lỗi" và nút **Thử lại** | Trang gặp lỗi khi tải | Bấm **Thử lại**. Vẫn lỗi thì chờ vài phút rồi tải lại |
