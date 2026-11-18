@@ -20,8 +20,8 @@
     "backHome": "← Về trang chủ"
   },
   "Seo": {
-    "siteDescription": "Nền tảng enterprise server-first xây từ số 0 trên Next.js 16 — App Router, React Server Components, i18n type-safe và lõi không phụ thuộc UI.",
-    "ogImageTagline": "Nền tảng enterprise server-first",
+    "siteDescription": "Xem các sản phẩm đang bán, tìm theo tên, sắp xếp theo giá và xem chi tiết từng sản phẩm, có giá và tình trạng còn hàng.",
+    "ogImageTagline": "Cửa hàng trực tuyến",
     "home": "Trang chủ"
   },
   "NotFound": {
@@ -126,7 +126,7 @@
   },
   "Products": {
     "metaTitle": "Sản phẩm",
-    "metaDescription": "Duyệt sản phẩm được lấy phía server qua Data Access Layer, validate ở biên và cache để tối ưu hiệu năng.",
+    "metaDescription": "Xem các sản phẩm đang bán, tìm theo tên, sắp xếp theo giá và xem chi tiết từng sản phẩm, có giá và tình trạng còn hàng.",
     "title": "Sản phẩm",
     "searchLabel": "Tìm theo tên",
     "searchPlaceholder": "Tìm sản phẩm…",

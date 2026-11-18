@@ -36,6 +36,26 @@ test('generateMetadata gives the description and the og:locale of the locale', a
   expect(metadata.openGraph).toMatchObject({ locale: 'vi_VN', alternateLocale: ['en_US'] });
 });
 
+// The sentences the human chose for SHOP-73 (sentence A): they tell what the shop does, not the template it came from.
+const SHOP_DESCRIPTION = {
+  vi: 'Xem các sản phẩm đang bán, tìm theo tên, sắp xếp theo giá và xem chi tiết từng sản phẩm, có giá và tình trạng còn hàng.',
+  en: "Browse the products on sale, search by name, sort by price, and see each product's details, price and stock.",
+} as const;
+
+for (const locale of ['vi', 'en'] as const) {
+  test(`generateMetadata describes the shop by default in ${locale}, in fewer than 160 characters`, async () => {
+    const metadata = await generateMetadata({ params: params(locale) });
+
+    expect(metadata.description).toBe(SHOP_DESCRIPTION[locale]);
+    expect(Array.from(SHOP_DESCRIPTION[locale]).length).toBeLessThan(160);
+  });
+}
+
+test('the share image of each locale carries the tagline of the shop', () => {
+  expect(vi_.Seo.ogImageTagline).toBe('Cửa hàng trực tuyến');
+  expect(en.Seo.ogImageTagline).toBe('Online shop');
+});
+
 test('generateMetadata falls back to the og:locale of the default locale for an unknown locale', async () => {
   const metadata = await generateMetadata({ params: params('fr') });
 
