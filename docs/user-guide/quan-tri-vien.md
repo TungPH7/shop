@@ -99,6 +99,7 @@ Mọi thay đổi bạn lưu hiện ở trang của khách **trong vòng 60 giâ
 | Giá tối đa 999.999.999 ₫ | Giá quá lớn |
 | Nhập giá bằng số, như 250.000 | Giá gốc không phải số |
 | Giá gốc phải lớn hơn giá bán | Giá gốc bằng hay nhỏ hơn giá bán |
+| Giá trị này không hợp lệ. | Máy chủ không nhận giá trị của ô này, dù form đã cho qua. Sửa ô đó; vẫn lỗi thì báo người quản trị hệ thống |
 
 **Thông báo ở đầu form, hay ở đầu trang:**
 

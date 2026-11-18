@@ -1,6 +1,6 @@
 # Hướng dẫn sử dụng `shop`, bản v0.3.0
 
-Bản `v0.3.0` (phát hành ngày 18/11/2026) có danh mục sản phẩm:
+Bản `v0.3.0` (lên Production ngày 18/11/2026) có danh mục sản phẩm:
 - **Quản trị viên** xem, tìm, thêm, sửa, ẩn, đánh dấu hết hàng và xóa sản phẩm.
 - **Khách** xem danh sách, tìm không cần dấu, sắp xếp theo giá, chia sẻ đường dẫn và xem chi tiết từng sản phẩm.
 
@@ -27,7 +27,7 @@ Cả hai trang có tiếng Việt và tiếng Anh, và có ba kiểu giao diện
 
 Nút đổi nằm ở góc phải của thanh trên cùng:
 - **Trang quản trị:** hai ô chọn, "Tiếng Việt" và "Hệ thống".
-- **Trang của khách:** các nút **EN**, **VI** và **Sáng**, **Tối**, **Hệ thống**.
+- **Trang của khách:** các nút **EN**, **VI** và **Sáng**, **Tối**, **Hệ thống**. Trên màn hình hẹp hơn 1024 px, ba nút giao diện chỉ còn biểu tượng: mặt trời, mặt trăng, màn hình.
 
 Giá luôn viết kiểu `1.250.000 ₫`, ở cả tiếng Việt lẫn tiếng Anh.
 
@@ -41,4 +41,6 @@ Giá luôn viết kiểu `1.250.000 ₫`, ở cả tiếng Việt lẫn tiếng 
 
 ## Về ảnh trong hướng dẫn
 
-Ảnh được chụp trong các lượt kiểm thử thật trên môi trường Development. Vì vậy tên sản phẩm trong ảnh có đuôi như "E2E yp8c9z". Trên trang thật, tên sản phẩm là đúng tên quản trị viên đã nhập.
+Phần lớn ảnh được chụp trong các lượt kiểm thử thật trên môi trường Development. Vì vậy tên sản phẩm trong ảnh có đuôi như "E2E yp8c9z". Trên trang thật, tên sản phẩm là đúng tên quản trị viên đã nhập.
+
+Riêng hai ảnh danh sách của khách, ở giao diện Sáng và Tối, được chụp trên Production ngày 18/11/2026, với các sản phẩm thử của cửa hàng.

@@ -82,7 +82,9 @@ Bấm **Xem tất cả sản phẩm** để về danh sách.
 
 - **Ngôn ngữ:** bấm **EN** hay **VI** ở góc phải. Đường dẫn đổi giữa `/en/…` và `/vi/…`. Giá vẫn viết kiểu `1.250.000 ₫`.
 - **Giao diện:** bấm **Sáng**, **Tối** hay **Hệ thống**. **Hệ thống** theo cài đặt sáng hay tối của máy bạn.
-- **Trên điện thoại:** các nút này nằm ở hàng trên cùng, cạnh tên cửa hàng, dưới dạng nút nhỏ.
+- **Trên điện thoại, và trên màn hình hẹp hơn 1024 px:**
+  - ba nút giao diện chỉ còn biểu tượng: mặt trời là **Sáng**, mặt trăng là **Tối**, màn hình là **Hệ thống**;
+  - **EN** và **VI** vẫn là chữ.
 
 ## 8. Khi gặp lỗi
 
