@@ -437,6 +437,12 @@ function decideBuild(facts, options) {
   const again = item.state === 'in-progress' && (split ? subtaskLedgers.length > 0 : facts.ledger);
   // After QA fail: the PR of the item is merged and its newest QA report is FAIL (human-loop spec 5.2).
   const afterQaFail = item.state === 'in-progress' && Boolean(pr?.merged) && facts.qaReport?.result === 'FAIL';
+  // A build run that stopped with a session goes on first, whatever the ledger: its agent may have started the item and
+  // hit the usage limit before it wrote one (live check of shop, 2026-11-16, SHOP-11).
+  if (item.state === 'in-progress' && !again && !afterQaFail) {
+    const resumed = carryOn('build', facts, options);
+    if (resumed) return out(resumed);
+  }
   if (item.state !== 'ready' && !again && !afterQaFail) {
     const why = item.state === 'in-progress' ? `${key} is In Progress but has no ledger in .ai/ledger/: its run did not come from an agent of the kit` : `${key} is ${item.status}, not Ready`;
     return out(stop(why, nextFor(item, pr)));

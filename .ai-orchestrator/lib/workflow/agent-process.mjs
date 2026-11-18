@@ -8,13 +8,21 @@
 // How long after its result an agent may take to exit by itself.
 export const EXIT_GRACE_MS = 60 * 1000;
 
-// Whether a line of the stream-json output is the result event, the last of a run.
+// Whether a line of the stream-json output is the result event of the agent's prompt, the last of a run. A result that
+// answers a task notification is not: `claude -p --resume` of a session cut off by the usage limit first prints one for
+// each command the session had left in the background, with no turn, before it reads the prompt. The wait started on
+// it, and the agent was stopped a minute into its work (Pilot 3, QA SHOP-63 and build SHOP-39 of shop, 2026-11-17).
 export function isResult(line) {
   try {
-    return JSON.parse(line)?.type === 'result';
+    return isOwnResult(JSON.parse(line));
   } catch {
     return false;
   }
+}
+
+// Whether an event of the stream is a result that is not the answer to a task notification.
+export function isOwnResult(event) {
+  return event?.type === 'result' && event.origin?.kind !== 'task-notification';
 }
 
 // Stops a process and what it started. On Windows `taskkill /T` takes the whole tree, which is where the dev servers

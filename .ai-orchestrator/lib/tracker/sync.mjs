@@ -13,11 +13,30 @@ const FLAG = 'flag-needs-you';
 // The only option of Jira's Flagged field.
 const FLAG_VALUE = 'Impediment';
 
-// The PR events jira-sync reads. The workflow of jira-sync runs on pull_request_target, from the base branch, so the
-// code of a PR never holds the CI token (review of shop PR #21); a review comes through the run of the secretless
-// workflow PR review, as a workflow_run. pull_request and pull_request_review stay for the copies of the workflow made
-// before.
+// The PR events jira-sync reads. jira-sync runs only from the protected branches, so the code of a PR never holds the CI
+// token (review of shop PR #21). The events of a PR come through the run of the secretless workflow PR events, and a
+// review through that of PR review, as a workflow_run. pull_request_target, which ran jira-sync from the base branch
+// before, is blocked by GitHub on public repositories from 2026-12-02 unless a policy allows it (Pilot 3). pull_request,
+// pull_request_target and pull_request_review stay for the copies of the workflow made before.
 const PR_EVENTS = ['pull_request', 'pull_request_target'];
+// The name of the workflow kit/.github/workflows/pr-events.yml.
+export const PR_RELAY = 'PR events';
+
+// Whether the event is a run of the relay PR events.
+const isRelay = (event, payload) => event === 'workflow_run' && payload.workflow_run?.name === PR_RELAY;
+
+// The PR a run of the relay is for, as GitHub lists it now: its state tells a PR that closed from one that opened or
+// moved. GitHub names the PR in the run, except for some runs, like that of a PR that closed, where the newest PR of the
+// run's branch at the run's commit is the one. null when the run is for a fork, or for no PR of the repository: such a
+// run concerns no item (review round 2 of shop PR #21).
+async function relayedPull(payload, github) {
+  const run = payload.workflow_run;
+  if (!run.head_repository?.full_name || run.head_repository.full_name !== payload.repository?.full_name) return null;
+  const pulls = await github.getAll('/pulls', { state: 'all', sort: 'created', direction: 'desc' });
+  const number = run.pull_requests?.[0]?.number;
+  if (number) return pulls.find((pr) => pr.number === number) ?? null;
+  return pulls.find((pr) => pr.head?.ref === run.head_branch && pr.head?.sha === run.head_sha) ?? pulls.find((pr) => pr.head?.ref === run.head_branch) ?? null;
+}
 
 // The keys of the items in the project space that an event concerns. A PR event concerns the item of its branch and
 // title; a run of CI or PR review, the item of its branch; a successful deployment, every item in a state that a
@@ -25,8 +44,9 @@ const PR_EVENTS = ['pull_request', 'pull_request_target'];
 export async function itemsOf(event, payload, { jira, contract, mapping, space }) {
   const inSpace = (keys) => [...new Set(keys.filter(Boolean))].filter((key) => key.startsWith(`${space}-`));
   const ofBranch = (name) => parseBranch(name ?? '')?.key;
-  // A PR from a fork concerns no item (review round 2 of shop PR #21): pull_request_target runs jira-sync with the CI token
-  // for it too, and its branch and title are anyone's words. A head repository that is gone counts as a fork.
+  // A PR from a fork concerns no item (review round 2 of shop PR #21): a run of CI, PR review or PR events starts jira-sync
+  // with the CI token for it too, as pull_request_target did, and its branch and title are anyone's words. A head
+  // repository that is gone counts as a fork.
   const ours = (repo) => Boolean(repo?.full_name) && repo.full_name === payload.repository?.full_name;
   switch (event) {
     case 'pull_request':
@@ -63,18 +83,22 @@ function waitingForDeployment(contract, mapping, space) {
 // says why a flag stays.
 export async function syncEvent({ event, payload, jira, github, contract, mapping, space, approvers = [] }) {
   if (event === 'deployment_status' && FAILED.includes(payload.deployment_status.state)) return deploymentFailed(payload, { jira, github, space });
-  const keys = await itemsOf(event, payload, { jira, contract, mapping, space });
+  // A run of the relay PR events stands for the event of its PR, read from GitHub as the PR is now.
+  const relayed = isRelay(event, payload) ? await relayedPull(payload, github) : undefined;
+  if (relayed === null) return { keys: [], actions: [], waiting: [], kept: [], failures: [] };
+  const keys = relayed ? await itemsOf('pull_request', { ...payload, pull_request: relayed }, { jira, contract, mapping, space }) : await itemsOf(event, payload, { jira, contract, mapping, space });
   const actions = [];
   const waiting = [];
   const kept = [];
   const failures = [];
-  const closing = PR_EVENTS.includes(event) && payload.action === 'closed';
+  const closing = relayed ? relayed.state === 'closed' : PR_EVENTS.includes(event) && payload.action === 'closed';
   for (const key of keys) {
     try {
       if (closing) {
-        const pr = payload.pull_request;
+        const pr = relayed ?? payload.pull_request;
         const decision = await flagClearing(key, pr.number, { jira, mapping });
-        if (decision.clear) actions.push({ key, effect: CLEAR, pr: pr.number, merged: Boolean(pr.merged) });
+        // The REST list of PRs has merged_at where the event has merged.
+        if (decision.clear) actions.push({ key, effect: CLEAR, pr: pr.number, merged: Boolean(pr.merged ?? pr.merged_at) });
         else if (decision.reason !== NOT_FLAGGED) kept.push({ key, reason: decision.reason });
         continue;
       }

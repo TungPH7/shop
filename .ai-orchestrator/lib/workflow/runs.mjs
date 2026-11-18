@@ -22,7 +22,10 @@ export function readRun(lines, previous) {
     }
   });
   const init = events.find(({ type, subtype }) => type === 'system' && subtype === 'init');
-  const results = events.filter(({ type }) => type === 'result');
+  // A result of no turn that answers a task notification says nothing of the run: `--resume` prints one before the
+  // prompt for each command the cut-off session left in the background, and a run killed after it is unfinished. A
+  // notice that woke the agent for turns after its result still counts (background-two-results).
+  const results = events.filter((event) => event.type === 'result' && !(event.origin?.kind === 'task-notification' && !event.num_turns));
   const last = results.at(-1);
   const session = last?.session_id ?? init?.session_id ?? null;
   const usage = Object.values(last?.modelUsage ?? {});

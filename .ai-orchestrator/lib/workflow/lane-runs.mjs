@@ -1,5 +1,5 @@
 // How ao-step starts a run when lanes and parallel runs are on (parallel-runs spec 4 and 5), out of ao-step.mjs so tests
-// reach it (review of shop PR #21): where the run works, its ports and variables, the free RAM it waits for, the qa run
+// reach it (review of shop PR #21): where the run works, its ports and variables, the RAM check before its agent, the qa run
 // stopped when another deploy reaches its environment, the install of a new lane and the PRs of a lane's branch. Every
 // effect is a parameter.
 import { join } from 'node:path';
@@ -8,15 +8,14 @@ import { laneEnv, lanePorts, portOffset, portsNote } from './ports.mjs';
 // The run as it starts: in its lane when it has one, told so; its ports and the variables of runs.lane_env moved by its
 // slot when more than one run may go at once or it works in a lane, so it meets neither another run nor the apps and
 // database you run in the project folder. keeper: laneKeeper; runs: runsSettings; apps: the apps of project.yaml;
-// waitForRam(gb) resolves once that much RAM is free; othersRunning() whether another command runs now; log(line) gets
-// what making the lane did.
-export function runPlacer({ keeper, command, cap, slot, runs, apps, waitForRam, othersRunning = () => true, log = () => {} }) {
+// admitAgent() resolves once the agent may start, after the RAM check of locks.mjs (admitAgent there), or throws with the
+// reason; log(line) gets what making the lane did.
+export function runPlacer({ keeper, command, cap, slot, runs, apps, admitAgent, log = () => {} }) {
   return async (run) => {
     const place = await keeper.placeOf(run, command);
     for (const line of place?.notes ?? []) log(line);
-    // Another agent starts only with enough free RAM (spec 5.1). Alone, a run waits for none: no other agent would free
-    // it (review round 2 of shop PR #21).
-    if (cap > 1 && othersRunning()) await waitForRam(runs.minFreeRamGb);
+    // Another agent starts only with enough free RAM while one runs (spec 5.1).
+    if (cap > 1) await admitAgent();
     const moved = cap > 1 || Boolean(place);
     const offset = moved ? portOffset(slot, runs.portStep) : 0;
     const env = moved ? laneEnv(runs.laneEnv, slot, offset) : {};
@@ -59,18 +58,6 @@ export function qaWatcher({ readSha, kill, every = setInterval, stop = clearInte
       stop(timer);
     }
   };
-}
-
-// Waits until the machine has minGb of free RAM (spec 5.1), looking again every step ms; after limit ms it throws with
-// the reason. freeBytes() is os.freemem.
-export async function waitForRam(minGb, { freeBytes, sleep, log = () => {}, step = 30_000, limit = 1_800_000 }) {
-  if (!minGb) return;
-  const need = minGb * 1024 ** 3;
-  for (let waited = 0; freeBytes() < need; waited += step) {
-    if (waited === 0) log(`Waiting for RAM: ${(freeBytes() / 1024 ** 3).toFixed(1)} GB free, ${minGb} GB needed before another agent starts`);
-    if (waited >= limit) throw new Error(`the machine stayed under ${minGb} GB of free RAM for ${Math.round(limit / 60_000)} minutes: close what you can, or lower runs.lanes_max`);
-    await sleep(step);
-  }
 }
 
 // The PRs whose head is a branch of this repository: [{ number, state }], state open, closed or merged.

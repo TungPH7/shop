@@ -1,0 +1,21 @@
+# PR events (ai-orchestrator): relays the events of a PR to jira-sync, which follows this workflow's runs with
+# workflow_run, as it does PR review. jira-sync ran on pull_request_target before, which GitHub blocks on public
+# repositories from 2026-12-02 unless a policy of the repository allows it (Pilot 3). GitHub takes a pull_request
+# workflow from the PR itself, with the repository's secrets for a branch of the repository, so this one holds no
+# secret, no right and no code: jira-sync, from the default branch, reads the PR from GitHub. A PR in conflict with its
+# base runs no pull_request workflow, so it reaches jira-sync once the conflict is resolved and pushed.
+name: PR events
+
+on:
+  pull_request:
+    # closed only clears the Needs you flag merge-gate raised for the PR (dev-workflow spec 2.7).
+    types: [opened, reopened, synchronize, ready_for_review, closed]
+
+permissions: {}
+
+jobs:
+  # The job id is the check run name, which lib/tracker/facts.mjs leaves out of CI.
+  pr-events-relay:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "jira-sync reads this PR from the default branch"

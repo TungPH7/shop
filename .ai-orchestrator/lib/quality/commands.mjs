@@ -62,7 +62,12 @@ const BACKUP_FILE = /\.agekey\b|\.dump\.age\b|ao-backups|ao-backup-pull|(?:^|[\s
 // keeps in the project. Round 4 added the usual spellings of the mark: BEGIN with the kind of key, the regex forms of the
 // space and the dashes. Like USER_VARIABLES above, this catches mistakes, not an agent set on reading the keys (it runs
 // as you, and the kit says so in lib/agents/launch.mjs); holding the App keys away from it needs another account.
-const KEY_MARK = /PRIVATE(?:.{0,3}|\[\[:space:\]\])KEY|AGE.{0,2}SECRET.{0,2}KEY|-{5}BEGIN|-\{\d\}\s*BEGIN|BEGIN.{0,3}(?:RSA|EC|DSA|OPENSSH|ENCRYPTED|PRIVATE)|BEGIN.{0,30}KEY/i;
+// The headers of a PEM block are upper case words with single spaces (BEGIN RSA PRIVATE KEY, BEGIN OPENSSH PRIVATE KEY):
+// matched in upper case only, as whole words, so a SQL transaction (BEGIN; … PRIMARY KEY) or a test title (begins
+// recording) is not a key search (review round 5 of shop PR #21).
+const PEM_HEADER = /\bBEGIN (?:RSA|EC|DSA|OPENSSH|ENCRYPTED|PRIVATE)\b|\bBEGIN (?:\[A-Z ?\]\*? ?|[A-Z]+ ){0,3}KEY\b/;
+const KEY_WORDS = /PRIVATE(?:.{0,3}|\[\[:space:\]\])KEY|AGE.{0,2}SECRET.{0,2}KEY|-{5}BEGIN|-\{\d\}\s*BEGIN/i;
+const KEY_MARK = { test: (text) => KEY_WORDS.test(text) || PEM_HEADER.test(text) };
 const KEY_SEARCH = 'do not search for a private key: ao-pr.mjs and git get the tokens of your role for you; to scan the project for committed keys, use Grep, or git grep alone on its line from a folder of the project';
 // git grep options that read outside the files git tracks (--no-index, --untracked) or start a program
 // (--open-files-in-pager, -O alone or in a group such as -nO), by any start git takes for them; git log --output writes

@@ -45,9 +45,9 @@ import { agentCommand, formatDecision, runGo } from '../lib/workflow/runner.mjs'
 import { CHANGES, decideStep, dockerGate } from '../lib/workflow/steps.mjs';
 import { restoreWip, saveWip } from '../lib/workflow/wip.mjs';
 import { laneKeeper, runsSettings } from '../lib/workflow/lanes.mjs';
-import { installLane, pullsOfBranch, qaWatcher, runPlacer, waitForRam } from '../lib/workflow/lane-runs.mjs';
+import { installLane, pullsOfBranch, qaWatcher, runPlacer } from '../lib/workflow/lane-runs.mjs';
 import { checkoutBranch, laneDir, laneRoot } from '../lib/workflow/places.mjs';
-import { claimRole, claimsRole, liveLocks, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
+import { admitAgent, claimRole, claimsRole, liveLocks, releaseAgent, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
 import { runsAtOnce } from '../lib/workflow/ports.mjs';
 import { hookKitDrift, hookKitNote } from '../lib/workflow/hook-kit.mjs';
 
@@ -336,8 +336,11 @@ async function main() {
       slot: taken.slot,
       runs,
       apps: projectApps,
-      waitForRam: (gb) => waitForRam(gb, { freeBytes: freemem, sleep, log: (line) => console.log(line) }),
-      othersRunning: () => liveLocks(activeDir, { fs: lockFs, alive }).some(({ pid }) => pid !== process.pid),
+      // An agent waits for RAM only while another command has one running (live check of shop, 2026-11-16).
+      admitAgent: async () => {
+        const admitted = await admitAgent(activeDir, lock, { fs: lockFs, alive, sleep, freeBytes: freemem, minGb: runs.minFreeRamGb, onWait: (gb) => console.log(`Waiting for RAM: ${gb} GB free, ${runs.minFreeRamGb} GB needed before another agent starts`) });
+        if (!admitted.ok) throw new Error(admitted.reason);
+      },
       log: (line) => console.log(line),
     });
     const gitOf = async (run) => {
@@ -363,7 +366,12 @@ async function main() {
       // qa on Development or Staging gets the basic auth from AO_ENV_AUTH, as variables, never as arguments.
       agent: async (run, { log }) => {
         await claim(run);
-        return watchQa(await placed(run.qa?.auth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run), (ready, onStart) => startAgent(ready, join(runsDir, key, log), onStart));
+        try {
+          return await watchQa(await placed(run.qa?.auth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run), (ready, onStart) => startAgent(ready, join(runsDir, key, log), onStart));
+        } finally {
+          // Its agent no longer holds RAM for the others that wait (admitAgent).
+          if (cap > 1) await releaseAgent(activeDir, lock, { fs: lockFs, alive, sleep });
+        }
       },
       // A defect you reported is checked like a QA run: its evidence goes to the item too (human-loop spec 5.1).
       after: (run, { tree }) => (['qa', 'qa-defect'].includes(run.purpose) ? afterQa(run, tree, { deploys, mapping }) : []),

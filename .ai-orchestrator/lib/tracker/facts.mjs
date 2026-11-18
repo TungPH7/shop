@@ -114,9 +114,10 @@ const GITHUB_GUARDS = ['branch-created', 'dependencies-merged', 'pr-open', 'ci-g
 const BRANCH_KINDS = ['feature', 'bugfix', 'hotfix'];
 const PASSED = ['success', 'neutral', 'skipped'];
 // The jobs of the kit that are check runs on a PR head but not CI: that of kit/.github/workflows/jira-sync.yml, which ran
-// on pull_request in the copies made before, and that of pr-review.yml, which relays a review to jira-sync (review of
-// shop PR #21). A failed relay must not send an item back.
-const NOT_CI = ['jira-sync', 'pr-review-relay'];
+// on pull_request in the copies made before, that of pr-review.yml, which relays a review to jira-sync (review of shop
+// PR #21), and that of pr-events.yml, which relays the events of the PR (Pilot 3). A failed relay must not send an item
+// back.
+const NOT_CI = ['jira-sync', 'pr-review-relay', 'pr-events-relay'];
 const FAILED = ['failure', 'timed_out'];
 // Review states that decide; COMMENTED does not.
 const DECISIVE = ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'];
