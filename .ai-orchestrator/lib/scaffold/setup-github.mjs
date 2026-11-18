@@ -64,8 +64,8 @@ export function setupGithub({ kitDir, repo, mergeAppId, mergeAppKeyFile, secret,
   // merge-gate reads the key of ao-merge from its environment, which only develop may use (docs/quality-gates.md).
   // jira-sync, merge-gate and audit read JIRA_CI_TOKEN from theirs, never from the repository: every workflow of a PR
   // from a branch of the repo can read a repository secret, and an agent's branch could take it (review of shop PR
-  // #21). jira-sync runs on develop, main and release/* (pull_request_target runs on the base branch, deployments come
-  // from those), and audit for a v* tag a deploy workflow may run on.
+  // #21). jira-sync runs on develop, main and release/* (workflow_run runs on the default branch, deployments come from
+  // those), and audit for a v* tag a deploy workflow may run on.
   const envs = new Set((json(gh(['api', `repos/${repo}/environments`]))?.environments ?? []).map(({ name }) => name));
   const missingEnvs = [...ENVIRONMENTS, ...Object.keys(GUARDED)].filter((name) => !envs.has(name));
   if (missingEnvs.length === 0) done.push('environments');

@@ -26,8 +26,9 @@ const KIT_DIRS = ['agents', 'contract', 'lib', 'quality', 'templates', 'tracker'
 const KIT_FILES = ['package.json', 'package-lock.json'];
 // The root of the project, from kit/. audit.yml is left out: a project deploys through the deployer, which runs audit.
 const ROOT_DIRS = ['.claude/hooks', '.githooks'];
-// pr-review.yml relays reviews to jira-sync, which no longer runs on pull_request_review (review of shop PR #21).
-const ROOT_FILES = ['.mcp.json', '.jira/config.yml', '.github/workflows/ci.yml', '.github/workflows/jira-sync.yml', '.github/workflows/merge-gate.yml', '.github/workflows/pr-review.yml'];
+// pr-review.yml relays reviews to jira-sync, which no longer runs on pull_request_review (review of shop PR #21), and
+// pr-events.yml the events of a PR, since jira-sync no longer runs on pull_request_target (Pilot 3).
+const ROOT_FILES = ['.mcp.json', '.jira/config.yml', '.github/workflows/ci.yml', '.github/workflows/jira-sync.yml', '.github/workflows/merge-gate.yml', '.github/workflows/pr-events.yml', '.github/workflows/pr-review.yml'];
 
 // The files under a folder, relative to `base`, with forward slashes; [] when there is none.
 const listed = (base, dir) => (existsSync(join(base, dir))

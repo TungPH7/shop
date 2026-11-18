@@ -146,3 +146,45 @@ export async function claimRole(dir, file, role, { fs, alive, sleep, poll = 30_0
   }
   return { ok: false, reason: `${role} stayed busy` };
 }
+
+// Lets the agent of a command start (spec 5.1): at once when no other command has an agent running, else once the
+// machine has minGb of free RAM, looking again every poll ms, limit ms at most; 0 turns the check off. The check and the
+// mark agent: true on the lock are one step under the mutex, so two waiting commands cannot both pass, and a command that
+// only holds a lock (making its lane, or waiting) holds no RAM back: in the live check of shop on 2026-11-16, three
+// commands each waited for RAM because the others held locks, and none would ever have started. freeBytes() is
+// os.freemem; onWait(gb free) is told once. Resolves { ok: true, waited } or { ok: false, reason }.
+export async function admitAgent(dir, file, { fs, alive, sleep, freeBytes, minGb, poll = 30_000, limit = 1_800_000, onWait = () => {} }) {
+  const need = minGb * 1024 ** 3;
+  for (let waited = 0; ; waited += poll) {
+    const result = await underMutex(
+      dir,
+      process.pid,
+      () => {
+        if (!fs.existsSync(file)) return { ok: false, reason: `the lock ${file} is gone` };
+        const own = JSON.parse(fs.readFileSync(file, 'utf8'));
+        const running = liveLocks(dir, { fs, alive, clean: true }).some((lock) => join(dir, `${lock.name}.json`) !== file && lock.agent === true);
+        if (running && minGb > 0 && freeBytes() < need) return { wait: true };
+        writeLock(fs, file, { ...own, agent: true });
+        return { ok: true, waited: waited > 0 };
+      },
+      { fs, alive, sleep },
+    );
+    if (!result.wait) return result;
+    if (waited === 0) onWait((freeBytes() / 1024 ** 3).toFixed(1));
+    if (waited >= limit) return { ok: false, reason: `the machine stayed under ${minGb} GB of free RAM while another agent ran, for ${Math.round(limit / 60_000)} minutes: close what you can, or lower runs.lanes_max` };
+    await sleep(poll);
+  }
+}
+
+// Marks the end of the agent of a command on its lock, so the agents that wait for RAM count it no more.
+export async function releaseAgent(dir, file, { fs, alive, sleep }) {
+  return underMutex(
+    dir,
+    process.pid,
+    () => {
+      if (fs.existsSync(file)) writeLock(fs, file, { ...JSON.parse(fs.readFileSync(file, 'utf8')), agent: false });
+      return { ok: true };
+    },
+    { fs, alive, sleep },
+  );
+}

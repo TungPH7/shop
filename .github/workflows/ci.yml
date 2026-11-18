@@ -137,8 +137,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      # pnpm, by packageManager of package.json, installed as in build-test. The script needs Docker and Node alone, so
-      # the packages of the project are not installed.
+      # pnpm, by packageManager of package.json, installed as in build-test. The script needs Docker and Node alone, but
+      # `pnpm run` installs the packages of the workspace first (pnpm 11), so the step takes the time of an install
+      # (review of PR #60, SHOP-62).
       - name: pnpm
         run: node .ai-orchestrator/scripts/ci-package-manager.mjs
       # --fail-if-no-match: when the filter matches no project, as after apps/admin moves, pnpm prints "No projects
