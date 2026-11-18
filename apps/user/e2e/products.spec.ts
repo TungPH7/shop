@@ -1,5 +1,8 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
+import en from '../messages/en.json';
+import vi from '../messages/vi.json';
+
 import {
   adminApi,
   adminUrlFor,
@@ -10,6 +13,8 @@ import {
   type CreatedProduct,
   type ProductInput,
 } from './support/products';
+
+const SITE_DESCRIPTION = { vi: vi.Seo.siteDescription, en: en.Seo.siteDescription } as const;
 
 // The run id of this file only, in the names (so the slugs) of its products: see newRunId.
 const runId = newRunId();
@@ -188,6 +193,17 @@ test.describe('products page shell', () => {
       expect(breadcrumbs.map((block) => block.itemListElement?.map((item) => item.name))).toEqual([
         [home, title],
       ]);
+    });
+  }
+
+  // SHOP-73: the list is described by the sentence of the site (Seo.siteDescription), not the template's sentence.
+  for (const locale of ['vi', 'en'] as const) {
+    test(`describes the list with the sentence of the site in ${locale}`, async ({ page }) => {
+      await page.goto(`/${locale}/products`);
+
+      const description = page.locator('meta[name="description"]');
+      await expect(description).toHaveCount(1);
+      await expect(description).toHaveAttribute('content', SITE_DESCRIPTION[locale]);
     });
   }
 

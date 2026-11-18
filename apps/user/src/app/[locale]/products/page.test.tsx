@@ -120,3 +120,14 @@ test('generateMetadata gives the translated title and the canonical of /products
   expect(metadata.description).toBe(en.Products.metaDescription);
   expect(metadata.alternates?.canonical).toBe('/en/products');
 });
+
+for (const [locale, messages] of [
+  ['vi', vi_],
+  ['en', en],
+] as const) {
+  test(`generateMetadata describes the product list with the default sentence of the site in ${locale}`, async () => {
+    const metadata = await generateMetadata({ params: Promise.resolve({ locale }) });
+
+    expect(metadata.description).toBe(messages.Seo.siteDescription);
+  });
+}

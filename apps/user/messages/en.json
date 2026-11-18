@@ -20,8 +20,8 @@
     "backHome": "← Back to home"
   },
   "Seo": {
-    "siteDescription": "A from-zero, server-first enterprise foundation built on Next.js 16 — App Router, React Server Components, type-safe i18n, and a UI-agnostic core.",
-    "ogImageTagline": "Server-first enterprise foundation",
+    "siteDescription": "Browse the products on sale, search by name, sort by price, and see each product's details, price and stock.",
+    "ogImageTagline": "Online shop",
     "home": "Home"
   },
   "NotFound": {
@@ -126,7 +126,7 @@
   },
   "Products": {
     "metaTitle": "Products",
-    "metaDescription": "Browse products fetched server-side through the Data Access Layer, validated at the boundary and cached for performance.",
+    "metaDescription": "Browse the products on sale, search by name, sort by price, and see each product's details, price and stock.",
     "title": "Products",
     "searchLabel": "Search by name",
     "searchPlaceholder": "Search products…",
