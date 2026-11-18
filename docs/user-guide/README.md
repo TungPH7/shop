@@ -26,7 +26,7 @@ Cả hai trang có tiếng Việt và tiếng Anh, và có ba kiểu giao diện
 - **Hệ thống**: theo cài đặt sáng hay tối của máy bạn.
 
 Nút đổi nằm ở góc phải của thanh trên cùng:
-- **Trang quản trị:** hai ô chọn, "Tiếng Việt" và "Hệ thống".
+- **Trang quản trị:** hai ô chọn, "Tiếng Việt" và "Hệ thống". Nếu trang mở bằng tiếng Anh, chọn **Tiếng Việt** ở ô ngôn ngữ. Trình duyệt chỉ đặt một ngôn ngữ `vi-VN` có thể mở trang bằng tiếng Anh.
 - **Trang của khách:** các nút **EN**, **VI** và **Sáng**, **Tối**, **Hệ thống**. Trên màn hình hẹp hơn 1024 px, ba nút giao diện chỉ còn biểu tượng: mặt trời, mặt trăng, màn hình.
 
 Giá luôn viết kiểu `1.250.000 ₫`, ở cả tiếng Việt lẫn tiếng Anh.
