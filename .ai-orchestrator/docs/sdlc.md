@@ -104,6 +104,7 @@ stateDiagram-v2
     new --> ready: refine
     ready --> in_progress: start
     in_progress --> in_review: submit
+    in_progress --> ready_for_qa: hand-over
     in_review --> in_progress: request-changes
     in_review --> ready_for_qa: deploy-to-qa
     ready_for_qa --> in_qa: pick-up
@@ -133,8 +134,9 @@ stateDiagram-v2
 | Transition | Từ → đến | Ai chuyển | Điều kiện | Bằng chứng | Effect |
 | --- | --- | --- | --- | --- | --- |
 | `refine` | `new` → `ready` | `automation`, `human`: automation chuyển Story/Task thuộc Epic có plan đã duyệt; human chuyển Bug sau triage và Task không thuộc Epic | Item đạt DoR của loại đó (mục 2.5): Story/Task thuộc Epic có plan đã duyệt, Bug đã qua triage | `tracker` |  |
-| `start` | `ready` → `in-progress` | `fe-dev`, `be-dev`, `devops` | Agent còn chỗ WIP: tính theo Sub-task nếu Story có Sub-task, nếu không thì theo cả item (mục 2.7); Các item phụ thuộc đã merge vào nhánh gốc; Đã tạo nhánh từ đúng nhánh gốc (mục 2.6), có trên GitHub | `tracker`, `git` |  |
+| `start` | `ready` → `in-progress` | `fe-dev`, `be-dev`, `devops` | Agent còn chỗ WIP: tính theo Sub-task nếu Story có Sub-task, nếu không thì theo cả item (mục 2.7); Các item phụ thuộc đã merge vào nhánh gốc; Đã tạo nhánh từ đúng nhánh gốc (mục 2.6), có trên GitHub. Task vận hành (nhãn ao-ops) không cần nhánh | `tracker`, `git` |  |
 | `submit` | `in-progress` → `in-review` | `automation` | Mọi Sub-task của item đã done; PR vào đúng nhánh gốc đã mở; Mọi check CI của PR xanh | `tracker`, `github-pr`, `ci` |  |
+| `hand-over` | `in-progress` → `ready-for-qa` | `devops`: Chỉ Task vận hành: không có PR, devops ghi bằng chứng rồi giao cho QA | Item là Task vận hành: có nhãn ao-ops, không có commit hay PR; devops đã ghi bằng chứng của việc vận hành trong một comment có mục ## Ops evidence | `tracker` |  |
 | `request-changes` | `in-review` → `in-progress` | `reviewer`, `security`, `human`, `automation` | Review trên PR yêu cầu sửa, hoặc CI của PR đỏ | `github-pr` | `increment-rework` |
 | `deploy-to-qa` | `in-review` → `ready-for-qa` | `automation` | Bạn đã approve PR ở cổng ③ merge-approval; PR đã merge vào nhánh gốc; Deploy lên môi trường QA của item (mục 2.6) thành công | `github-pr`, `deploy` |  |
 | `pick-up` | `ready-for-qa` → `in-qa` | `qa` | Không có | Không có |  |
@@ -172,7 +174,7 @@ stateDiagram-v2
 | `start-spec` | `new` → `specifying` | `human` | Còn chỗ WIP cho Epic ở specifying hoặc planning (mục 2.7) | `tracker` |  |
 | `approve-spec` | `specifying` → `planning` | `human` | Bạn duyệt SPEC của Epic ở cổng ① spec-approval | `human` (`spec`) |  |
 | `approve-plan` | `planning` → `in-progress` | `human` | Bạn duyệt plan của Epic ở cổng ② plan-approval; Các Story/Task con theo plan đã được tạo trên Jira | `human` (`plan`), `tracker` | `refine-children` |
-| `complete` | `in-progress` → `done` | `human` | Mọi item con đã Done hoặc Cancelled; Mọi item con đã Done nằm trong một bản đã lên Production | `tracker` |  |
+| `complete` | `in-progress` → `done` | `human` | Mọi item con đã Done hoặc Cancelled; Mọi item con đã Done nằm trong một bản đã lên Production, trừ Task vận hành (nhãn ao-ops), vốn không có commit | `tracker` |  |
 | `cancel` | `new`, `specifying`, `planning`, `in-progress` → `cancelled` | `human` | Item có Resolution: Won't do, Duplicate, Not a bug hoặc Cannot reproduce | `tracker` |  |
 
 ### `sub-task`

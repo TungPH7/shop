@@ -45,13 +45,20 @@ export function decideStep(command, facts, options) {
 
 const stop = (reason, next, extra = {}) => ({ go: false, reason, next, lines: [], ...extra });
 
-// The tests of a Java app start Postgres with Testcontainers (project-scaffold part 3, spec 2.2), so a decision that
-// starts be-dev on a project with a Java app stops first when Docker is not running. qa checks a deployed environment
-// and fe-dev the JS apps, so neither needs Docker. dockerRunning() is asked only when it matters.
-export function dockerGate(decision, { java, dockerRunning }) {
-  if (!decision.go || !java || !decision.runs.some((r) => r.role === 'be-dev')) return decision;
+// The tests of a Java app start Postgres with Testcontainers (project-scaffold part 3, spec 2.2), and the E2E that qa
+// runs start the api with its Postgres for the @local tests. So a decision that starts be-dev or qa on a project with a
+// Java app stops first when Docker is not running: qa started Docker Desktop itself instead, twice on SHOP-76 of shop,
+// and left the database of its lane up (Pilot 3). fe-dev tests the JS apps, which need no Docker. dockerRunning() is
+// asked only when it matters.
+const DOCKER_ROLES = ['be-dev', 'qa'];
+// Docker is asked once more after pause(), before the command stops: the first /ao-build SHOP-13 of shop stopped though
+// docker info had just answered.
+export function dockerGate(decision, { java, dockerRunning, pause = () => {} }) {
+  if (!decision.go || !java || !decision.runs.some((r) => DOCKER_ROLES.includes(r.role))) return decision;
   if (dockerRunning()) return decision;
-  return stop('the project has a Java app, whose tests start Postgres with Testcontainers, and Docker is not running', 'Start Docker Desktop, wait until it says Engine running, then run the command again');
+  pause();
+  if (dockerRunning()) return decision;
+  return stop('the project has a Java app, whose tests start Postgres in Docker, and Docker is not running', 'Start Docker Desktop, wait until it says Engine running, then run the command again');
 }
 const go = (runs, lines = []) => ({ go: true, runs, lines });
 
@@ -386,7 +393,9 @@ export function nextFor(item, pr = null) {
 }
 
 export const usd = (value) => `${value.toFixed(2)} USD`;
-const describeRun = (r) => `${r.role} ${r.purpose ?? ''} ${r.outcome}${r.costUsd !== undefined ? `, ${usd(r.costUsd)}` : ''}`.replace(/\s+/g, ' ');
+// A run stopped before its result has a cost of null: unknown (lib/workflow/runs.mjs).
+const costOfRun = (r) => (r.costUsd === null ? ', cost unknown' : r.costUsd !== undefined ? `, ${usd(r.costUsd)}` : '');
+const describeRun = (r) => `${r.role} ${r.purpose ?? ''} ${r.outcome}${costOfRun(r)}`.replace(/\s+/g, ' ');
 
 function epicLine({ item, docs }) {
   const pr = docs?.pr ? `docs PR #${docs.pr.number} ${docs.pr.merged ? 'merged' : docs.pr.state}` : docs?.exists ? `branch ${docs.branch}, no PR` : 'no docs branch';
@@ -434,7 +443,8 @@ function decideBuild(facts, options) {
   // In Progress goes on from its own ledger.
   const subtaskLedgers = facts.subtaskLedgers ?? [];
   const split = item.subtasks.length > 0;
-  const again = item.state === 'in-progress' && (split ? subtaskLedgers.length > 0 : facts.ledger);
+  // A Story whose agent kept its ledger by the key of the Story, with a Sub-task done, goes on too (SHOP-34 of shop).
+  const again = item.state === 'in-progress' && (split ? subtaskLedgers.length > 0 || (facts.ledger && item.subtasks.some(({ state }) => state === 'done')) : facts.ledger);
   // After QA fail: the PR of the item is merged and its newest QA report is FAIL (human-loop spec 5.2).
   const afterQaFail = item.state === 'in-progress' && Boolean(pr?.merged) && facts.qaReport?.result === 'FAIL';
   // A build run that stopped with a session goes on first, whatever the ledger: its agent may have started the item and
@@ -443,6 +453,10 @@ function decideBuild(facts, options) {
     const resumed = carryOn('build', facts, options);
     if (resumed) return out(resumed);
   }
+  // A Story or Task added to an Epic after its plan was approved stays New: jira-sync refined the children of the Epic
+  // only at Approve plan (Phiên 33 of shop: SHOP-39, 41, 42, 43, 45). One that meets DoR (refinable) gets jira-sync now,
+  // and the build goes on once it is Ready.
+  if (item.state === 'new' && facts.refinable) return out(go([{ action: 'jira-sync', key, continue: true }]));
   if (item.state !== 'ready' && !again && !afterQaFail) {
     const why = item.state === 'in-progress' ? `${key} is In Progress but has no ledger in .ai/ledger/: its run did not come from an agent of the kit` : `${key} is ${item.status}, not Ready`;
     return out(stop(why, nextFor(item, pr)));
@@ -468,6 +482,15 @@ function decideBuild(facts, options) {
     for (const role of new Set((todo.length > 0 ? todo : [item]).map(({ role: r }) => r))) {
       if (facts.wip.devAgent[role] === false) return out(stop(`${role} is at its WIP limit dev-agent: it has an item In Progress already`, `/ao-status`));
     }
+  }
+  // An ops Task (label ao-ops; kit followups, batch 4 item 14) is devops's, with no branch: no checkout to make, and
+  // the basic auth only under the label ao-env-auth, which only you put (block-atlassian refuses it to agents).
+  if (item.ops) {
+    const prefix = options.mapping?.work_labels?.role_prefix ?? 'ao-';
+    if (item.role !== 'devops') return out(stop(`${key} is an ops Task, which only devops does, and its role label is ${prefix}${item.role}`, `Ask ba to label it ${prefix}devops, then /ao-build ${key}`));
+    const auth = item.envAuth ? { envAuth: true } : {};
+    const prompt = again ? promptFor('build-again', { key, status: item.status }) : promptFor('build-ops', { key, auth: Boolean(item.envAuth) });
+    return out(go([{ role: 'devops', key, effort: effortOf(item), purpose: 'build', prompt, ...auth }]));
   }
   if (again && !split) return out(go([{ role: item.agent && DEV_ORDER.includes(item.agent) ? item.agent : item.role, key, effort: effortOf(item), purpose: 'build', prompt: promptFor('build-again', { key, status: item.status }) }]));
   if (item.subtasks.length === 0) {
@@ -614,15 +637,50 @@ function decideReview(facts, options) {
   return { ...afterReviews(facts), lines };
 }
 
-// Both reports are on the head: a blocking finding goes back to the dev agent, otherwise you approve.
-function afterReviews({ pr }) {
+// The environment a merge into the base of `pr` deploys to (release-workflow spec 2.4): develop on Development, a
+// release branch on Staging; main on Staging for a hotfix and on Production for a release.
+function mergeEnvironment(pr) {
+  if (pr.base === 'develop') return 'development';
+  if (parseBranch(pr.base)?.kind === 'release') return 'staging';
+  if (pr.base === 'main') return parseBranch(pr.headRef)?.kind === 'hotfix' ? 'staging' : 'production';
+  return null;
+}
+
+// The dev agent of each app of project.yaml by its profile: a back end for be-dev, a front end for fe-dev; an app of
+// another profile is left out. apps: the apps of project.yaml.
+const BACK_END = ['spring-boot', 'nestjs'];
+const FRONT_END = ['nextjs', 'react'];
+export function appRolesOf(apps = {}) {
+  return Object.fromEntries(Object.entries(apps ?? {}).flatMap(([name, app]) => {
+    if (BACK_END.includes(app?.profile)) return [[name, 'be-dev']];
+    if (FRONT_END.includes(app?.profile)) return [[name, 'fe-dev']];
+    return [];
+  }));
+}
+
+// The dev agent of the app a path is in, by appRoles of project.yaml ({ api: 'be-dev', user: 'fe-dev' }), or null for a
+// path outside apps/<app>/ or an app it does not name.
+function appRoleOf(where, appRoles = {}) {
+  const match = /^`?apps\/([^/`]+)\//.exec(String(where ?? '').trim());
+  return match ? (appRoles[match[1]] ?? null) : null;
+}
+
+// Both reports are on the head: a blocking finding goes back to the dev agent, otherwise you approve. qaRunning: the
+// qa runs that hold a lock now, [{ key, environment, pid }]. Approving while one tests the environment the merge
+// deploys to makes merge-gate merge and the deployer deploy, and ao-step then stops that QA as superseded, to start
+// again (Pilot 3, SHOP-28 and SHOP-69 of shop): the stop says to wait.
+function afterReviews({ pr, qaRunning = [] }) {
   const open = Object.entries(pr.reports).filter(([, report]) => report?.blocking > 0);
   const blocking = open.map(([role, report]) => `${role} ${report.blocking}${report.ids?.length ? `: ${report.ids.join(' ')}` : ''}`);
   // A High may be accepted rather than fixed (Pilot 3, spec 2.9 part 5): say how, with the ids to name.
   const accept = open.some(([, report]) => report.ids?.length) ? `. To accept a High instead of fixing it, approve PR #${pr.number} on its head with one line per finding: Accept risk: <id> until <YYYY-MM-DD>: <why> (docs/quality-gates.md)` : '';
   if (blocking.length > 0 || pr.changesRequested) return stop(`the reports on the head of PR #${pr.number} ask for changes${blocking.length ? ` (Critical or High: ${blocking.join(', ')})` : ''}${accept}`, `/ao-fix ${pr.number}`);
   const yours = pr.protectedPaths.length > 0 ? `, then Squash and merge it yourself: it changes ${pr.protectedPaths.join(', ')}` : '; merge-gate merges it';
-  return stop(`both reports are on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}: it waits for you at gate ③ merge-approval`, `Read the reports and the diff of PR #${pr.number}, approve it${yours}`);
+  const environment = mergeEnvironment(pr);
+  const testing = environment ? qaRunning.find((lock) => lock.environment === environment) : null;
+  const wait = testing ? `. Wait: qa is testing ${testing.key} on ${environment} now (process ${testing.pid}). Approve after it ends: the merge deploys ${environment}, and the new deploy stops that QA, which then starts again` : '';
+  const read = `ead the reports and the diff of PR #${pr.number}, approve it${yours}`;
+  return stop(`both reports are on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}: it waits for you at gate ③ merge-approval${wait}`, testing ? `Once qa ends on ${environment}, r${read}` : `R${read}`);
 }
 
 // /ao-fix <PR> [what to fix]: the dev agent of the item, then the reviews again.
@@ -640,6 +698,18 @@ function decideFix(facts, options) {
   for (const [role, report] of Object.entries(pr.reports)) if (report?.onHead && report.blocking > 0) reasons.push(`the ${report.blocking} Critical or High findings of the ${role} report`);
   // Who fixes what is not yours to say: the dev agent of the item, or the last one of a split Story.
   const own = DEV_ORDER.includes(item.agent) ? item.agent : (item.role ?? [...item.subtasks].sort((a, b) => DEV_ORDER.indexOf(a.role) - DEV_ORDER.indexOf(b.role)).at(-1)?.role);
+  // A Story with a BE and an FE Sub-task (Pilot 3, PR #62 of shop: CI was red only in apps/user, and be-dev, the Agent
+  // of the Story, got the fix): a blocking finding goes to the dev agent of the app its Where is in, by the profiles of
+  // project.yaml (options.appRoles); a red CI without your request stops, since ao-step cannot tell which side broke it.
+  const subRoles = new Set(item.subtasks.map(({ role }) => role));
+  const twoSided = subRoles.has('be-dev') && subRoles.has('fe-dev');
+  if (twoSided && !asked && pr.ci.failed) {
+    return { ...stop(`CI is red on PR #${pr.number}, and ${item.key} has a BE and an FE Sub-task: /ao-fix does not guess which side broke it`, `Read the failed job (gh run view --log-failed), then /ao-fix ${pr.number} be: … or fe: …, with what to fix`), lines };
+  }
+  const blockingWhere = Object.values(pr.reports).filter((report) => report?.onHead && report.blocking > 0).flatMap((report) => (report.open ?? []).map(({ where }) => where));
+  const bySide = twoSided ? [...new Set(blockingWhere.map((where) => appRoleOf(where, options.appRoles)).filter(Boolean))] : [];
+  // With your request on such a Story, its be: and fe: parts say who works; the reasons add no one else.
+  const fixers = bySide.length > 0 ? bySide : twoSided && asked ? [] : own ? [own] : [];
   // Your request, split by be: and fe: (human-loop spec 4.4). Without a prefix it goes to the item's dev agent, unless
   // the Story has a BE and an FE Sub-task: then it stops, since /ao-fix does not guess.
   let parts = {};
@@ -674,10 +744,10 @@ function decideFix(facts, options) {
   // Once the change ran for this request, the requests it wrote to ba, ux or sa run next, on the PR branch (spec 2.2).
   const changed = changer && done.has(`${changer} ${purpose}`) ? (facts.run?.runs ?? []).findLast((r) => r.command === 'fix' && r.purpose === purpose && r.note === noteKey(asked) && r.outcome === 'done') : null;
   const follow = changed ? followUpRuns(facts, Date.parse(changed.startedAt ?? 0), options, { branch: pr.headRef, pr: pr.number, extra: { checkout: { branch: pr.headRef, pull: true } } }) : [];
-  const roles = DEV_ORDER.filter((role) => todo[role] !== undefined || (reasons.length > 0 && role === own));
+  const roles = DEV_ORDER.filter((role) => todo[role] !== undefined || (reasons.length > 0 && fixers.includes(role)));
   if (roles.length === 0 && follow.length > 0) return go(follow, lines);
   if (roles.length === 0) {
-    if (reasons.length > 0 && !own) return { ...stop(`${item.key} has no dev agent: no Agent value of a dev role, and no role label`, `Ask ba to label ${item.key}, then /ao-fix ${pr.number}`), lines };
+    if (reasons.length > 0 && fixers.length === 0) return { ...stop(`${item.key} has no dev agent: no Agent value of a dev role, and no role label`, `Ask ba to label ${item.key}, then /ao-fix ${pr.number}`), lines };
     if (pr.ci.pending) return { ...stop(`CI is still running on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-fix ${pr.number} once CI is done`), lines };
     // A draft PR has no review yet: you look at it again, or review it (human-loop spec 4.4).
     if (pr.draft) return { ...stop(`the draft PR #${pr.number} of ${item.key} has nothing left to fix${asked ? ': your request is pushed' : ''}`, `/ao-preview ${item.key} to look at it again, or /ao-review ${pr.number}`), lines };
@@ -737,8 +807,23 @@ function decideQa(facts, options) {
   // A defect you found (human-loop spec 5.1): before qa runs, and until you Accept after its PASS.
   const asked = options.note?.trim() || undefined;
   const defect = asked && !noteDone(facts, 'qa', 'qa-defect', asked) ? asked : undefined;
-  const states = stopped || superseded || defect ? ['ready-for-qa', 'in-qa'] : ['ready-for-qa'];
+  // A NOT TESTED report (a cause outside the code, such as a Bug of the environment) leaves the item In QA. Once you
+  // fixed the cause and cleared its flag, --retest makes the whole QA afresh from In QA (Pilot 3, SHOP-20 after SHOP-56),
+  // not the road of a defect you found.
+  const retest = Boolean(options.retest);
+  if (retest && !(item.state === 'in-qa' && facts.qaReport?.result === 'NOT TESTED')) {
+    const newest = facts.qaReport ? `its newest QA report is ${facts.qaReport.result}` : 'it has no QA report';
+    return stop(`--retest runs QA again only for an item In QA whose newest QA report is NOT TESTED: ${item.key} is ${item.status}, and ${newest}`, nextFor(item, pr));
+  }
+  const states = stopped || superseded || defect || retest ? ['ready-for-qa', 'in-qa'] : ['ready-for-qa'];
   if (!states.includes(item.state)) return stop(`${item.key} is ${item.status}, not Ready for QA`, nextFor(item, pr));
+  // An ops Task (kit followups, batch 4 item 14) has no PR and no deploy: qa checks its Verification where it names, from
+  // the evidence of devops, with the basic auth and no worktree. No sha: nothing to watch for a new deploy.
+  if (item.ops) {
+    const opsRun = run('qa', 'qa-ops', { key: item.key }, options, { qa: { environment: null, sha: null, auth: true } });
+    if (stopped) return go([{ ...opsRun, effort: stopped.effort ?? opsRun.effort, resume: stopped.session, prompt: resumePrompt(item.key) }]);
+    return go([opsRun]);
+  }
   if (!pr?.merged || !pr.mergeCommit) return stop(`PR #${pr?.number ?? '?'} of ${item.key} is not merged`, `/ao-status ${item.key}`);
   const env = title(qa.environment);
   if (!qa.running) return stop(`${env} runs no release yet`, 'Wait for the deployer to run one; its deployments are on GitHub');

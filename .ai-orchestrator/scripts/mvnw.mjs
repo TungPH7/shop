@@ -2,7 +2,8 @@
 // its pom.xml asks for. The package.json of a Java app calls it, so pnpm -r, CI and /ao-preview run the app as a JS one.
 // JAVA_HOME is set for the wrapper only; yours stays as it is. dev reads the app's .env and starts the services of its
 // docker-compose.yml that run from an image, such as the database, first. The decisions are in lib/quality/maven.mjs.
-//   node .ai-orchestrator/scripts/mvnw.mjs <app folder> lint|typecheck|test:coverage|build|dev
+//   node .ai-orchestrator/scripts/mvnw.mjs <app folder> lint|typecheck|test|test:coverage|build|dev [<arguments for Maven>]
+// The arguments after the script go to Maven as they are, such as -Dtest=ProductServiceTest (scripts/run.mjs).
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -13,12 +14,12 @@ function fail(message) {
   process.exit(1);
 }
 
-const [dir, script] = process.argv.slice(2);
-if (!dir || !script) fail('usage: node mvnw.mjs <app folder> lint|typecheck|test:coverage|build|dev');
+const [dir, script, ...extra] = process.argv.slice(2);
+if (!dir || !script) fail('usage: node mvnw.mjs <app folder> lint|typecheck|test|test:coverage|build|dev [<arguments for Maven>]');
 const app = resolve(dir);
 let args;
 try {
-  args = mavenArgs(script);
+  args = [...mavenArgs(script), ...extra];
 } catch (error) {
   fail(error.message);
 }

@@ -13,7 +13,7 @@ import { unquotePath } from '../lib/quality/diff-paths.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
 import { auditArgs, managerFromLockfile, PNPM_MISSING, runManager } from '../lib/quality/package-manager.mjs';
 import { checkDesignFile } from '../lib/quality/design-files.mjs';
-import { auditProblems, checkConventions, designFilesToCheck, osvProblems } from '../lib/quality/policy.mjs';
+import { auditProblems, checkConventions, designFilesToCheck, osvProblems, pomsToScan, scanTries } from '../lib/quality/policy.mjs';
 import { addedLines, deletedTests, findSuppressions, loweredThresholds } from '../lib/quality/suppressions.mjs';
 
 function run(command, args, options = {}) {
@@ -41,6 +41,8 @@ try {
   const gates = readGates(gatesDir);
   const root = git('rev-parse', '--show-toplevel');
   const pr = pullRequest();
+  // The paths the PR changes, or null on a push.
+  let changed = null;
 
   if (pr) {
     const base = git('merge-base', pr.base, 'HEAD');
@@ -65,6 +67,7 @@ try {
       .split('\n')
       .filter(Boolean)
       .map((line) => ({ status: line[0], path: unquotePath(line.split('\t').at(-1)) }));
+    changed = changes.map(({ path }) => path);
     const designs = designFilesToCheck(changes, (path) => existsSync(join(root, path)));
     sections.push(['Design', designs.flatMap((path) => checkDesignFile(join(root, path)).map(({ rule, line, message }) => `${path}:${line} ${rule} ${message}`))]);
   }
@@ -86,9 +89,13 @@ try {
     const scanner = process.env.OSV_SCANNER;
     if (!scanner) throw new Error(`${poms.join(', ')}: osv-scanner is not installed, so the Java dependencies are not checked; set OSV_SCANNER to it`);
     const problems = [];
-    for (const pom of poms) {
-      // It exits 0 when it finds nothing and 1 when it finds advisories; anything else is a failed scan.
-      const scan = run(scanner, ['scan', 'source', '--format', 'json', '--data-source', 'native', '--lockfile', pom], { cwd: root });
+    const scanned = pomsToScan(poms, changed);
+    for (const pom of poms.filter((path) => !scanned.includes(path))) notes.push(`${pom}: not scanned, since the PR changes nothing in its app; the push to the base scans it`);
+    // Ten seconds before a failed scan is tried again.
+    const pause = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10_000);
+    for (const pom of scanned) {
+      // It exits 0 when it finds nothing and 1 when it finds advisories; anything else is a failed scan, tried again.
+      const scan = scanTries(() => run(scanner, ['scan', 'source', '--format', 'json', '--data-source', 'native', '--lockfile', pom], { cwd: root }), { pause });
       if (scan.status !== 0 && scan.status !== 1) throw new Error(`osv-scanner on ${pom}: ${`${scan.stderr ?? scan.error?.message ?? ''}`.trim().split('\n').at(-1)}`);
       problems.push(...osvProblems(JSON.parse(scan.stdout || '{}'), gates.dependencies, new Date().toISOString().slice(0, 10)));
     }

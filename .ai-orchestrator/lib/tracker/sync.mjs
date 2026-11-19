@@ -29,13 +29,29 @@ const isRelay = (event, payload) => event === 'workflow_run' && payload.workflow
 // moved. GitHub names the PR in the run, except for some runs, like that of a PR that closed, where the newest PR of the
 // run's branch at the run's commit is the one. null when the run is for a fork, or for no PR of the repository: such a
 // run concerns no item (review round 2 of shop PR #21).
+// Only the PRs whose head is in the repository: on a public repository anyone can open one from a fork with the same
+// branch and commit, and the event of ours was lost (review of shop PR #74).
 async function relayedPull(payload, github) {
   const run = payload.workflow_run;
-  if (!run.head_repository?.full_name || run.head_repository.full_name !== payload.repository?.full_name) return null;
-  const pulls = await github.getAll('/pulls', { state: 'all', sort: 'created', direction: 'desc' });
+  const repository = payload.repository?.full_name;
+  if (!run.head_repository?.full_name || run.head_repository.full_name !== repository) return null;
+  const pulls = (await github.getAll('/pulls', { state: 'all', sort: 'created', direction: 'desc' })).filter((pr) => pr.head?.repo?.full_name === repository);
   const number = run.pull_requests?.[0]?.number;
   if (number) return pulls.find((pr) => pr.number === number) ?? null;
   return pulls.find((pr) => pr.head?.ref === run.head_branch && pr.head?.sha === run.head_sha) ?? pulls.find((pr) => pr.head?.ref === run.head_branch) ?? null;
+}
+
+// The client with one list of the PRs per event, for each query: the relay and the GitHub guards read the same list,
+// all pages of it (review of shop PR #74). Every other call goes to the client.
+function sharedPullList(github) {
+  const lists = new Map();
+  const getAll = (path, query, ...rest) => {
+    if (path !== '/pulls') return github.getAll(path, query, ...rest);
+    const key = JSON.stringify(query ?? {});
+    if (!lists.has(key)) lists.set(key, github.getAll(path, query, ...rest));
+    return lists.get(key).then((list) => structuredClone(list));
+  };
+  return Object.assign(Object.create(github), { getAll });
 }
 
 // The keys of the items in the project space that an event concerns. A PR event concerns the item of its branch and
@@ -81,7 +97,8 @@ function waitingForDeployment(contract, mapping, space) {
 // reconciled. A change on an item outside the space, like a child of an Epic in another space, is dropped. A PR that
 // closes moves no item: it only clears the Needs you flag merge-gate raised for it (dev-workflow spec 2.7); `kept`
 // says why a flag stays.
-export async function syncEvent({ event, payload, jira, github, contract, mapping, space, approvers = [] }) {
+export async function syncEvent({ event, payload, jira, github: client, contract, mapping, space, approvers = [] }) {
+  const github = client && sharedPullList(client);
   if (event === 'deployment_status' && FAILED.includes(payload.deployment_status.state)) return deploymentFailed(payload, { jira, github, space });
   // A run of the relay PR events stands for the event of its PR, read from GitHub as the PR is now.
   const relayed = isRelay(event, payload) ? await relayedPull(payload, github) : undefined;

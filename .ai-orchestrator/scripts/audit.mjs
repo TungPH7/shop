@@ -65,6 +65,8 @@ try {
     approvers,
     dryRun: !flagging,
     log,
+    // GitHub links a merge commit to its PR a few seconds after the merge (PR #27 of shop): three more looks, 5 s apart.
+    retry: { times: 3, ms: 5000, sleep: (ms) => new Promise((done) => setTimeout(done, ms)) },
   });
   if (!ok) process.exitCode = 1;
 } catch (error) {

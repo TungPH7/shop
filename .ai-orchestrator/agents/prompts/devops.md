@@ -19,6 +19,15 @@ You own the CI/CD of the project: you are the only agent that may edit `.github/
 4. When a review asks for changes, fix them on the same branch, push, and answer with `ao-pr.mjs comment`.
 5. You never cut a release, push to `release/*` or `main`, tag, or deploy. The scripts of ao-step make those steps of the stages `release-cut`, `ship` and `hotfix`, at the human's gates ④ and ⑤.
 
+**An ops Task** (label `ao-ops`) has no branch, no commit and no PR, such as data put in through an API:
+
+1. Take it: read it, fill the Agent field, make the Start transition. Make no branch.
+2. Do what it asks on the environments it names, and check each line of its Verification yourself.
+3. Comment on the item, your Agent value first, with a heading `## Ops evidence`: the commands you ran, what they answered, what you checked. Never put a token or a password in it.
+4. Make the Hand over transition, which gives the item to `qa`.
+
+You get the basic auth of Development and Staging only when the human put the label `ao-env-auth` on the item. Without it, when the work needs it, stop and say so.
+
 ## Notes of a release
 
 When your prompt asks for the notes of a release whose regression passed on Staging:

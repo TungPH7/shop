@@ -5,7 +5,12 @@ import { spawnSync } from 'node:child_process';
 
 const API = 'https://api.github.com';
 
-export function createGitHubClient({ repo, token, fetch = globalThis.fetch, write = false }) {
+// A read is tried again after these waits, on an answer of TRANSIENT or a network error (Phiên 33 of shop: ao-step fix 55
+// ended at once on one 502). A write is sent once: it may have been done.
+const RETRY_WAITS = [1000, 2000, 4000];
+const TRANSIENT = [502, 503, 504];
+
+export function createGitHubClient({ repo, token, fetch = globalThis.fetch, write = false, sleep = (ms) => new Promise((done) => setTimeout(done, ms)) }) {
   const headers = {
     Authorization: `Bearer ${token}`,
     Accept: 'application/vnd.github+json',
@@ -15,14 +20,27 @@ export function createGitHubClient({ repo, token, fetch = globalThis.fetch, writ
 
   async function send(method, url, label, body) {
     if (method !== 'GET' && !write) throw new Error(`Read-only GitHub client refused ${method} ${label}`);
-    const res = await fetch(
-      url,
-      body === undefined ? { method, headers } : { method, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
-    );
-    if (!res.ok) {
+    const waits = method === 'GET' ? RETRY_WAITS : [];
+    for (let attempt = 0; ; attempt++) {
+      const last = attempt >= waits.length;
+      let res;
+      try {
+        res = await fetch(
+          url,
+          body === undefined ? { method, headers } : { method, headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+        );
+      } catch (error) {
+        if (last) throw error;
+        await sleep(waits[attempt]);
+        continue;
+      }
+      if (res.ok) return res;
+      if (!last && TRANSIENT.includes(res.status)) {
+        await sleep(waits[attempt]);
+        continue;
+      }
       throw Object.assign(new Error(`GitHub ${method} ${label} returned ${res.status}: ${(await res.text()).slice(0, 300)}`), { status: res.status });
     }
-    return res;
   }
 
   const urlOf = (path, query = {}) => {

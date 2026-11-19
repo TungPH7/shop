@@ -62,10 +62,19 @@ const BACKUP_FILE = /\.agekey\b|\.dump\.age\b|ao-backups|ao-backup-pull|(?:^|[\s
 // keeps in the project. Round 4 added the usual spellings of the mark: BEGIN with the kind of key, the regex forms of the
 // space and the dashes. Like USER_VARIABLES above, this catches mistakes, not an agent set on reading the keys (it runs
 // as you, and the kit says so in lib/agents/launch.mjs); holding the App keys away from it needs another account.
-// The headers of a PEM block are upper case words with single spaces (BEGIN RSA PRIVATE KEY, BEGIN OPENSSH PRIVATE KEY):
-// matched in upper case only, as whole words, so a SQL transaction (BEGIN; … PRIMARY KEY) or a test title (begins
-// recording) is not a key search (review round 5 of shop PR #21).
-const PEM_HEADER = /\bBEGIN (?:RSA|EC|DSA|OPENSSH|ENCRYPTED|PRIVATE)\b|\bBEGIN (?:\[A-Z ?\]\*? ?|[A-Z]+ ){0,3}KEY\b/;
+// The headers of a PEM block (BEGIN RSA PRIVATE KEY, BEGIN OPENSSH PRIVATE KEY), as a search writes them: in any case,
+// with any number of spaces, or with a regex form between the words. Each regex form (REGEX_GAP: \s, \S, \w, \x20, a
+// dot, a class such as [A-Z ] or [[:space:]], with its count) becomes GAP first. Then BEGIN, spaces or gaps, and the
+// kind of key is a search; so is BEGIN, a gap and KEY within a few words (BEGIN.*KEY, BEGIN [A-Z ]*KEY); and so is the
+// upper case header with single spaces. Review round 5 of shop PR #21 matched only the last of these, so grep -ri
+// "begin rsa" and BEGIN.*KEY passed (review of shop PR #74, Medium). Still no key search: a SQL transaction (BEGIN; …
+// PRIMARY KEY), a test title (begins recording, begin the key step), a word glued to begin (BeginKeyTest).
+const GAP = '\u0001';
+const REGEX_GAP = /(?:\\[sSwW]|\\x20|\.|\[(?:[^[\]]|\[:[a-z]+:\])+\])(?:[*+?]|\{\d*,?\d*\})?/g;
+const KEY_KIND = /\bbegin[ \u0001]+\(?(?:\?:)?(?:rsa|ec|dsa|openssh|encrypted|private|pgp)\b/i;
+const KEY_GAP = /\bbegin[ \u0001]*\u0001[ \u0001a-z]{0,40}?key\b/i;
+const PEM_UPPER = /\bBEGIN (?:[A-Z]+ ){0,3}KEY\b/;
+const PEM_HEADER = { test: (text) => [KEY_KIND, KEY_GAP, PEM_UPPER].some((header) => header.test(text.replace(REGEX_GAP, GAP))) };
 const KEY_WORDS = /PRIVATE(?:.{0,3}|\[\[:space:\]\])KEY|AGE.{0,2}SECRET.{0,2}KEY|-{5}BEGIN|-\{\d\}\s*BEGIN/i;
 const KEY_MARK = { test: (text) => KEY_WORDS.test(text) || PEM_HEADER.test(text) };
 const KEY_SEARCH = 'do not search for a private key: ao-pr.mjs and git get the tokens of your role for you; to scan the project for committed keys, use Grep, or git grep alone on its line from a folder of the project';
@@ -181,6 +190,17 @@ const ASSIGNMENT = /^[A-Za-z_]\w*=/;
 // the way bash, PowerShell or cmd expand it. Any process on the machine can read a command line, so the password goes
 // to curl on stdin: printf, a builtin of the shell, prints it into the pipe (Pilot 2, T6: qa ran curl -u).
 const PASSWORD_REFERENCE = /\$(?:\{|env:)?(?:E2E_HTTP_PASSWORD|AO_ENV_AUTH)\b|%(?:E2E_HTTP_PASSWORD|AO_ENV_AUTH)%/i;
+const PASSWORD_SET_CHECK = /\$\{(?:E2E_HTTP_PASSWORD|AO_ENV_AUTH):?\+[^}$`]*\}/gi;
+const PASSWORD_BUILTINS = ['printf', '[', '[[', 'test'];
+// A copy or a delete of a tree that holds node_modules, or of the whole apps folder (request SHOP-54 of shop: ux copied
+// apps into a temp folder to try a check). A copy fills the disk; a delete through a link of pnpm once emptied the
+// node_modules of the project. Like the key search, this catches mistakes: a loop over a variable is not followed.
+const RECURSIVE = { cp: /^-[A-Za-z]*[rRa]|^--(?:recursive|archive)$/, rm: /^-[A-Za-z]*[rR]|^--recursive$/ };
+const HEAVY_TREE = /(?:^|[\\/])node_modules(?:[\\/]|$)|(?:^|[\\/])apps[\\/]?\*?$/;
+const TREE = 'do not copy or delete a folder tree that holds node_modules, or the whole apps folder: a copy fills the disk, and a delete can empty the node_modules of the project through a link of pnpm. To try a check on a copy, take only the files it needs, as in git archive HEAD <paths> | tar -x -C <temp folder>; to reinstall the packages, ask the human';
+const touchesHeavyTree = (program, words) => Boolean(RECURSIVE[program])
+  && words.slice(1).some((word) => RECURSIVE[program].test(word))
+  && words.slice(1).some((word) => !word.startsWith('-') && HEAVY_TREE.test(word));
 const PASSWORD = 'do not put the basic auth password on a command line, where any process can read it: give it to curl on stdin, as in printf \'user = "%s:%s"\\n\' "$E2E_HTTP_USER" "$E2E_HTTP_PASSWORD" | curl -K - <url>';
 // Windows reads program names in any letter case.
 const programOf = (word) => word?.split(/[\\/]/).at(-1).replace(/\.exe$/i, '').toLowerCase();
@@ -234,8 +254,10 @@ function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
     if (program === 'timeout') i++;
     return i < words.length ? checkWords(words.slice(i), role, gates, roster, depth, [...env, ...assignments]) : allow;
   }
-  // Only the builtin itself: /usr/bin/printf is a process of its own.
-  if (words[0] !== 'printf' && words.slice(1).some((word) => PASSWORD_REFERENCE.test(word))) return deny(PASSWORD);
+  // Only the builtins themselves: /usr/bin/printf is a process of its own. printf prints it into a pipe; [, [[ and test
+  // only check it. ${…:+word} gives word or nothing, never the value, so it is no reference (QA SHOP-13 of shop).
+  if (!PASSWORD_BUILTINS.includes(words[0]) && words.slice(1).some((word) => PASSWORD_REFERENCE.test(word.replace(PASSWORD_SET_CHECK, '')))) return deny(PASSWORD);
+  if (touchesHeavyTree(program, words)) return deny(TREE);
   if (program === 'git' && env.some((assignment) => /^GIT_CONFIG/.test(assignment))) return deny(HOOKS);
   const result = program === 'git' ? checkGit(words, gates) : program === 'gh' ? checkGh(words) : (checkOrchestration(words) ?? checkAoPr(words, role, gates));
   if (!result.allow) return result;
@@ -280,6 +302,9 @@ function checkPowerShell(words, role, gates, roster, depth) {
   return deny(STDIN);
 }
 
+// The keywords of bash that may stand before a command, as the first word of a simple command.
+const SHELL_KEYWORDS = new Set(['{', '}', '!', 'do', 'done', 'then', 'else', 'elif', 'fi', 'if', 'while', 'until']);
+
 // The simple commands of a command line, as lists of words, with quotes removed. The leading VAR=value words are
 // dropped from the list and kept in its `env`; a line of assignments alone is an empty list with its `env`.
 function segments(command) {
@@ -299,6 +324,9 @@ function segments(command) {
   const endCommand = () => {
     endWord();
     target = false;
+    // A keyword of the shell is not the command: after do, then or {, the command is the next word (QA SHOP-73 of shop:
+    // printf in a loop or a function was taken for a command named do or {, and the stdin form was refused).
+    while (words.length > 0 && SHELL_KEYWORDS.has(words[0])) words.shift();
     const start = words.findIndex((w) => !ASSIGNMENT.test(w));
     if (start >= 0) all.push(Object.assign(words.slice(start), { env: words.slice(0, start) }));
     else if (words.length > 0) all.push(Object.assign([], { env: words }));

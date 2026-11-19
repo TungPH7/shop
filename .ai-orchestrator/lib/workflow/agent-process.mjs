@@ -40,6 +40,38 @@ export function killTree(pid, { platform = process.platform, spawnSync, kill }) 
   }
 }
 
+// The processes whose command line names a folder, in any case and with either slash: what an agent started in a
+// worktree and left running. In QA SHOP-28 of shop (Phiên 33), a deploy stopped qa, and its next dev, vite,
+// mvnw spring-boot:run and Playwright went on holding the files, so the worktree could not go and the next QA stopped.
+// On Windows from Win32_Process through PowerShell, elsewhere from ps; this process is left out. [{ pid, command }].
+export function processesUnder(dir, { platform = process.platform, spawnSync, self = process.pid }) {
+  const forms = [...new Set([dir, dir.replaceAll('\\', '/'), dir.replaceAll('/', '\\')])].map((form) => form.toLowerCase());
+  const under = (command) => forms.some((form) => {
+    const at = command.indexOf(form);
+    // The folder itself or a path inside it, not a folder whose name goes on (shop-SHOP-28-qa-other).
+    return at >= 0 && !/[\w.-]/.test(command[at + form.length] ?? '');
+  });
+  let rows = [];
+  if (platform === 'win32') {
+    const listed = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    if (listed.status !== 0 || !listed.stdout?.trim()) return [];
+    const parsed = JSON.parse(listed.stdout);
+    rows = (Array.isArray(parsed) ? parsed : [parsed]).map(({ ProcessId: pid, CommandLine: command }) => ({ pid, command: command ?? '' }));
+  } else {
+    const listed = spawnSync('ps', ['-eo', 'pid=,args='], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    if (listed.status !== 0) return [];
+    rows = listed.stdout.split('\n').map((line) => /^\s*(\d+)\s+(.*)$/.exec(line)).filter(Boolean).map(([, pid, command]) => ({ pid: Number(pid), command }));
+  }
+  return rows.filter(({ pid, command }) => pid !== self && under(command.toLowerCase()));
+}
+
+// Stops the tree of every process that runs from a folder, before the folder goes. Returns their pids.
+export function stopProcessesUnder(dir, { platform = process.platform, spawnSync, kill, self = process.pid }) {
+  const found = processesUnder(dir, { platform, spawnSync, self });
+  for (const { pid } of found) killTree(pid, { platform, spawnSync, kill });
+  return found.map(({ pid }) => pid);
+}
+
 // Runs the agent and resolves { lines, stopped } when its process closes: the lines of its output, and whether it was
 // stopped for staying alive after its result. append(stream, chunk) writes the log files.
 export function startAgentProcess({ spawn, command, args, env, cwd, append, kill, graceMs = EXIT_GRACE_MS, setTimer = setTimeout, clearTimer = clearTimeout }) {

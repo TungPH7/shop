@@ -7,7 +7,7 @@ const ITEM_FIELDS = ['issuetype', 'status', 'labels', 'description', 'parent', '
 // dor-met as automation checks it (contract note on `refine`): a Story or Task under an Epic whose plan is approved,
 // that is an Epic in progress, and with a description.
 const DOR_TYPES = ['story', 'task'];
-const JIRA_GUARDS = ['dor-met', 'wip-available', 'subtasks-done', 'qa-report-failed', 'qa-report-passed'];
+const JIRA_GUARDS = ['dor-met', 'wip-available', 'subtasks-done', 'qa-report-failed', 'qa-report-passed', 'ops-task', 'ops-evidence'];
 const BLOCKS = new Set(['paragraph', 'heading', 'listItem', 'codeBlock', 'blockquote', 'tableRow', 'rule', 'mediaSingle', 'panel']);
 
 export async function readItem(client, key) {
@@ -38,6 +38,8 @@ export async function jiraGuards(client, { key, item, actor, needed, contract, m
     'subtasks-done': () => current.subtasks.every(({ done }) => done),
     'qa-report-failed': async () => (await latestQaResult()) === 'FAIL',
     'qa-report-passed': async () => (await latestQaResult()) === 'PASS',
+    'ops-task': () => isOpsTask(current, mapping),
+    'ops-evidence': () => opsEvidence(client, current.key, contract, mapping),
   };
   const holds = [];
   for (const guard of needed.filter((id) => JIRA_GUARDS.includes(id))) if (await check[guard]()) holds.push(guard);
@@ -57,16 +59,40 @@ function dorMet(item, contract, mapping) {
 
 // The agent's in-progress work, counted by Sub-task when a Story has Sub-tasks, else by item (contract wip_limits).
 async function wipAvailable(client, item, actor, contract, mapping) {
+  const { keys, limit } = await wipHolders(client, { space: item.key.slice(0, item.key.lastIndexOf('-')), actor, contract, mapping });
+  return keys.length < limit;
+}
+
+// The items In Progress that hold the WIP of a dev role, and its limit: { keys, limit }. A Story with Sub-tasks does not
+// count; its Sub-task of the role does. ao-step reads it again before each build run, since a process lock that ends
+// does not mean the item left In Progress on Jira (Pilot 3, SHOP-31 after SHOP-58).
+export async function wipHolders(client, { space, actor, contract, mapping }) {
   const field = contract.work_item_fields.find(({ id }) => id === 'agent');
   const index = field.values.findIndex(({ id }) => id === actor);
   if (index === -1) throw new Error(`No Agent value for role '${actor}'`);
   const agent = expectedOptions(contract, mapping, 'agent')[index];
   const workflows = Object.entries(contract.workflows).filter(([, w]) => w.applies_to.some((type) => field.applies_to.includes(type)));
   const statuses = [...new Set(workflows.map(([id]) => mapping.workflows[id].states['in-progress']?.status).filter(Boolean))];
-  const space = item.key.slice(0, item.key.lastIndexOf('-'));
   const jql = `project = "${space}" AND "${mapping.fields.agent.jira_field}" = "${agent}" AND status in (${statuses.map((s) => `"${s}"`).join(', ')})`;
   const busy = (await client.searchAll(jql, ['subtasks'])).filter(({ fields }) => (fields.subtasks ?? []).length === 0);
-  return busy.length < contract.wip_limits.find(({ id }) => id === 'dev-agent').limit;
+  return { keys: busy.map(({ key }) => key), limit: contract.wip_limits.find(({ id }) => id === 'dev-agent').limit };
+}
+
+// An ops Task: the label ao-ops, no commit and no PR (kit followups, batch 4 item 14; SHOP-12 of shop).
+export const isOpsTask = (item, mapping) => (item.labels ?? []).includes(mapping.work_labels.ops);
+
+// Whether devops left its evidence on an ops Task: a comment that starts with its Agent value and has the heading Ops
+// evidence, a block of its own, as Rovo MCP stores the markdown ## Ops evidence.
+async function opsEvidence(client, key, contract, mapping) {
+  const field = contract.work_item_fields.find(({ id }) => id === 'agent');
+  const devops = expectedOptions(contract, mapping, 'agent')[field.values.findIndex(({ id }) => id === 'devops')];
+  const comments = await client.getAll(`/rest/api/3/issue/${encodeURIComponent(key)}/comment`, { orderBy: '-created' }, 'comments');
+  return comments.some(({ body }) => {
+    if (!adfText(body).startsWith(`${devops}:`)) return false;
+    // Markdown as a string, or ADF with the heading as a block.
+    if (typeof body === 'string') return body.split('\n').some((line) => /^#{1,6}\s*ops evidence\s*$/i.test(line.trim()));
+    return (body?.content ?? []).some((block) => block.type === 'heading' && /^ops evidence$/i.test(adfText(block).trim()));
+  });
 }
 
 async function readLatestQaResult(client, key) {
@@ -141,7 +167,8 @@ export async function githubGuards(github, { item, needed, contract, mapping, ap
   const intoBase = (pr) => checkBranch(pr.head.ref, { workType, base: pr.base.ref }).ok;
 
   const check = {
-    'branch-created': async () => (await branchesOf(github, item.key)).some((name) => checkBranch(name, { workType }).ok),
+    // An ops Task has no branch (contract guard branch-created).
+    'branch-created': async () => isOpsTask(item, mapping) || (await branchesOf(github, item.key)).some((name) => checkBranch(name, { workType }).ok),
     'dependencies-merged': async () => {
       for (const key of item.blockedBy) {
         const [pr] = await pullsOf(key);

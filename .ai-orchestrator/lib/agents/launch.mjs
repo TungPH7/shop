@@ -19,6 +19,13 @@ export const CLEARED_ENV = [
   'JIRA_CI_TOKEN', 'JIRA_ADMIN_TOKEN', 'AO_JIRA_READ_TOKEN', 'AO_ENV_AUTH',
 ];
 
+// Settings of Git Bash that would hold for every command of an agent's session. ao-step runs with MSYS_NO_PATHCONV=1,
+// and an agent that got it could not run ./mvnw ("Could not find or load main class
+// org.codehaus.plexus.classworlds.launcher.Launcher") or the pnpm shim ("Cannot find module 'D:\c\Program Files\…'"),
+// since /c/... paths then reached Windows programs as they were (SHOP-44, SHOP-21 of shop, Pilot 3). An agent puts it in
+// front of the one command that needs it, as the rules say.
+export const SHELL_CLEARED_ENV = ['MSYS_NO_PATHCONV', 'MSYS2_ARG_CONV_EXCL'];
+
 // The command git runs for a credential, before the role and the repository. git runs it through the shell, so the
 // folder is quoted, and a folder the shell would still read inside the quotes is refused.
 export function credentialHelper(kitDir) {
@@ -50,7 +57,7 @@ export function launchPlan({ role, roster, args, skills, projectDir, identity })
     path,
     ...(unattended && entry.max_turns && !args.includes('--max-turns') ? ['--max-turns', String(entry.max_turns)] : []),
   ];
-  return { command: 'claude', args: [...ours, ...args], skillsFile: { path, text: `${parts.join('\n\n')}\n` }, env: agentEnv(role, identity), clear: CLEARED_ENV };
+  return { command: 'claude', args: [...ours, ...args], skillsFile: { path, text: `${parts.join('\n\n')}\n` }, env: agentEnv(role, identity), clear: [...CLEARED_ENV, ...SHELL_CLEARED_ENV] };
 }
 
 // gh reads with the token in GH_TOKEN. For credentials git reads only the settings below: the empty credential.helper

@@ -12,7 +12,7 @@ You check one deployed item against its acceptance criteria and post the QA repo
 
 1. Read the item with `getJiraIssue`. It is in Ready for QA and deployed to the QA environment the routing table names. Read its SPEC, `design.md` and merged PR.
 2. Fill the Agent field with your value, then make the Pick up transition.
-3. Run the project's E2E against the QA environment, in the worktree your prompt names: `E2E_BASE_URL` is the URL of the environment, and on Development and Staging `E2E_HTTP_USER` and `E2E_HTTP_PASSWORD` hold its basic auth. When the project has more than one public app, each on its own host, your prompt names them, and `E2E_<APP>_URL` holds the URL of each, such as `E2E_ADMIN_URL`; check each criterion on the app it belongs to. Tests tagged `@local` run against the server Playwright starts in the worktree.
+3. Run the project's E2E against the QA environment, in the worktree your prompt names: `E2E_BASE_URL` is the URL of the environment, and on Development and Staging `E2E_HTTP_USER` and `E2E_HTTP_PASSWORD` hold its basic auth. When the project has more than one public app, each on its own host, your prompt names them, and `E2E_<APP>_URL` holds the URL of each, such as `E2E_ADMIN_URL`; check each criterion on the app it belongs to. Tests tagged `@local` run against the server Playwright starts in the worktree. Docker is already running when your run starts, since ao-step checks it for a project with a Java app. Never start, stop or restart Docker Desktop yourself. When a test still cannot reach Docker, report it as not run, with the reason.
 4. Check each acceptance criterion:
    - Give each verdict the evidence that fits it: a screenshot for the UI, taken with playwright-cli; the test name or a recorded result for behaviour.
    - Write the criterion next to what you observed.
@@ -59,7 +59,7 @@ Basic auth:
 
 - Keep `E2E_HTTP_PASSWORD` off every command line: any process on the machine can read one. Playwright and the E2E tests read it from the environment.
 - To call the environment with curl, give it the credentials on stdin: `printf 'user = "%s:%s"\n' "$E2E_HTTP_USER" "$E2E_HTTP_PASSWORD" | curl -K - "$E2E_BASE_URL/<path>"`. `printf` is a shell builtin, so the password reaches no command line. Never use `curl -u`, `--user`, or a URL with `user:password@`.
-- gh-guard refuses any other command whose arguments name `E2E_HTTP_PASSWORD`.
+- gh-guard refuses any other command whose arguments name `E2E_HTTP_PASSWORD`, except a check of whether it is set, which gives no value: `[ -n "$E2E_HTTP_PASSWORD" ]` or `${E2E_HTTP_PASSWORD:+set}`.
 
 A criterion without an E2E test is FAIL, not NOT TESTED, because the Story's Definition of Done asks for one.
 

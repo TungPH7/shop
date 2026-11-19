@@ -19,6 +19,8 @@ const KEY = /^[A-Z][A-Z0-9_]*-\d+$/;
 // Written in a lane once its packages are installed and its files copied: git ignores .ai/. A lane without it was cut
 // short, so the next run finishes it (review of shop PR #21: one whose install failed was taken as ready).
 const READY = join('.ai', 'lane-ready');
+// How long a mark of removal holds a lane: longer, and the command that wrote it died (markRemoval).
+const REMOVAL_MARK_MS = 10 * 60_000;
 
 export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtected, settings, busy = () => false, sleep = (ms) => new Promise((done) => setTimeout(done, ms)) }) {
   const git = gitIn(projectDir);
@@ -155,54 +157,160 @@ export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtecte
     return Number(ahead.stdout.trim()) > 0 ? 'commits not pushed' : null;
   }
 
+  // A mark that one command removes a lane, next to the lanes: two commands that prune at once remove it once (Phiên 33
+  // of shop: /ao-build SHOP-15 and SHOP-18 both removed three merged lanes, took the .git of a lane from under each
+  // other, and left the folders). A mark older than ten minutes was left by a command that died. Returns the function
+  // that drops the mark, or null while another command holds it.
+  function markRemoval(key) {
+    fs.mkdirSync(root, { recursive: true });
+    const mark = join(root, `.remove-${key}`);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        fs.writeFileSync(mark, `${process.pid}\n`, { flag: 'wx' });
+        return () => fs.rmSync(mark, { force: true });
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+        let age;
+        try {
+          age = Date.now() - fs.statSync(mark).mtimeMs;
+        } catch (gone) {
+          if (gone.code === 'ENOENT') continue;
+          throw gone;
+        }
+        if (age <= REMOVAL_MARK_MS) return null;
+        fs.rmSync(mark, { force: true });
+      }
+    }
+    return null;
+  }
+
+  const removePackages = (dir) => removeNodeModules(fs, dir);
+
+  // A folder git no longer knows as a worktree goes: what git worktree remove leaves on Windows, such as the root files
+  // and test-results (SHOP-19, SHOP-49 of shop). Whether it went.
+  function removeFolder(dir) {
+    if (fs.existsSync(dir) && !exists(dir)) {
+      removePackages(dir);
+      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+    }
+    return !fs.existsSync(dir);
+  }
+
+  // The folders of the lane folder that git no longer knows as worktrees: what a removal left, or a lane git could not
+  // add. None holds work: a lane went only once its PR was merged or closed and its work pushed. The folder of an item
+  // another command runs on stays: it may be the reserved folder of a lane that command is making.
+  function leftovers() {
+    if (!fs.existsSync(root)) return [];
+    return fs
+      .readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && KEY.test(entry.name) && !exists(join(root, entry.name)) && !busy(entry.name))
+      .map(({ name }) => ({ key: name, dir: join(root, name) }));
+  }
+
   // The lanes whose PR is merged or closed go: their ledgers come back to the project folder first. A lane with work
-  // that is not pushed stays, and is named. Resolves notes.
+  // that is not pushed stays, and is named. What git left of a lane goes too. Resolves notes.
   async function prune() {
+    const notes = [];
+    for (const left of leftovers()) {
+      const release = markRemoval(left.key);
+      if (!release) continue;
+      try {
+        if (removeFolder(left.dir)) notes.push(`Removed what was left of the lane of ${left.key}: git no longer knows it as a worktree.`);
+        else notes.push(`What was left of the lane of ${left.key} is still at ${left.dir}: remove that folder by hand.`);
+      } finally {
+        release();
+      }
+    }
     const lanes = list();
-    if (lanes.length === 0) return [];
+    if (lanes.length === 0) return notes;
     const pulls = [];
     for (const { branch } of lanes) if (branch) pulls.push(...(await pullsOf(branch)).map((pr) => ({ ...pr, headRef: branch })));
-    const notes = [];
     for (const lane of lanesToPrune(lanes, pulls)) {
       // Another command may be between making the lane and putting it on a new branch (review round 2 of shop PR #21).
       if (busy(lane.key)) {
         notes.push(`The lane of ${lane.key} stays: another command runs on ${lane.key}.`);
         continue;
       }
-      const merged = pulls.some(({ headRef, state }) => headRef === lane.branch && state === 'merged');
-      const held = unsaved(lane, merged);
-      if (held) {
-        notes.push(`The lane of ${lane.key} stays at ${lane.dir}: its PR is ${merged ? 'merged' : 'closed'}, but it has ${held}. Look at it, then remove it with git worktree remove.`);
+      const release = markRemoval(lane.key);
+      if (!release) {
+        notes.push(`The lane of ${lane.key} stays: another command is removing it.`);
         continue;
       }
-      const ledgers = join(lane.dir, '.ai', 'ledger');
-      // A ledger comes back unless the project folder has it newer, such as one qa wrote there after the lane did (review
-      // round 2 of shop PR #21).
-      const ledgerFiles = fs.existsSync(ledgers) ? fs.readdirSync(ledgers).filter((name) => name.endsWith('.md')) : [];
-      const home = (name) => join(projectDir, '.ai', 'ledger', name);
-      const newerHome = ledgerFiles.filter((name) => fs.existsSync(home(name)) && fs.statSync(home(name)).mtimeMs > fs.statSync(join(ledgers, name)).mtimeMs);
-      const back = ledgerFiles.filter((name) => !newerHome.includes(name));
-      for (const name of back) {
-        fs.mkdirSync(join(projectDir, '.ai', 'ledger'), { recursive: true });
-        fs.copyFileSync(join(ledgers, name), home(name));
+      try {
+        // Another command that pruned at the same time removed it already.
+        if (exists(lane.dir)) notes.push(removeLane(lane, pulls.some(({ headRef, state }) => headRef === lane.branch && state === 'merged')));
+      } finally {
+        release();
       }
-      // The screenshots and API samples of the item's dev agents (review of shop PR #21).
-      const preview = join('.ai', 'runs', lane.key, 'preview');
-      const previewBack = fs.existsSync(join(lane.dir, preview));
-      if (previewBack) fs.cpSync(join(lane.dir, preview), join(projectDir, preview), { recursive: true });
-      const kept = [
-        ...(back.length > 0 ? ['its ledgers are back in .ai/ledger/'] : []),
-        ...newerHome.map((name) => `.ai/ledger/${name} of the project folder is newer and stays`),
-        ...(previewBack ? [`its preview in .ai/runs/${lane.key}/preview/`] : []),
-      ];
-      const removed = git('worktree', 'remove', '--force', lane.dir);
-      notes.push(removed.status === 0 ? `Removed the lane of ${lane.key}: its PR is ${merged ? 'merged' : 'closed'}${kept.length > 0 ? `; ${kept.join(', ')}` : ''}.` : `The lane of ${lane.key} could not be removed: ${(removed.stderr || removed.stdout).trim()}`);
     }
     git('worktree', 'prune');
     return notes;
   }
 
+  // One lane whose PR is merged or closed: its ledgers and preview back in the project folder, its node_modules, the
+  // worktree, then what git left. The note of what happened.
+  function removeLane(lane, merged) {
+    const held = unsaved(lane, merged);
+    if (held) return `The lane of ${lane.key} stays at ${lane.dir}: its PR is ${merged ? 'merged' : 'closed'}, but it has ${held}. Look at it, then remove it with git worktree remove.`;
+    const ledgers = join(lane.dir, '.ai', 'ledger');
+    // A ledger comes back unless the project folder has it newer, such as one qa wrote there after the lane did (review
+    // round 2 of shop PR #21).
+    const ledgerFiles = fs.existsSync(ledgers) ? fs.readdirSync(ledgers).filter((name) => name.endsWith('.md')) : [];
+    const home = (name) => join(projectDir, '.ai', 'ledger', name);
+    const newerHome = ledgerFiles.filter((name) => fs.existsSync(home(name)) && fs.statSync(home(name)).mtimeMs > fs.statSync(join(ledgers, name)).mtimeMs);
+    const back = ledgerFiles.filter((name) => !newerHome.includes(name));
+    for (const name of back) {
+      fs.mkdirSync(join(projectDir, '.ai', 'ledger'), { recursive: true });
+      fs.copyFileSync(join(ledgers, name), home(name));
+    }
+    // The screenshots and API samples of the item's dev agents (review of shop PR #21).
+    const preview = join('.ai', 'runs', lane.key, 'preview');
+    const previewBack = fs.existsSync(join(lane.dir, preview));
+    if (previewBack) fs.cpSync(join(lane.dir, preview), join(projectDir, preview), { recursive: true });
+    const kept = [
+      ...(back.length > 0 ? ['its ledgers are back in .ai/ledger/'] : []),
+      ...newerHome.map((name) => `.ai/ledger/${name} of the project folder is newer and stays`),
+      ...(previewBack ? [`its preview in .ai/runs/${lane.key}/preview/`] : []),
+    ];
+    removePackages(lane.dir);
+    const removed = git('worktree', 'remove', '--force', lane.dir);
+    if (removeFolder(lane.dir)) return `Removed the lane of ${lane.key}: its PR is ${merged ? 'merged' : 'closed'}${kept.length > 0 ? `; ${kept.join(', ')}` : ''}.`;
+    return `The lane of ${lane.key} could not be removed: ${(removed.stderr || removed.stdout).trim() || `${lane.dir} is still there`}`;
+  }
+
   return { list, ensure, placeOf, checkout, ledgerExists, prune, note: laneNote };
+}
+
+// Every node_modules of a folder, a lane or the worktree of a review or of qa, at any depth, the links of Next.js dev under .next included, as a folder or as a link.
+// rmSync takes a link away, a junction of pnpm too, and not what it points to (checked on Windows, 2026-11-19).
+// git worktree remove --force on Windows could not delete those trees, about 2,000 junctions a lane, and left the lane
+// folder, which still counted against runs.lanes_max (Phiên 33 of shop, SHOP-13 to SHOP-49).
+export function removeNodeModules(fs, dir) {
+  let entries;
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const path = join(dir, entry.name);
+    if (entry.name === 'node_modules' && (entry.isDirectory() || entry.isSymbolicLink())) fs.rmSync(path, { recursive: true, force: true, maxRetries: 3 });
+    else if (entry.isDirectory() && entry.name !== '.git') removeNodeModules(fs, path);
+  }
+}
+
+// The files of runs.copy, such as the .env of each app, from the project into a folder: a lane, or the worktree where
+// qa runs the E2E. Before, every qa run wrote its own runner to load them from the project (QA SHOP-65, SHOP-67,
+// SHOP-68 of shop, Pilot 3). A file the project does not have is left out. Returns the paths copied.
+export function copyRunFiles(fs, from, to, paths) {
+  return paths.filter((path) => {
+    const source = join(from, path);
+    if (!fs.existsSync(source)) return false;
+    const target = join(to, path);
+    fs.mkdirSync(dirname(target), { recursive: true });
+    fs.copyFileSync(source, target);
+    return true;
+  });
 }
 
 // The runs part of project.yaml, checked: { worktrees, lanesMax, minFreeRamGb, portStep, copy, laneEnv }. Off and one lane when

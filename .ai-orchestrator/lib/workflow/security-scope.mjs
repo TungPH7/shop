@@ -11,6 +11,15 @@ export const MAX_DELTA_LINES = 300;
 
 const plural = (n) => `${n} Critical or High finding${n === 1 ? '' : 's'}`;
 
+// The files of the compare since a report that the PR itself changes, by its own diff against its base (prFiles, the
+// paths of /pulls/<n>/files). A merge of develop into the branch, to clear a conflict, brings the code of other PRs into
+// the compare, reviewed already in those PRs: PR #41 of shop counted 3,749 lines, most of them SHOP-20 and SHOP-21, and
+// security ran at max on them (Pilot 3). A renamed file counts by either of its names.
+export function ownChanges(compareFiles, prFiles) {
+  const own = new Set(prFiles);
+  return compareFiles.filter(({ filename, previous_filename: previous }) => own.has(filename) || (previous && own.has(previous)));
+}
+
 // report: the newest security report as facts give it ({ sha, at, ok, blocking, open, onHead }), or null. full: the
 // newest full one, the same when the newest has no Scope line; null when there is none. compare: GitHub's compare of the
 // full report's commit X with the head ({ status, files }), or null.

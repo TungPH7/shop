@@ -23,11 +23,7 @@ coverage:
 # npm audit fails on this level and above. An exception names a GitHub advisory, why it is accepted, and when it ends.
 dependencies:
   audit_level: high
-  exceptions:
-    # Accepted by you on 2026-11-18 (Phiên 33): no fixed picomatch exists yet.
-    - advisory: GHSA-fc5q-39xc-vjpf
-      reason: "picomatch ReDoS, no fixed version yet (4.0.7 is the newest); in shop it reads only glob patterns of our own config (lint, vite, lint-staged, the dev watcher of next-intl), never input from a user"
-      expires: "2026-12-31"
+  exceptions: []
 
 # Lines that switch a check off. A line that also carries the reason marker passes, so the reviewer can read why;
 # a `never` pattern fails even with a reason.
