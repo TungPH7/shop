@@ -11,7 +11,8 @@ const round = (usd) => Math.round(usd * 1e6) / 1e6;
 // lines: the log as lines. previous: what readRun gave for the run this one resumed, if any. Returns
 //   { outcome, session, model, turns, durationMs, tokens, costUsd, cumulative, denials, text }
 // outcome is done, max-turns, usage-limit, error, or unfinished when the log has no result event (the process was
-// stopped). tokens and costUsd are this run's; cumulative is the session's so far, for the run that resumes it.
+// stopped) or its success result has an empty answer. tokens and costUsd are this run's; cumulative is the session's so
+// far, for the run that resumes it.
 export function readRun(lines, previous) {
   const events = lines.flatMap((line) => {
     if (!line.startsWith('{')) return [];
@@ -35,6 +36,10 @@ export function readRun(lines, previous) {
     tokens: { input: sum('inputTokens'), output: sum('outputTokens'), cacheRead: sum('cacheReadInputTokens'), cacheWrite: sum('cacheCreationInputTokens') },
   };
   const before = previous?.session === session && previous.cumulative ? previous.cumulative : { costUsd: 0, tokens: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+  // The session's cost comes with a result only. A run stopped before its result has no cost to read: unknown (null),
+  // not 0 minus the session's cost so far (T18 of Pilot 3: SHOP-39 run 2 read −5.77 USD), and the session's cumulative
+  // stays that of the run before, for the run that goes on after it.
+  if (!last) return { outcome: 'unfinished', session, model: init?.model ?? null, turns: 0, durationMs: 0, tokens: null, costUsd: null, cumulative: before, denials: [], text: '' };
   return {
     outcome: outcomeOf(last),
     session,
@@ -64,6 +69,9 @@ function outcomeOf(result) {
   if (result.subtype === 'error_max_turns') return 'max-turns';
   if (result.is_error && (result.api_error_status === 429 || LIMIT_TEXT.test(result.result ?? ''))) return 'usage-limit';
   if (result.is_error || result.subtype !== 'success') return 'error';
+  // An agent always ends with its report: success with nothing to say means it ended its turn while a command it
+  // started in the background still ran (QA SHOP-64 of shop, Pilot 3). It goes on in its session, not as done.
+  if (!String(result.result ?? '').trim()) return 'unfinished';
   return 'done';
 }
 

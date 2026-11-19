@@ -32,7 +32,14 @@ $ARGUMENTS
   When the request is a new capability, changes what a Bug was expected to do, or changes the direction of the Epic,
   say so and stop: that goes through `/ao-intake`, not this PR. Add `--change <word>` with the human's answer to the
   command below; the word is one of the five above, never their own words.
-- On STOP, and no text after the PR number, tell the human the reason and the command or clicks it names, in
+- When the STOP says CI is red on a Story with a BE and an FE Sub-task:
+  1. Read the failed job with `gh run view <run> --log-failed`.
+  2. Find the failing file: `apps/<app>/…` of a back end is `be:`, of a front end is `fe:`.
+  3. Write one line with that prefix and what to fix to `.ai/runs/<KEY>/note.md`.
+  4. Run the command below with `--note .ai/runs/<KEY>/note.md`.
+
+  When the log does not show which side broke, ask the human.
+- On any other STOP, and no text after the PR number, tell the human the reason and the command or clicks it names, in
   Vietnamese, and stop. With such text, a STOP that says there is nothing to fix does not count: go on.
 - On GO, or with such text, run `node .ai-orchestrator/scripts/ao-step.mjs fix $0 --go` with the Bash tool in the
   background, with a timeout of 7200000 ms, and wait for its notification. Do not poll.

@@ -13,6 +13,7 @@ import { changesRequestedOn, githubGuards, jiraGuards, qaEnvironment, readChecks
 import { latestFlagComment } from '../tracker/flags.mjs';
 import { countRework } from '../tracker/rework.mjs';
 import { openRequests } from './requests.mjs';
+import { ownChanges } from './security-scope.mjs';
 import { cutPoint } from '../release/cut.mjs';
 import { parseHistory } from '../release/release-cut.mjs';
 import { regressionResult } from '../release/release-pr.mjs';
@@ -71,6 +72,9 @@ export async function readWorkItem(jira, key, ctx) {
     summary: fields.summary,
     labels,
     ...workLabels(labels, mapping, roster),
+    // An ops Task, and the basic auth you gave devops for it (kit followups, batch 4 item 14).
+    ops: labels.includes(mapping.work_labels.ops),
+    envAuth: labels.includes(mapping.work_labels.env_auth),
     agent: Object.keys(names).find((role) => names[role] === fields[agentField]?.value) ?? null,
     rework: workType ? countRework(histories, { contract, mapping, workType }) : 0,
     flagged,
@@ -168,11 +172,14 @@ export async function readPullRequest(github, number, { gates, apps, approvers =
     title: pr.title,
     body: pr.body ?? '',
     state: pr.state,
-    securityCompare: compare && { base: since, status: compare.status, files: (compare.files ?? []).map(({ filename, previous_filename: previous, additions, deletions }) => ({ filename, previous_filename: previous, additions, deletions })) },
+    // Only the files the PR changes itself: a merge of develop into its branch brings no new part (PR #41 of shop).
+    securityCompare: compare && { base: since, status: compare.status, files: ownChanges((compare.files ?? []).map(({ filename, previous_filename: previous, additions, deletions }) => ({ filename, previous_filename: previous, additions, deletions })), files.map(({ filename }) => filename)) },
     merged: Boolean(pr.merged_at),
     mergeCommit: pr.merged_at ? pr.merge_commit_sha : null,
     mergedAt: pr.merged_at ?? null,
     draft: Boolean(pr.draft),
+    // dirty: the PR conflicts with its base, and GitHub runs no workflow of pull_request on it (PR #57 of shop).
+    conflicts: pr.mergeable_state === 'dirty',
     // A PR from a fork may share the name of a branch here; /ao-preview runs only branches of this repository. Only a
     // head and base both named this repository count as one: GitHub gives head.repo null once the fork is deleted
     // (live-run-fixes spec 2.8).
@@ -282,7 +289,9 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
   // /ao-qa reads deployments with your gh login (`deploys`): the read token of ao-review may not (release-workflow T12).
   const qa = command === 'qa' && pr ? await readQaFacts(ctx.deploys, pr, ctx) : undefined;
   // After QA fail the PR of an item In Progress is merged: /ao-build reads the newest QA report (human-loop spec 5.2).
-  const qaReport = command === 'build' && item.state === 'in-progress' && pr?.merged ? await readLatestQaReport(jira, item.key) : undefined;
+  // /ao-qa --retest reads it for an item In QA: it runs again only after a NOT TESTED report.
+  const reportNeeded = (command === 'build' && item.state === 'in-progress' && pr?.merged) || (command === 'qa' && item.state === 'in-qa');
+  const qaReport = reportNeeded ? await readLatestQaReport(jira, item.key) : undefined;
   // A kit another project reviewed needs no agent (kit-copy-review spec 2.1). Only on an open PR with green CI, which
   // /ao-review would review, and while a report is missing on its head: the compare reads GitHub and renders the agents
   // (review of ao-pilot PR #24). ctx.kitCopy(pr) resolves to null when the PR claims no such thing.
@@ -303,6 +312,8 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
     ...(qaReport !== undefined && { qaReport }),
     ...(kitCopy && { kitCopy }),
     wip: await readWip(jira, item, ctx),
+    // A New Story or Task that meets DoR: /ao-build asks jira-sync to refine it (SHOP-39 of shop, Phiên 33).
+    ...(command === 'build' && item.state === 'new' && { refinable: (await jiraGuards(jira, { key: item.key, actor: 'automation', needed: ['dor-met'], contract: ctx.contract, mapping: ctx.mapping })).includes('dor-met') }),
     ledger: local.ledger(item.key),
     // The Sub-tasks with a ledger: the agents of a split Story keep one per Sub-task.
     subtaskLedgers: (item.subtasks ?? []).filter(({ key: sub }) => local.ledger(sub)).map(({ key: sub }) => sub),

@@ -32,6 +32,14 @@ workflows:
         to: in-review
         actors: [automation]
         guards: [subtasks-done, pr-open, ci-green]
+      # A Task vận hành (label ao-ops) has no commit and no PR, such as data put in through an API (SHOP-12 of shop, Pilot
+      # 3): devops hands it to QA once its evidence is on the item.
+      - id: hand-over
+        from: in-progress
+        to: ready-for-qa
+        actors: [devops]
+        guards: [ops-task, ops-evidence]
+        note: "Chỉ Task vận hành: không có PR, devops ghi bằng chứng rồi giao cho QA"
       - id: request-changes
         from: in-review
         to: in-progress
@@ -134,7 +142,7 @@ guards:
     description: "Các item phụ thuộc đã merge vào nhánh gốc"
     evidence: { source: git }
   branch-created:
-    description: "Đã tạo nhánh từ đúng nhánh gốc (mục 2.6), có trên GitHub"
+    description: "Đã tạo nhánh từ đúng nhánh gốc (mục 2.6), có trên GitHub. Task vận hành (nhãn ao-ops) không cần nhánh"
     evidence: { source: git }
   subtasks-done:
     description: "Mọi Sub-task của item đã done"
@@ -185,7 +193,13 @@ guards:
     description: "Mọi item con đã Done hoặc Cancelled"
     evidence: { source: tracker }
   children-released:
-    description: "Mọi item con đã Done nằm trong một bản đã lên Production"
+    description: "Mọi item con đã Done nằm trong một bản đã lên Production, trừ Task vận hành (nhãn ao-ops), vốn không có commit"
+    evidence: { source: tracker }
+  ops-task:
+    description: "Item là Task vận hành: có nhãn ao-ops, không có commit hay PR"
+    evidence: { source: tracker }
+  ops-evidence:
+    description: "devops đã ghi bằng chứng của việc vận hành trong một comment có mục ## Ops evidence"
     evidence: { source: tracker }
   work-committed:
     description: "Phần việc của Sub-task đã được commit lên nhánh của Story"

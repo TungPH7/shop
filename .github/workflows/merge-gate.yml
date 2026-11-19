@@ -6,8 +6,11 @@ name: merge-gate
 
 on:
   workflow_run:
-    # jira-sync runs after every CI run and every review, so merge-gate sees both.
-    workflows: [jira-sync]
+    # jira-sync runs after every CI run and every review, so merge-gate sees both. CI too, by the name of the project's
+    # CI workflow: the merge-back PR #73 of shop (v0.3.0) waited for CI, and the CI run that went green started no
+    # jira-sync, so merge-gate did not run again. A run more is harmless: the concurrency below queues it, and it merges
+    # only what meets every gate.
+    workflows: [jira-sync, CI]
     types: [completed]
   workflow_dispatch:
 

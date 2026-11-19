@@ -12,12 +12,12 @@ export function shiftLocalUrls(value, offset) {
   return String(value).replace(/\b(localhost|127\.0\.0\.1):(\d+)/g, (_, host, port) => `${host}:${Number(port) + offset}`);
 }
 
-// The ports of the apps for a slot: [{ name, port, variable }]. apps: { name: { port: { env, default } } } of
-// project.yaml.
+// The ports of the apps for a slot: [{ name, port, variable, env? }], env the variables of the app in project.yaml with
+// their localhost URLs moved. apps: { name: { port: { env, default }, env } } of project.yaml.
 export function lanePorts(apps, offset) {
   return Object.entries(apps ?? {})
     .filter(([, app]) => Number.isInteger(app?.port?.default))
-    .map(([name, app]) => ({ name, port: app.port.default + offset, variable: app.port.env }));
+    .map(([name, app]) => ({ name, port: app.port.default + offset, variable: app.port.env, ...(app.env && { env: Object.fromEntries(Object.entries(app.env).map(([key, value]) => [key, shiftLocalUrls(value, offset)])) }) }));
 }
 
 // The variables of a run in slot k: AO_PORT_OFFSET, and those of runs.lane_env ({ ports, names }) of project.yaml, each
@@ -38,8 +38,11 @@ export function portsNote(rows, offset, env = {}) {
   if (rows.length === 0) return null;
   const list = rows.map(({ name, port, variable }) => `${name} on ${port} (${variable}=${port})`).join(', ');
   const own = Object.entries(env).filter(([name]) => name !== 'AO_PORT_OFFSET');
+  // An app the agent starts itself reads its .env files, which point at the default ports (review of shop PR #43).
+  const vars = rows.filter((row) => row.env && Object.keys(row.env).length > 0).map(({ name, env: appEnv }) => `${name} with ${Object.entries(appEnv).map(([key, value]) => `${key}=${value}`).join(' ')}`);
   return [
     `Other runs may work next to this one on this machine, and you may run the apps in the project folder. Your apps use their own ports, the defaults moved by ${offset} (AO_PORT_OFFSET=${offset}): ${list}. Start an app with its port set that way, point one app at another by these ports, never the defaults, and run Playwright with AO_PORT_OFFSET as it is, so it starts and tests these. Playwright starts the apps itself and uses no server already on these ports: stop an app you started before you run it.`,
+    ...(vars.length > 0 ? [`Start each app with its variables of project.yaml too, as its .env files do not have them for this lane: ${vars.join('; ')}.`] : []),
     ...(own.length > 0 ? [`Your environment holds this lane's own services too: ${own.map(([name, value]) => `${name}=${value}`).join(', ')}. Keep them: they come before the .env files, so the database your apps start is this run's own.`] : []),
   ].join(' ');
 }

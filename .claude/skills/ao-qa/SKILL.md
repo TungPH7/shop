@@ -1,7 +1,7 @@
 ---
 name: ao-qa
-description: QA an item in Ready for QA with the qa agent, on the environment that runs its merge, and attach the evidence to Jira; with "fail:" and a defect the human found, qa reproduces it and fails the item.
-argument-hint: "<KEY> [fail: <defect, steps, expected result>]"
+description: QA an item in Ready for QA with the qa agent, on the environment that runs its merge, and attach the evidence to Jira; with "fail:" and a defect the human found, qa reproduces it and fails the item; with "retest", QA again an item In QA after a NOT TESTED report.
+argument-hint: "<KEY> [fail: <defect, steps, expected result>] [retest]"
 disable-model-invocation: true
 ---
 
@@ -26,6 +26,11 @@ $ARGUMENTS
 
   Add `--change none` or `--change ac` with the human's answer to the command below, then run it whatever the check
   said: ao-step decides with the defect.
+- When the text after the key is `retest`, the item is In QA after a NOT TESTED report whose cause the human fixed,
+  such as a Bug of the environment. Check that the item carries no Needs you flag any more; if it does, ask the human
+  to clear it first, and stop. Otherwise run `node .ai-orchestrator/scripts/ao-step.mjs qa <KEY> --retest`, and treat
+  its GO or STOP as below, with `--retest` on the run command too. Never use `--note` for this: it is the road of a
+  defect the human found.
 - On STOP, and no defect, tell the human the reason and the command or clicks it names, in Vietnamese, and stop.
 - On GO, or with a defect, run `node .ai-orchestrator/scripts/ao-step.mjs qa $0 --go` with the Bash tool in the
   background, with a timeout of 7200000 ms, and wait for its notification. Do not poll.

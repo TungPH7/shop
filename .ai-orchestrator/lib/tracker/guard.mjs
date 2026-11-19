@@ -141,10 +141,22 @@ export function checkToolCall(input, { mapping, space }) {
   if (!WRITE_TOOLS.includes(name)) return allow;
   if (!space) return deny('set AO_JIRA_SPACE to the project space key in .claude/settings.json');
   if (args.cloudId && !isProjectSite(args.cloudId, mapping)) return deny(`${args.cloudId} is not the Jira site of the project`);
+  // The label that gives devops the basic auth on an ops Task is yours to put (kit followups, batch 4 item 14).
+  const envAuth = mapping.work_labels.env_auth;
+  if (input.agent_type && ['createJiraIssue', 'editJiraIssue'].includes(name) && namesLabel(args, envAuth)) {
+    return deny(`only you put the label ${envAuth} on an item: it gives devops the basic auth of Development and Staging`);
+  }
   if (name === 'createJiraIssue') return args.projectKey === space ? allow : deny(`${args.projectKey} is outside the project space ${space}`);
   const [key] = extractKeys(String(args.issueIdOrKey ?? ''));
   if (!key) return deny(`use the work item key, not ${args.issueIdOrKey}, so the project space can be checked`);
   return key.startsWith(`${space}-`) ? allow : deny(`${key} is outside the project space ${space}`);
+}
+
+// Whether the input of a tool puts a label on an item, in any field named labels at any depth: fields.labels,
+// additional_fields.labels, update.labels with add or set. Words in a description or a comment are not a label.
+function namesLabel(value, label) {
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value).some(([key, inner]) => (key === 'labels' ? JSON.stringify(inner).includes(JSON.stringify(label)) : namesLabel(inner, label)));
 }
 
 // The one operation executeWrite may run: a Blocks link between two items of the project space, which `ba` makes from

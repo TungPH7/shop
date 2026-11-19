@@ -188,3 +188,15 @@ export async function releaseAgent(dir, file, { fs, alive, sleep }) {
     { fs, alive, sleep },
   );
 }
+
+// Why a build run of a dev role may not start, from the WIP of the role on Jira, or null. keys: the items that hold it
+// (wipHolders of lib/tracker/facts.mjs), read after the run took its role on the lock; key: the item of the run, which
+// holds its own WIP when it goes on; story: the Story of a Sub-task. A process lock that ends does not mean its item
+// left In Progress: SHOP-58 stayed there until its PR was ready, and fe-dev was refused the Start of SHOP-33 (Pilot 3).
+export function jiraWipStop({ role, key, story, keys, limit }) {
+  const others = keys.filter((other) => other !== key);
+  if (others.length < limit) return null;
+  const which = others.length === 1 ? `${others[0]} is` : `${others.join(', ')} are`;
+  const when = others.length === 1 ? others[0] : 'one of them';
+  return `${role} is at its WIP limit on Jira: ${which} In Progress, and ${key} would be one more. Once ${when} is In Review, /ao-build ${story ?? key} again`;
+}

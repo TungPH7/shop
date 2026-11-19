@@ -17,6 +17,8 @@ const SKIP_LINT = ['-Dspotless.check.skip=true', '-Dcheckstyle.skip=true'];
 export const MAVEN_SCRIPTS = {
   lint: ['validate'],
   typecheck: ['compile', ...SKIP_LINT],
+  // The tests alone, without the coverage gate of verify: what scripts/run.mjs runs with -Dtest=<class>.
+  test: ['test', ...SKIP_LINT],
   'test:coverage': ['verify'],
   build: ['package', '-DskipTests', ...SKIP_LINT],
   dev: ['spring-boot:run'],

@@ -26,7 +26,18 @@ schema of an Epic, is a Task that comes before them. -->
 
 ## Verification
 
-<!-- The commands that show the Task is done; the Task DoD also needs the regression suite to pass. -->
+<!-- The commands that show the Task is done; the Task DoD also needs the regression suite to pass.
+qa makes one row of its report from each line, and checks it on the QA environment, so keep each line narrow and
+checkable: a command, a test, a screen and what it shows. A line such as "every step works as written" makes qa check
+each sentence of the change. On SHOP-76 of shop, a guide of 3 Markdown files, it cost 5.42 USD and 32 minutes (Pilot 3).
+For a Task that changes only docs, name what to compare and the few screens to open:
+"Đọc đối chiếu chữ trên nút và thông báo với apps/admin/src/lib/i18n/locales/vi/product.json; mở S1 và S4 trên
+Development". -->
+
+<!-- Example of a narrow Verification for a docs Task:
+- Chữ trên nút và thông báo trong docs/user-guide/ khớp file i18n của hai app.
+- Mở danh sách sản phẩm của admin và của khách trên Development: ảnh trong hướng dẫn khớp màn hình. -->
+
 
 ## Definition of Ready
 

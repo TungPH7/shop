@@ -97,8 +97,8 @@ const result = (pr, problems, keys) => ({ ok: problems.length === 0, pr, problem
 // of the project space it names is flagged, with a comment that says why, once per commit and branch. dryRun flags
 // nothing. `docs` ({ jira, passage }, a reading Jira client) reads the facts of a docs PR. Returns the decision and the
 // keys flagged.
-export async function runAudit({ github, jira, docs, mapping, space, sha, branch, gates, apps, approvers, dryRun = false, log = console.log }) {
-  const { facts, docsKey } = await readAuditFacts({ github, docs, sha, branch, gates, apps, approvers, space });
+export async function runAudit({ github, jira, docs, mapping, space, sha, branch, gates, apps, approvers, dryRun = false, log = console.log, retry }) {
+  const { facts, docsKey } = await readAuditFacts({ github, docs, sha, branch, gates, apps, approvers, space, retry });
   // facts.sha, the full hash, takes the place of a short one.
   const decision = decideAudit({ sha, branch, ...facts, gates, apps, approvers, space });
   const short = facts.sha.slice(0, 7);
@@ -134,11 +134,18 @@ export async function runAudit({ github, jira, docs, mapping, space, sha, branch
 // is the merge of a docs PR. `docs` ({ jira, passage }, a reading Jira client) reads the facts of a docs PR. GitHub
 // finds a commit by a short hash too, and the facts carry its full hash: a PR's merge commit is matched by the full one,
 // so a short hash read as a commit pushed without a PR (Pilot 2, T10).
-export async function readAuditFacts({ github, docs, sha, branch, gates, apps, approvers = [], space }) {
+// retry ({ times, ms, sleep }): how many more times to look for the PR of the commit, and how long to wait before each.
+// GitHub lists a merge commit as the merge of its PR only a few seconds after the merge: the deployer audited the merge
+// of PR #27 of shop five seconds after merge-gate made it, read it as pushed without a PR, and flagged SHOP-18.
+export async function readAuditFacts({ github, docs, sha, branch, gates, apps, approvers = [], space, retry = { times: 0 } }) {
   const found = await github.get(`/commits/${sha}`);
   const full = found.sha ?? sha;
   const parents = (found.parents ?? []).map((parent) => parent.sha);
-  const listed = mergedPull(await github.getAll(`/commits/${full}/pulls`), full, branch);
+  let listed = mergedPull(await github.getAll(`/commits/${full}/pulls`), full, branch);
+  for (let attempt = 0; !listed && attempt < (retry.times ?? 0); attempt++) {
+    await retry.sleep(retry.ms);
+    listed = mergedPull(await github.getAll(`/commits/${full}/pulls`), full, branch);
+  }
   if (!listed) return { facts: { sha: full, message: found.commit.message, pull: null, parents }, docsKey: null };
   // Only the PR itself says who merged it.
   const pull = await github.get(`/pulls/${listed.number}`);

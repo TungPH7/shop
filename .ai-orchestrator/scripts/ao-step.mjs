@@ -3,12 +3,12 @@
 // time, and writes .ai/runs/<KEY>/state.json, a stream-json log per run, and last.md. It never moves a Jira item,
 // approves or merges a PR; the second /ao-plan only asks GitHub to run jira-sync, with your gh login.
 // Usage: node .ai-orchestrator/scripts/ao-step.mjs <status|spec|plan|request|build|review|fix|...> [<KEY>|<PR>] [--go]
-//        [--answers <file>] [--note <file>]
+//        [--answers <file>] [--note <file>] [--retest]
 // It exits 0 on GO and on STOP, and 1 only when it cannot run: a token missing, Jira or GitHub not answering.
 // Jira is read with ATLASSIAN_AGENT_TOKEN, GitHub with a read-only token of the ao-review App. Run it from the project
 // root; the kit is in AO_KIT_DIR when set.
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { freemem, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +30,7 @@ import { attachEvidence } from '../lib/tracker/attachments.mjs';
 import { createGitHubClient, readGitHubToken } from '../lib/tracker/github-client.mjs';
 import { bearerAuth, createJiraClient } from '../lib/tracker/jira-client.mjs';
 import { readMapping } from '../lib/tracker/mapping.mjs';
-import { startAgentProcess, killTree } from '../lib/workflow/agent-process.mjs';
+import { startAgentProcess, killTree, stopProcessesUnder } from '../lib/workflow/agent-process.mjs';
 import { answers, portBusy, previewRunner } from '../lib/workflow/preview-run.mjs';
 import { withLoggedSession } from '../lib/workflow/runs.mjs';
 import { gatherFacts, readRunning } from '../lib/workflow/facts.mjs';
@@ -42,17 +42,18 @@ import { adfText, buildReviewPack, filesToQuote } from '../lib/workflow/review-p
 import { postKitCopyReports, readKitCopy, renderedReason } from '../lib/workflow/kit-copy.mjs';
 import { removeInstructions } from '../lib/workflow/review-tree.mjs';
 import { agentCommand, formatDecision, runGo } from '../lib/workflow/runner.mjs';
-import { CHANGES, decideStep, dockerGate } from '../lib/workflow/steps.mjs';
+import { CHANGES, appRolesOf, decideStep, dockerGate } from '../lib/workflow/steps.mjs';
 import { restoreWip, saveWip } from '../lib/workflow/wip.mjs';
-import { laneKeeper, runsSettings } from '../lib/workflow/lanes.mjs';
+import { copyRunFiles, laneKeeper, removeNodeModules, runsSettings } from '../lib/workflow/lanes.mjs';
 import { installLane, pullsOfBranch, qaWatcher, runPlacer } from '../lib/workflow/lane-runs.mjs';
 import { checkoutBranch, laneDir, laneRoot } from '../lib/workflow/places.mjs';
-import { admitAgent, claimRole, claimsRole, liveLocks, releaseAgent, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
+import { admitAgent, claimRole, claimsRole, jiraWipStop, liveLocks, releaseAgent, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
+import { wipHolders } from '../lib/tracker/facts.mjs';
 import { runsAtOnce } from '../lib/workflow/ports.mjs';
 import { hookKitDrift, hookKitNote } from '../lib/workflow/hook-kit.mjs';
 
 const COMMANDS = ['status', 'intake', 'preview', 'spec', 'plan', 'request', 'build', 'review', 'fix', 'qa', 'release', 'ship', 'rollback'];
-const USAGE = 'usage: node .ai-orchestrator/scripts/ao-step.mjs <status|intake|preview|spec|plan|request|build|review|fix|qa|release|ship|rollback> [<KEY>|<PR>|<vX.Y.0> <sha>|<vX.Y.Z>|<environment> [<sha>]] [--go] [--answers <file>] [--note <file>] [--change <word>] [--stop]';
+const USAGE = 'usage: node .ai-orchestrator/scripts/ao-step.mjs <status|intake|preview|spec|plan|request|build|review|fix|qa|release|ship|rollback> [<KEY>|<PR>|<vX.Y.0> <sha>|<vX.Y.Z>|<environment> [<sha>]] [--go] [--answers <file>] [--note <file>] [--change <word>] [--stop] [--retest]';
 const ENVIRONMENTS = ['development', 'staging', 'production'];
 // The commands that read deployments with your gh login (release-workflow T12).
 const RELEASE_COMMANDS = ['qa', 'release', 'ship', 'rollback', 'status'];
@@ -164,7 +165,7 @@ export function runsFile(projectDir, file) {
 
 
 async function main() {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { go: { type: 'boolean', default: false }, answers: { type: 'string' }, note: { type: 'string' }, change: { type: 'string' }, stop: { type: 'boolean', default: false } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { go: { type: 'boolean', default: false }, answers: { type: 'string' }, note: { type: 'string' }, change: { type: 'string' }, stop: { type: 'boolean', default: false }, retest: { type: 'boolean', default: false } } });
   const [command, arg, extra] = positionals;
   const settings = projectSettings(projectDir);
   const space = setting('AO_JIRA_SPACE', settings);
@@ -275,14 +276,21 @@ async function main() {
     return command === 'preview' ? { ...facts, preview: await preview.facts(values.stop, facts.pr) } : facts;
   };
   const read = (file) => readFileSync(runsFile(projectDir, file), 'utf8');
-  const options = { roster, contract, gates, mapping, ...(values.answers && { answers: read(values.answers) }), ...(values.note && { note: read(values.note) }), ...(values.change && { change: values.change }) };
+  // The dev agent of each app by its profile: /ao-fix gives a blocking finding to the side of its app (kit followups,
+  // batch 2; PR #62 of shop, Pilot 3).
+  const appRoles = appRolesOf(existsSync(projectYaml) ? parse(readFileSync(projectYaml, 'utf8'))?.apps : {});
+  const options = { roster, contract, gates, mapping, appRoles, ...(values.answers && { answers: read(values.answers) }), ...(values.note && { note: read(values.note) }), ...(values.change && { change: values.change }), ...(values.retest && { retest: true }) };
 
   const facts = await gather();
-  // A Java app needs Docker for the tests be-dev runs (project-scaffold part 3, spec 2.2).
+  // A Java app needs Docker for the tests be-dev and qa run (project-scaffold part 3, spec 2.2).
   const projectFile = join(projectDir, '.ai-orchestrator', 'project.yaml');
   const java = existsSync(projectFile) && Object.values(parse(readFileSync(projectFile, 'utf8'))?.apps ?? {}).some((app) => app?.profile === 'spring-boot');
   const dockerRunning = () => dockerAnswered(spawnSync('docker', DOCKER_INFO, { encoding: 'utf8', timeout: 20000 }));
-  const decision = dockerGate(decideStep(command, facts, options), { java, dockerRunning });
+  // The qa runs of other commands: the stop at gate ③ says to wait while one tests where the merge deploys.
+  const qaRunning = liveLocks(activeDir, { fs: lockFs, alive }).filter((lock) => lock.command === 'qa' && lock.pid !== process.pid).map(({ key: k, environment, pid }) => ({ key: k, environment, pid }));
+  // Three seconds before Docker is asked again: the command waits on nothing else meanwhile.
+  const pause = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3000);
+  const decision = dockerGate(decideStep(command, { ...facts, qaRunning }, options), { java, dockerRunning, pause });
   console.log(formatDecision(decision));
   // Agents run the hooks of the kit in AO_KIT_DIR: one that differs from the kit copy of the project is named (review round
   // 3 of shop PR #21).
@@ -303,6 +311,10 @@ async function main() {
   if (command === 'status') {
     const live = liveLocks(activeDir, { fs: lockFs, alive });
     if (live.length > 0) console.log(`Running: ${live.map(({ command: c, key: k, slot, startedAt }) => `${c} ${k} in slot ${slot}, ${Math.round((Date.now() - Date.parse(startedAt)) / 60000)} min`).join('; ')}`);
+    // Approving a PR now would make its merge deploy and stop the QA (Pilot 3, SHOP-28 and SHOP-69 of shop).
+    for (const { key: k, environment } of live.filter((lock) => lock.command === 'qa' && lock.environment)) {
+      console.log(`QA in progress: qa is testing ${k} on ${environment}. Approve no PR whose merge deploys ${environment} until it ends: the new deploy would stop it, and it would start again`);
+    }
   }
   if (!values.go || !decision.go) return;
 
@@ -357,24 +369,32 @@ async function main() {
       if (!claimsRole(command) || !run.role) return;
       const claimed = await claimRole(activeDir, lock, run.role, { fs: lockFs, alive, sleep, onWait: (busy) => console.log(`Waiting for ${run.role}: it is at work on ${busy.key} (process ${busy.pid}), and builds one item at a time`) });
       if (!claimed.ok) throw new Error(claimed.reason);
+      // Then its WIP on Jira, read now: a build of the role that ended may have left its item In Progress, and jira-guard
+      // would refuse the Start of this one (kit followups, batch 2; SHOP-31 after SHOP-58 in Pilot 3).
+      if (command === 'build' && run.purpose === 'build') {
+        const { keys, limit } = await wipHolders(jira, { space, actor: run.role, contract, mapping });
+        const wip = jiraWipStop({ role: run.role, key: run.key, story: run.story, keys, limit });
+        if (wip) throw new Error(wip);
+      }
     };
     const { decision: final, facts: last } = await runGo({
       command,
       arg,
       options,
       gather,
-      // qa on Development or Staging gets the basic auth from AO_ENV_AUTH, as variables, never as arguments.
+      // qa on Development or Staging gets the basic auth from AO_ENV_AUTH, as variables, never as arguments; so does
+      // devops on an ops Task you put the label ao-env-auth on (envAuth; kit followups, batch 4 item 14).
       agent: async (run, { log }) => {
         await claim(run);
         try {
-          return await watchQa(await placed(run.qa?.auth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run), (ready, onStart) => startAgent(ready, join(runsDir, key, log), onStart));
+          return await watchQa(await placed(run.qa?.auth || run.envAuth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run), (ready, onStart) => startAgent(ready, join(runsDir, key, log), onStart));
         } finally {
           // Its agent no longer holds RAM for the others that wait (admitAgent).
           if (cap > 1) await releaseAgent(activeDir, lock, { fs: lockFs, alive, sleep });
         }
       },
       // A defect you reported is checked like a QA run: its evidence goes to the item too (human-loop spec 5.1).
-      after: (run, { tree }) => (['qa', 'qa-defect'].includes(run.purpose) ? afterQa(run, tree, { deploys, mapping }) : []),
+      after: (run, { tree }) => (['qa', 'qa-defect', 'qa-ops'].includes(run.purpose) ? afterQa(run, tree, { deploys, mapping }) : []),
       act: (step) => {
         if (step.action === 'release-pr') return releasePr(step, { repo, settings });
         if (step.action === 'hotfix-ship') return hotfixShip(step, { repo, settings, userToken });
@@ -550,10 +570,22 @@ function prepareCheckout(spec) {
 // them write in the temp folder. --add-dir is not given: with it, the skills of the folder's .claude/skills load. The
 // instruction files are still removed from it, in case a later Claude Code loads more. A stale worktree from a run that
 // was stopped is replaced. Node finds no node_modules there, so tests that need packages do not run in it.
-export const reviewTreePath = (project, name, tmp = tmpdir()) => join(tmp, 'ao-reviews', `${basename(resolve(project))}-${name}`);
+// The temp folder by its long path: on Windows os.tmpdir() can give a short 8.3 path such as C:/Users/HUUTUN~1/…, where
+// pnpm --filter found no app in the qa worktree (QA SHOP-68 of shop, Pilot 3). The path as it is when it cannot be read.
+export function longTmpDir(realpath = realpathSync.native, tmp = tmpdir()) {
+  try {
+    return realpath(tmp);
+  } catch {
+    return tmp;
+  }
+}
+export const reviewTreePath = (project, name, tmp = longTmpDir()) => join(tmp, 'ao-reviews', `${basename(resolve(project))}-${name}`);
 function addWorktree({ name, sha, install = false, keepInstructions = false }) {
   const path = reviewTreePath(projectDir, name);
-  if (existsSync(path)) removeWorktree({ name });
+  if (existsSync(path)) {
+    const removed = removeWorktree({ name });
+    if (!removed.ok) return { ok: false, reason: `the worktree of ${name} from an earlier run is still at ${path}: ${removed.reason}` };
+  }
   mkdirSync(join(path, '..'), { recursive: true });
   const added = git('worktree', 'add', '--detach', '--quiet', path, sha);
   if (added.status !== 0) return { ok: false, reason: `git could not add the worktree of ${name} at ${sha.slice(0, 7)}: ${(added.stderr || added.stdout).trim()}` };
@@ -575,6 +607,10 @@ function addWorktree({ name, sha, install = false, keepInstructions = false }) {
       removeWorktree({ name });
       return { ok: false, reason: `${manager === 'npm' ? 'npm ci' : 'pnpm install'} failed in the worktree of ${name} at ${sha.slice(0, 7)}: ${(installed.stderr || installed.error?.message || '').trim().slice(-500)}` };
     }
+    // The .env of each app (runs.copy of project.yaml), as a lane gets them: the @local tests start the apps there.
+    const projectYaml = join(projectDir, '.ai-orchestrator', 'project.yaml');
+    const { copy } = runsSettings(existsSync(projectYaml) ? parse(readFileSync(projectYaml, 'utf8')) : {});
+    copyRunFiles({ existsSync, mkdirSync, copyFileSync }, projectDir, path, copy);
   }
   return { ok: true, path: path.replaceAll('\\', '/') };
 }
@@ -821,21 +857,27 @@ function afterQa(run, tree, { deploys, mapping }) {
   });
 }
 
-// Takes the worktree away with what the agent left in it. A process that still holds a file of it (Windows) leaves the
-// folder behind; the next run of the same PR replaces it.
+// Takes the worktree away with what the agent left in it. What still runs from it stops first: in QA SHOP-28 of shop,
+// next dev, vite, Maven and Playwright held its files after a deploy stopped qa, and the next QA could not make it
+// again. Then its node_modules go, without following a link, and git removes the rest.
 function removeWorktree({ name }) {
   const path = reviewTreePath(projectDir, name);
-  const removed = git('worktree', 'remove', '--force', path);
-  if (removed.status !== 0 && existsSync(path)) {
-    try {
-      rmSync(path, { recursive: true, force: true });
-    } catch (error) {
-      git('worktree', 'prune');
-      return { ok: false, reason: error.message };
-    }
+  if (!existsSync(path)) {
+    git('worktree', 'prune');
+    return { ok: true };
+  }
+  const stopped = stopProcessesUnder(path, { spawnSync, kill: (target, signal) => process.kill(target, signal) });
+  const still = (reason) => ({ ok: false, reason: `${reason}${stopped.length > 0 ? ` (stopped ${stopped.length} processes that ran from it first)` : ''}` });
+  try {
+    removeNodeModules({ readdirSync, rmSync }, path);
+    git('worktree', 'remove', '--force', path);
+    if (existsSync(path)) rmSync(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
+  } catch (error) {
+    git('worktree', 'prune');
+    return still(error.message);
   }
   git('worktree', 'prune');
-  return existsSync(path) ? { ok: false, reason: `${path} is still there` } : { ok: true };
+  return existsSync(path) ? still(`${path} is still there`) : { ok: true };
 }
 
 // The second /ao-plan: jira-sync for the Epic, with your gh login, since this is your session, not an agent's.

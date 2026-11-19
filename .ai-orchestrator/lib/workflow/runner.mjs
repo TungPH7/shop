@@ -72,6 +72,8 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       made.push({ action: 'jira-sync', key: next.key });
       ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined, note: undefined }), (d) => !(d.go && d.runs[0]?.action === 'jira-sync'), limits.syncWaitMs, { sleep, now, limits }));
       if (decision.go && decision.runs[0]?.action === 'jira-sync') reason = `jira-sync ran, but ${next.key} is not done after ${Math.round(limits.syncWaitMs / 60000)} minutes: see the jira-sync and merge-gate runs on GitHub`;
+      // With continue, jira-sync is a first step, as for an item it refines before its build: the command goes on.
+      if (next.continue) continue;
       break;
     }
     if (next.action) {
@@ -159,7 +161,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     };
     // On record from its start: a shell killed during the run leaves it unfinished, and the next command goes on in the
     // session of its log (release-workflow T22). What its session cost so far stays, for the run that resumes it.
-    store.writeState(key, { ...state, runs: [...state.runs, { ...run, session: next.resume ?? null, outcome: 'unfinished', turns: 0, durationMs: 0, costUsd: 0, ...(resumed?.cumulative && { cumulative: resumed.cumulative }) }] });
+    store.writeState(key, { ...state, runs: [...state.runs, { ...run, session: next.resume ?? null, outcome: 'unfinished', turns: 0, durationMs: 0, costUsd: null, ...(resumed?.cumulative && { cumulative: resumed.cumulative }) }] });
     let lines;
     let superseded;
     let stopped;
@@ -223,9 +225,11 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     // After a run that may have pushed, wait for CI before deciding again, but not for a CI that never starts.
     const since = now();
     const startMs = Math.min(limits.ciStartMs, limits.ciWaitMs);
-    ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined }), (_, f) => !ciPending(f) || (ciIdle(f) && now() - since >= startMs), limits.ciWaitMs, { sleep, now, limits }));
+    ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined }), (_, f) => !ciPending(f) || (ciIdle(f) && (ciIdle(f).conflicts || now() - since >= startMs)), limits.ciWaitMs, { sleep, now, limits }));
     const idle = ciIdle(facts);
-    if (idle) reason = `no CI run started on PR #${idle.number} after ${Math.round(startMs / 60000)} minutes: GitHub Actions did not start the workflows. Open the Actions tab of the repo; on a new repo, push a commit that touches .github/workflows/, then run the command again`;
+    // GitHub runs no workflow of pull_request on a PR it cannot merge (PR #57 of shop, SHOP-31).
+    if (idle?.conflicts) reason = `PR #${idle.number} conflicts with ${idle.base}, and GitHub runs no CI on a PR it cannot merge: merge origin/${idle.base} into its branch, resolve the conflict, push, then run the command again`;
+    else if (idle) reason = `no CI run started on PR #${idle.number} after ${Math.round(startMs / 60000)} minutes: GitHub Actions did not start the workflows. Open the Actions tab of the repo; on a new repo, push a commit that touches .github/workflows/, then run the command again`;
     else if (ciPending(facts)) reason = `CI is still running after ${Math.round(limits.ciWaitMs / 60000)} minutes: run the command again once it is done`;
   }
   const final = reason ? { go: false, reason, next: `/ao-${command} ${arg ?? ''}`.trim(), lines: decision.lines ?? [] } : decision;
@@ -252,7 +256,8 @@ async function waitFor(gatherFacts, decideOn, done, waitMs, { sleep, now, limits
   }
 }
 
-const usd = (value) => `${(value ?? 0).toFixed(2)} USD`;
+// null: a run stopped before its result, whose cost is not known (lib/workflow/runs.mjs).
+const usd = (value) => (value === null ? 'unknown' : `${(value ?? 0).toFixed(2)} USD`);
 const minutes = (ms) => `${Math.round((ms ?? 0) / 6000) / 10} min`;
 
 // The printout of a decision (spec section 6): the facts, then GO with the runs, STOP with the reason, or the status.
@@ -288,6 +293,7 @@ export function formatDecision(decision) {
 export function lastReport({ command, key, made, decision, state }) {
   const all = state?.runs ?? [];
   const total = all.reduce((sum, r) => sum + (r.costUsd ?? 0), 0);
+  const unknown = all.filter((r) => r.costUsd === null).length;
   const rows = made.map((r) => (r.action ? `| - | ${r.action} | ${r.key} | | | | | |` : `| ${r.n} | ${r.role} | ${r.key} | ${r.purpose} | ${r.effort} | ${r.outcome} | ${r.turns} turns, ${minutes(r.durationMs)} | ${usd(r.costUsd)} |`));
   const text = [
     `# ${command} ${key}`,
@@ -295,7 +301,7 @@ export function lastReport({ command, key, made, decision, state }) {
     made.length > 0 ? '| # | Role | Item | Step | Effort | Outcome | Turns, time | Cost |\n|---|---|---|---|---|---|---|---|' : 'No run was made.',
     ...rows,
     '',
-    `Cost of every run on ${key} so far: ${usd(total)}.`,
+    `Cost of every run on ${key} so far: ${usd(total)}${unknown > 0 ? `, and ${unknown} run${unknown === 1 ? '' : 's'} stopped before ${unknown === 1 ? 'its' : 'their'} result, of unknown cost` : ''}.`,
     '',
     ...made.filter((r) => r.text || r.notes?.length).flatMap((r) => [
       ...(r.text ? [`## ${r.n}. ${r.role}: its answer`, '', r.text, ''] : []),

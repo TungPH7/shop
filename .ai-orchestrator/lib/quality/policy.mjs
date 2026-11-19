@@ -106,3 +106,26 @@ export function auditProblems(report, { audit_level: level, exceptions }, today)
   }
   return problems;
 }
+
+// The pom.xml files osv-scanner checks: every one on a push (changed null); on a PR, those of the Java apps whose folder
+// it changes. PR #66 of shop changed only apps/admin, and its policy job went red when the scan of apps/api could not
+// reach Maven Central (Phiên 33). A push to the base still scans them all.
+export function pomsToScan(poms, changed) {
+  if (!changed) return poms;
+  return poms.filter((pom) => {
+    const folder = pom.slice(0, -'pom.xml'.length);
+    return changed.some((path) => path.startsWith(folder));
+  });
+}
+
+// A scan of osv-scanner that failed, by an exit code other than 0 (nothing found) and 1 (advisories found), such as
+// Maven Central not answering: tried again after pause(), `tries` times in all. Returns the last result.
+export function scanTries(scan, { tries = 3, pause = () => {} } = {}) {
+  let result;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    if (attempt > 0) pause();
+    result = scan();
+    if (result.status === 0 || result.status === 1) return result;
+  }
+  return result;
+}

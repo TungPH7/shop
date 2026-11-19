@@ -62,6 +62,8 @@ const MEDIA = /\.(png|jpe?g|gif|webp|webm|mp4)$/i;
 // Of .ai/qa/<KEY>/ only images and videos go then: qa may have pointed outputDir there, as it did on DEMO-12.
 export async function qaFollowUp({ run, tree, projectDir, list, attach, keep, running }) {
   const notes = [];
+  // The qa run of an ops Task has no environment of its own (kit followups, batch 4 item 14).
+  const where = run.qa.environment ? title(run.qa.environment) : 'Development and Staging';
   const dir = (path) => path.replaceAll('\\', '/').replace(/\/+$/, '');
   // A run with no start on record keeps every file, as before.
   const since = Date.parse(run.startedAt ?? '');
@@ -81,20 +83,21 @@ export async function qaFollowUp({ run, tree, projectDir, list, attach, keep, ru
     }
   }
   if (held.length > 0) {
-    notes.push(`Behind the basic auth of ${title(run.qa.environment)} only images and videos go to Jira, so these stay in .ai/qa/${run.key}/: ${held.map((file) => file.split('/').pop()).join(', ')}.`);
+    notes.push(`Behind the basic auth of ${where} only images and videos go to Jira, so these stay in .ai/qa/${run.key}/: ${held.map((file) => file.split('/').pop()).join(', ')}.`);
   }
   if (local.length > 0) {
     const what = local.length === 1 ? '1 Playwright trace of the run holds' : `${local.length} Playwright traces of the run hold`;
     try {
       const folder = await keep(run.key, local);
-      notes.push(`The ${what} the basic auth of ${title(run.qa.environment)}, so ${local.length === 1 ? 'it is' : 'they are'} not attached: ${local.length === 1 ? 'it stays' : 'they stay'} on this machine, in ${folder}.`);
+      notes.push(`The ${what} the basic auth of ${where}, so ${local.length === 1 ? 'it is' : 'they are'} not attached: ${local.length === 1 ? 'it stays' : 'they stay'} on this machine, in ${folder}.`);
     } catch (error) {
-      notes.push(`The ${what} the basic auth of ${title(run.qa.environment)}, so ${local.length === 1 ? 'it is' : 'they are'} not attached, and keeping ${local.length === 1 ? 'it' : 'them'} failed: ${error.message}.`);
+      notes.push(`The ${what} the basic auth of ${where}, so ${local.length === 1 ? 'it is' : 'they are'} not attached, and keeping ${local.length === 1 ? 'it' : 'them'} failed: ${error.message}.`);
     }
   }
-  const now = await running(run.qa.environment);
-  if (now !== run.qa.sha) {
-    notes.push(`${title(run.qa.environment)} ran ${short(run.qa.sha)} when qa started and runs ${short(now)} now: the deployer replaced it during the run, so run /ao-qa ${run.key} again.`);
+  // With no release on record, as for an ops Task, there is none to compare.
+  const now = run.qa.sha ? await running(run.qa.environment) : null;
+  if (run.qa.sha && now !== run.qa.sha) {
+    notes.push(`${where} ran ${short(run.qa.sha)} when qa started and runs ${short(now)} now: the deployer replaced it during the run, so run /ao-qa ${run.key} again.`);
   }
   return notes;
 }
