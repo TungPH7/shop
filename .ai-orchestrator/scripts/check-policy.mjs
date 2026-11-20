@@ -15,7 +15,7 @@ import { auditArgs, managerFromLockfile, PNPM_MISSING, runManager } from '../lib
 import { checkDesignFile } from '../lib/quality/design-files.mjs';
 import { auditProblems, checkConventions, designFilesToCheck, osvProblems, pomsToScan, scanTries } from '../lib/quality/policy.mjs';
 import { addedLines, deletedTests, findSuppressions, loweredThresholds } from '../lib/quality/suppressions.mjs';
-import { auditRule, projectDependencies, unapprovedDependencies } from '../lib/quality/dependencies.mjs';
+import { auditRule, ownPackages, projectDependencies, unapprovedDependencies, workspaceCatalogs } from '../lib/quality/dependencies.mjs';
 
 function run(command, args, options = {}) {
   return spawnSync(command, args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, ...options });
@@ -75,25 +75,30 @@ try {
     changed = changes.map(({ path }) => path);
     // A direct dependency the PR adds must be approved first, at the plan or by dep-check (C1 spec section 5).
     if (project) {
-      const manifests = changes.filter(({ path }) => /(^|\/)(package\.json|pom\.xml)$/.test(path) && !path.split('/').includes('node_modules'));
+      // pnpm-workspace.yaml too: its catalogs and overrides name packages (second review of shop PR #79).
+      const manifests = changes.filter(({ path }) => /(^|\/)(package\.json|pom\.xml|pnpm-workspace\.yaml)$/.test(path) && !path.split('/').includes('node_modules'));
       const at = (ref, path) => {
         const shown = run('git', ['show', `${ref}:${path}`]);
         return shown.status === 0 ? shown.stdout : '';
       };
-      // The packages of the project itself, such as its apps in a workspace: not libraries to approve.
-      const own = git('ls-files', '*package.json')
-        .split('\n')
-        .filter(Boolean)
-        .map((path) => {
-          try {
-            return JSON.parse(readFileSync(join(root, path), 'utf8')).name;
-          } catch {
-            return null;
-          }
-        })
-        .filter(Boolean);
+      const readJson = (path) => {
+        try {
+          return JSON.parse(readFileSync(join(root, path), 'utf8'));
+        } catch {
+          return null;
+        }
+      };
+      // The packages of the project itself: with npm, those inside the workspaces of the root package.json; with pnpm,
+      // none, which workspace: links (ownPackages; second review of shop PR #79).
+      const own = ownPackages({
+        manager: managerFromLockfile((path) => existsSync(join(root, path))),
+        packageJson: readJson('package.json'),
+        manifests: git('ls-files', '*package.json').split('\n').filter(Boolean).map((path) => ({ path, name: readJson(path)?.name })),
+      });
+      // A spec catalog: takes its version from the catalogs of pnpm-workspace.yaml at the head.
+      const catalogs = workspaceCatalogs(at('HEAD', 'pnpm-workspace.yaml')) ?? {};
       const added = manifests.map(({ status, path }) => ({ path, before: status === 'A' ? '' : at(base, path), after: status === 'D' ? '' : at('HEAD', path) }));
-      sections.push(['New dependencies', unapprovedDependencies(added, projectDependencies(project).approved, own)]);
+      sections.push(['New dependencies', unapprovedDependencies(added, projectDependencies(project).approved, own, { catalogs })]);
     } else notes.push('no .ai-orchestrator/project.yaml: new dependencies are not checked');
     const designs = designFilesToCheck(changes, (path) => existsSync(join(root, path)));
     sections.push(['Design', designs.flatMap((path) => checkDesignFile(join(root, path)).map(({ rule, line, message }) => `${path}:${line} ${rule} ${message}`))]);

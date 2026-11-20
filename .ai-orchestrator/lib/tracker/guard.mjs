@@ -1,15 +1,16 @@
 // The logic of the Jira hooks (tracker-integration spec section 2.6): whether an agent may make a transition
 // (jira-guard), whether a tool call goes around the guard (block-atlassian), and whether a rework must be flagged
 // (jira-rework). The hook scripts in kit/.claude/hooks/ only read stdin, build the clients and print the decision.
-import { NON_AGENT_ROLES } from '../rules/references.mjs';
+import { NON_AGENT_ROLES, WEB_ROLES } from '../rules/references.mjs';
 import { checkTransition } from '../transitions.mjs';
 import { extractKeys } from './conventions.mjs';
-import { githubGuards, jiraGuards, jiraTime, readItem } from './facts.mjs';
+import { adfText, githubGuards, jiraGuards, jiraTime, qaReportResult, readItem } from './facts.mjs';
 import { countRework, reworkStatus } from './rework.mjs';
 
 // input: the PreToolUse input of mcp__atlassian__transitionJiraIssue. Returns { allow: true } or { allow: false, reason }.
 // Any error while reading the facts refuses the call.
-export async function decide(input, { contract, mapping, jira, github, approvers = [] }) {
+// agentsPerRole: runs.agents_per_role of the project, for the guard wip-available (C2 spec section 6).
+export async function decide(input, { contract, mapping, jira, github, approvers = [], agentsPerRole = {} }) {
   const role = input.agent_type;
   const deny = (reason) => ({ allow: false, reason: `jira-guard: ${reason}` });
   if (!role) return deny('only an agent may move a Jira item; this call does not come from a subagent named after a role of the contract');
@@ -45,7 +46,7 @@ export async function decide(input, { contract, mapping, jira, github, approvers
 
     const needed = transition.guards ?? [];
     const guards = [
-      ...(await jiraGuards(jira, { item, actor: role, needed, contract, mapping })),
+      ...(await jiraGuards(jira, { item, actor: role, needed, contract, mapping, agentsPerRole })),
       ...(github ? await githubGuards(github, { item, needed, contract, mapping, approvers }) : []),
     ];
     const result = checkTransition(contract, workType, transition.id, { actor: role, facts: { guards } });
@@ -160,10 +161,39 @@ export function checkToolCall(input, { mapping, space }) {
       return deny(`only you change the level label (${level}*) of an item: it sets how much review and QA the item gets`);
     }
   }
+  // A QA report is qa's alone (second review of shop PR #79): QA again checks only the criteria the newest one failed,
+  // and the guards of QA fail and Accept read it, while every agent writes with the same Jira account. A comment shaped
+  // as one, in a comment tool or in the update of a transition or an edit, from any other agent is refused.
+  if (input.agent_type && input.agent_type !== 'qa' && holdsQaReport(args)) {
+    return deny('only qa writes a QA report: QA reads the newest one to decide what it checks again, and Accept needs a PASS');
+  }
+  // A role that reads web pages makes no request (second review of shop PR #79): "Cần <role>:" runs that role, ba or sa
+  // with Bash among them, on what a page may have written.
+  if (WEB_ROLES.includes(input.agent_type) && holdsRequest(args)) {
+    return deny('seo reads web pages, so it asks no other role: a request of "Cần <role>:" would run that role on what a page wrote. Say what you need in your answer, for the human');
+  }
   if (name === 'createJiraIssue') return args.projectKey === space ? allow : deny(`${args.projectKey} is outside the project space ${space}`);
   const [key] = extractKeys(String(args.issueIdOrKey ?? ''));
   if (!key) return deny(`use the work item key, not ${args.issueIdOrKey}, so the project space can be checked`);
   return key.startsWith(`${space}-`) ? allow : deny(`${key} is outside the project space ${space}`);
+}
+
+// Whether any text of a tool input, a string or an ADF document at any depth, reads as a QA report (qaReportResult).
+function holdsQaReport(value) {
+  if (typeof value === 'string') return qaReportResult(value) !== null;
+  if (!value || typeof value !== 'object') return false;
+  if (value.type === 'doc' && qaReportResult(value) !== null) return true;
+  return Object.values(value).some(holdsQaReport);
+}
+
+// Whether any text of a tool input holds a request to a role (lib/workflow/requests.mjs): a line that starts with
+// "Cần <role>:", after an Agent value or not.
+const REQUEST = /(?:^|\n)[ \t]*(?:[^\n:]{1,40}:[ \t]*)?Cần [\w-]+:/u;
+function holdsRequest(value) {
+  if (typeof value === 'string') return REQUEST.test(value);
+  if (!value || typeof value !== 'object') return false;
+  if (value.type === 'doc') return REQUEST.test(adfText(value));
+  return Object.values(value).some(holdsRequest);
 }
 
 // Whether the input of a tool puts a label on an item, in any field named labels at any depth: fields.labels,

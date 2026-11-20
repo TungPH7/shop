@@ -8,7 +8,7 @@ rework:
 # Default WIP limits, adjusted at the retro.
 wip_limits:
   - id: dev-agent
-    scope: "Việc đang làm của mỗi dev agent: Sub-task nếu Story có Sub-task, nếu không thì cả item"
+    scope: "Việc đang làm của mỗi dev agent: Sub-task nếu Story có Sub-task, nếu không thì cả item. Dự án nâng được từng role bằng runs.agents_per_role của project.yaml (C2): nhiều agent cùng role, mỗi agent một item"
     limit: 1
   - id: in-review
     scope: "Cột In Review (gồm PR đang chờ bạn approve)"

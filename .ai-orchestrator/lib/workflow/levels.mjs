@@ -61,17 +61,30 @@ export function trustedLabels(labels = [], histories = [], { agentAccount, prefi
   return labels.filter((label) => kept.has(label)).concat([...kept].filter((label) => !labels.includes(label)));
 }
 
+// The level an item's labels name, without a change of the agents' account that lowered it: { level, ignored }. The
+// main session calls Jira with the agents' token too, so a level you raise through it is a change of that account: it
+// counts, and only a change that lowers the level is left out (second review of shop PR #79). level is the higher of the
+// label now and the label without the agents' changes (trustedLabels), no label counting as standard; null when that is
+// no label. ignored: { label } when a lower label now on the item does not count (label null: the level label was
+// taken off), for /ao-status and the review to say so; else null.
+export function trustedLevel(labels = [], histories = [], { agentAccount, prefix }) {
+  const now = labelLevel(labels, prefix);
+  const trusted = labelLevel(trustedLabels(labels, histories, { agentAccount, prefix }), prefix);
+  const rank = (level) => LEVELS.indexOf(level ?? 'standard');
+  return rank(now) >= rank(trusted) ? { level: now, ignored: null } : { level: trusted, ignored: { label: now } };
+}
+
 // The account id of the agents' identity of tracker/jira.yaml, or undefined: its unsigned comments are an agent's, not
 // the human's (review of PR #21), and its changes of a level label do not count.
 export const agentsAccount = (mapping) => mapping.identities?.find(({ id }) => id === 'agents')?.account_id;
 
 // A reader of the level an item's label names, with a Jira client: for merge-gate and audit, which work a review
-// waiver out again (C1 spec 3.4). A level the agents' account changed does not count (trustedLabels). Resolves to null
+// waiver out again (C1 spec 3.4). A level the agents' account lowered does not count (trustedLevel). Resolves to null
 // when the item has no level label.
 export const itemLevel = (jira, mapping) => async (key) => {
   const path = `/rest/api/3/issue/${encodeURIComponent(key)}`;
   const labels = (await jira.get(path, { fields: 'labels' })).fields?.labels ?? [];
   const histories = await jira.getAll(`${path}/changelog`);
   const prefix = mapping.work_labels.level_prefix;
-  return labelLevel(trustedLabels(labels, histories, { agentAccount: agentsAccount(mapping), prefix }), prefix);
+  return trustedLevel(labels, histories, { agentAccount: agentsAccount(mapping), prefix }).level;
 };

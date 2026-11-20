@@ -11,7 +11,7 @@ import { gitRefusal, writeRefusal } from '../agents/scope.mjs';
 import { NON_AGENT_ROLES, WEB_ROLES } from '../rules/references.mjs';
 import { configReads, gitSubcommand } from './git-options.mjs';
 import { matchesGlob } from './glob.mjs';
-import { dependencyProblems, installRefusal, installTargets } from './dependencies.mjs';
+import { dependencyProblems, installRefusal, installTargets, workspaceCatalogs } from './dependencies.mjs';
 
 const allow = { allow: true };
 const deny = (reason) => ({ allow: false, reason: `gh-guard: ${reason}` });
@@ -136,7 +136,7 @@ export function checkAgentCall(input, { gates: kitGates, contract, projectDir, r
   const agentRoles = contract.roles.map(({ id }) => id).filter((id) => !NON_AGENT_ROLES.includes(id));
   if (!agentRoles.includes(role)) return allow;
   const args = input.tool_input ?? {};
-  const webCall = WEB_ROLES.includes(role) ? webRoleCall(input.tool_name, args, { projectDir, ignored, searched }) : undefined;
+  const webCall = WEB_ROLES.includes(role) ? webRoleCall(input.tool_name, args, { projectDir, ignored, searched, writes: roster?.roles?.[role]?.writes ?? [] }) : undefined;
   if (webCall) return webCall;
   switch (input.tool_name) {
     case 'Bash':
@@ -177,7 +177,9 @@ export function checkAgentCall(input, { gates: kitGates, contract, projectDir, r
         before = found ? current : old;
         after = found ? (args.replace_all ? current.split(old).join(next) : current.replace(old, () => next)) : next;
       }
-      const [problem] = dependencyProblems({ path: file.replaceAll('\\', '/'), before, after }, approved());
+      // A spec catalog: takes its version from pnpm-workspace.yaml at the root of the project (second review of shop PR #79).
+      const catalogs = workspaceCatalogs(readFile('pnpm-workspace.yaml')) ?? {};
+      const [problem] = dependencyProblems({ path: file.replaceAll('\\', '/'), before, after }, approved(), [], { catalogs });
       return problem ? deny(problem) : allow;
     }
     default:
@@ -577,7 +579,9 @@ function checkEdit(file, role, gates, projectDir, roster, tempDir) {
 // what it read out with WebFetch. So (review of shop PR #79):
 // - Read, Grep and Glob stay in the project, not in the temp folder either, and away from the .env files but
 //   .env.example, by any spelling Windows opens (.env., .env::$DATA, .env/., a short name such as ENV~1.DEV), and from
-//   the files git ignores, where the secrets of a machine live: `ignored` asks git.
+//   the files git ignores, where the secrets of a machine live: `ignored` asks git. The files of its own `writes` in
+//   agents/roster.yaml, such as its ledger under .ai/, pass before that rule: Claude Code edits no file it has not read,
+//   so a run that stopped could not go on (second review of shop PR #79).
 // - Grep reads every file under its path whatever the pattern, and its glob reaches the files git ignores too: so it
 //   takes a file, or a glob or a type of code and docs files only, where a secret has no place.
 // - Edit and Write stay in the project: a file of its own in the temp folder could pass for the record of its searches.
@@ -610,7 +614,7 @@ const urlKey = (text) => {
   }
 };
 
-function webRoleCall(tool, args, { projectDir, ignored = () => false, searched = () => [] }) {
+function webRoleCall(tool, args, { projectDir, ignored = () => false, searched = () => [], writes = [] }) {
   const outside = (path) => typeof path === 'string' && path.trim() !== '' && outsideProject(path, projectDir, []);
   const hidden = (value) => {
     if (typeof value !== 'string' || value.trim() === '') return undefined;
@@ -620,6 +624,7 @@ function webRoleCall(tool, args, { projectDir, ignored = () => false, searched =
     const parts = path.toLowerCase().split('/');
     if (parts.some((part) => ENV_PART.test(part))) return deny(WEB_ENV);
     if (parts.some((part) => SHORT_NAME.test(part))) return deny(`${value} has a short name, such as ENV~1.DEV, that can name a .env file: a role that reads web pages gives the long name (C1 spec 6.4)`);
+    if (writes.some((glob) => matchesGlob(glob, path))) return undefined;
     if (!['', '.'].includes(path) && ignored(path)) return deny(`${value} is a file git ignores, as a .env file or a key is: a role that reads web pages reads only what the repo may hold (C1 spec 6.4)`);
     return undefined;
   };

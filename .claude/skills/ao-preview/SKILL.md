@@ -28,10 +28,12 @@ No agent runs here (human-loop spec 4.3).
   the `Next:` command, and stop. Run nothing yourself.
 - On GO, run `node .ai-orchestrator/scripts/ao-step.mjs preview $0 --go` with the Bash tool, with a timeout of
   600000 ms, and wait for it. It puts the project folder on the PR branch, runs `npm ci` when the lockfile changed,
-  and starts the apps, which keep running after it ends. Do not start, stop or change anything yourself.
+  and starts the apps, which keep running after it ends. With `runs.worktrees` on, it starts them from the lane of the
+  item instead, with the packages of the lane, and the project folder stays on `develop`; agents of other items go on
+  meanwhile, and none of the item. Do not start, stop or change anything yourself.
 - Then report in Vietnamese:
   - the URLs to open;
-  - that the project folder is on the PR branch, and that the apps run code no reviewer has read yet, on this machine:
+  - that the project folder (or the lane) is on the PR branch, and that the apps run code no reviewer has read yet, on this machine:
     no secret variable of the session reaches them, but they run under the human's Windows user, so they can read
     the human's files, the App key files and the variables of `HKCU\Environment`;
   - that the apps can also write in the project folder, files git does not track included, such as `CLAUDE.local.md`

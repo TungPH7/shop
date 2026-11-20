@@ -45,7 +45,19 @@ async function decideCall(call) {
   const repo = githubRepo();
   const githubToken = repo && readGitHubToken();
   const github = githubToken ? createGitHubClient({ repo, token: githubToken }) : null;
-  return decide(call, { contract, mapping, jira, github });
+  return decide(call, { contract, mapping, jira, github, agentsPerRole: await agentsPerRole() });
+}
+
+// runs.agents_per_role of the project's project.yaml (C2 spec section 6). A file that cannot be read keeps the limit of
+// the contract, which is the lower one.
+async function agentsPerRole() {
+  try {
+    const { readProjectYaml } = await load('lib/quality/approved-file.mjs');
+    const { runsSettings } = await load('lib/workflow/lanes.mjs');
+    return runsSettings(readProjectYaml(projectDir) ?? {}).agentsPerRole;
+  } catch {
+    return {};
+  }
 }
 
 // owner/name of the project's origin remote, from an https or ssh URL.

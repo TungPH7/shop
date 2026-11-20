@@ -290,7 +290,7 @@ Giới hạn mặc định, chỉnh được ở retro:
 
 | Chỗ | Giới hạn |
 | --- | --- |
-| Việc đang làm của mỗi dev agent: Sub-task nếu Story có Sub-task, nếu không thì cả item | 1 |
+| Việc đang làm của mỗi dev agent: Sub-task nếu Story có Sub-task, nếu không thì cả item. Dự án nâng được từng role bằng runs.agents_per_role của project.yaml (C2): nhiều agent cùng role, mỗi agent một item | 1 |
 | Cột In Review (gồm PR đang chờ bạn approve) | 2 |
 | Epic ở specifying hoặc planning | 1 |
 

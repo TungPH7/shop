@@ -68,9 +68,12 @@ export async function answers(url, ms) {
 //   runPackages(manager, args, options)   npm or pnpm with no shell (runManager of lib/quality/package-manager.mjs)
 //   env, execPath, cliOf(tool)   the environment and the node of ao-step, and the path of npm-cli.js or pnpm.cjs, or null
 //   cleared                   the variables an agent run clears (CLEARED_ENV of lib/agents/launch.mjs)
-//   agentRunning()            the live holder of the lock of the runs, other than this process, or null
+//   agentRunning(key)         the live holder of the lock of the runs, other than this process, or null; with a key, of
+//                             that item only (a preview in a lane)
+//   gitAt(dir)                git in another folder, the lane of an item (C2 spec section 8)
+//   hold({ pid, key }), drop(key)   the lock a preview in a lane holds on its item while its apps run, and its end
 //   now()
-export function previewRunner({ projectDir, git, checkout, runPackages, spawn, fs, portBusy: busy, answers: answering, killTree, sleep, env, execPath, cliOf, cleared = [], agentRunning, now = Date.now }) {
+export function previewRunner({ projectDir, git, gitAt = () => git, checkout, runPackages, spawn, fs, portBusy: busy, answers: answering, killTree, sleep, env, execPath, cliOf, cleared = [], agentRunning, hold = () => {}, drop = () => {}, now = Date.now }) {
   const paths = previewPaths(projectDir);
   const readJson = (file) => {
     try {
@@ -89,9 +92,10 @@ export function previewRunner({ projectDir, git, checkout, runPackages, spawn, f
 
   // What /ao-preview reads on this machine. `install` is a forecast from the head of the PR when git has it already;
   // start decides again once the folder is on the branch.
-  async function facts(stopping, pr) {
+  // lane: { key, dir } when lanes are on (dir null when the item has none), or null; the lane is what counts then.
+  async function facts(stopping, pr, lane = null) {
     const { apps: config, manager, problem: configError } = readApps(fs, projectDir);
-    const dirty = git('status', '--porcelain', '--untracked-files=no').stdout.trim().split('\n').filter(Boolean).length;
+    const dirty = (lane?.dir ? gitAt(lane.dir) : git)('status', '--porcelain', '--untracked-files=no').stdout.trim().split('\n').filter(Boolean).length;
     const taken = [];
     for (const { port } of config ?? []) if (await busy(port)) taken.push(port);
     const lock = pr?.headSha ? git('show', `${pr.headSha}:${lockfileOf(manager)}`) : null;
@@ -101,10 +105,12 @@ export function previewRunner({ projectDir, git, checkout, runPackages, spawn, f
       manager,
       configError,
       active: readJson(paths.active),
-      agentRunning: agentRunning(),
+      agentRunning: agentRunning(lane?.key),
       dirty,
       busy: taken,
-      install: lock?.status === 0 ? needsInstall(lock.stdout, readJson(paths.state)) : true,
+      // A lane has the packages of its branch: its agents installed them there.
+      install: lane ? false : lock?.status === 0 ? needsInstall(lock.stdout, readJson(paths.state)) : true,
+      lane,
     };
   }
 
@@ -112,7 +118,8 @@ export function previewRunner({ projectDir, git, checkout, runPackages, spawn, f
   // order, apart from ao-step, with its log in .ai/preview/ and no secret in its environment. The record of the preview
   // is written as soon as the folder is on the branch, and whatever fails from there goes through stop: the apps stop,
   // the folder goes back to develop with its packages, and the record stays while it cannot (live-run-fixes spec 2.6).
-  async function start({ key, number, branch, head: checked, protected: globs = [] }) {
+  async function start({ key, number, branch, head: checked, protected: globs = [], lane }) {
+    if (lane) return startInLane({ key, number, branch, checked, globs, lane });
     const { apps: config, manager, problem } = readApps(fs, projectDir);
     if (!config) throw new Error(problem ?? `the project has no ${PROJECT_FILE}`);
     steeringCheck({ key, number, branch, checked, globs });
@@ -143,6 +150,18 @@ export function previewRunner({ projectDir, git, checkout, runPackages, spawn, f
         installed(lock);
         notes.push(`Ran ${installName(manager)} --ignore-scripts, since ${lockfileOf(manager)} differs from the one installed before.`);
       }
+      await runApps(config, projectDir, apps, record, appEnv);
+      notes.push(...apps.map(({ name, url }) => `${name}: ${url}`), `Stop it with /ao-preview ${key} --stop: the apps stop and the folder goes back to develop. /ao-fix and /ao-review stop it too.`);
+      return notes;
+    } catch (error) {
+      const stopped = await stop();
+      throw new Error(`${error.message}. ${stopped.notes.join(' ')}`);
+    }
+  }
+
+  // Each app of project.yaml in order, from `cwd`, apart from ao-step, with its log in .ai/preview/; started(app) once
+  // each runs. Throws when one does not answer within 2 minutes.
+  async function runApps(config, cwd, apps, record, appEnv, started = () => {}) {
       for (const app of config) {
         const log = fs.openSync(join(paths.dir, `${app.name}.log`), 'w');
         // npm, pnpm or node and its words, with no shell: npm and pnpm through their JavaScript file next to node, as
@@ -151,14 +170,40 @@ export function previewRunner({ projectDir, git, checkout, runPackages, spawn, f
         const cli = tool === 'node' ? null : cliOf(tool);
         const [file, args] = tool === 'node' ? [execPath, words] : cli ? [execPath, [cli, ...words]] : [tool, words];
         const quiet = tool === 'pnpm' ? { COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' } : {};
-        const child = spawn(file, args, { cwd: projectDir, env: { ...appEnv, ...quiet, ...app.env }, detached: true, windowsHide: true, stdio: ['ignore', log, log] });
+        const child = spawn(file, args, { cwd, env: { ...appEnv, ...quiet, ...app.env }, detached: true, windowsHide: true, stdio: ['ignore', log, log] });
         child.unref();
         apps.push({ name: app.name, url: app.url, port: app.port, pid: child.pid });
         record();
+        started(apps.at(-1));
         if (!(await answering(app.url, 120000))) throw new Error(`${app.name} did not answer at ${app.url} within 2 minutes: read .ai/preview/${app.name}.log`);
       }
-      notes.push(...apps.map(({ name, url }) => `${name}: ${url}`), `Stop it with /ao-preview ${key} --stop: the apps stop and the folder goes back to develop. /ao-fix and /ao-review stop it too.`);
-      return notes;
+  }
+
+  // /ao-preview <KEY> --go with lanes on (C2 spec section 8): the apps of the PR run from the lane of its item, which is
+  // on the PR branch already, with its packages, on the default ports of project.yaml, kept for you. No checkout, so the
+  // project folder stays on develop; the steering files are checked as for the folder. The first app to run holds the
+  // item, so no agent changes its code while you look; stop lets it go.
+  async function startInLane({ key, number, branch, checked, globs, lane }) {
+    const { apps: config, problem } = readApps(fs, projectDir);
+    if (!config) throw new Error(problem ?? `the project has no ${PROJECT_FILE}`);
+    steeringCheck({ key, number, branch, checked, globs });
+    const inLane = gitAt(lane);
+    const untracked = untrackedSteering(globs, inLane);
+    const headOf = () => inLane('rev-parse', 'HEAD').stdout.trim();
+    // The lane is brought to the head that was checked, never past it.
+    if (checked && headOf() !== checked) {
+      const was = headOf();
+      const moved = inLane('merge', '--ff-only', checked);
+      if (moved.status !== 0 || headOf() !== checked) throw new Error(`the lane of ${key} is at ${was.slice(0, 8)}, not ${checked.slice(0, 8)}, the head that was checked, and cannot move there: ${(moved.stderr || '').trim()}`);
+    }
+    const head = headOf();
+    const apps = [];
+    fs.mkdirSync(paths.dir, { recursive: true });
+    const record = () => fs.writeFileSync(paths.active, `${JSON.stringify({ key, pr: number, branch, head, apps, untracked, protected: globs, lane, startedAt: at() }, null, 2)}\n`);
+    record();
+    try {
+      await runApps(config, lane, apps, record, previewEnv(env, cleared), (app) => apps.length === 1 && hold({ pid: app.pid, key }));
+      return [`The apps of PR #${number} run from the lane of ${key}, on ${branch} at ${head.slice(0, 8)}; the project folder stays on develop.`, ...apps.map(({ name, url }) => `${name}: ${url}`), `Stop it with /ao-preview ${key} --stop. /ao-build, /ao-fix and /ao-review of ${key} stop it too.`];
     } catch (error) {
       const stopped = await stop();
       throw new Error(`${error.message}. ${stopped.notes.join(' ')}`);
@@ -190,8 +235,8 @@ export function previewRunner({ projectDir, git, checkout, runPackages, spawn, f
   // The files that steer a session and git does not track, ignored ones included, such as CLAUDE.local.md or
   // .claude/settings.local.json: the apps of a PR run as you in the project folder and may write them (Low of security
   // on ao-sample PR #21; live-run-fixes spec 2.8). A folder ignored as a whole, such as node_modules/, is one entry.
-  function untrackedSteering(globs) {
-    const listed = git('status', '--porcelain=v1', '-z', '--ignored=matching', '--untracked-files=all');
+  function untrackedSteering(globs, inFolder = git) {
+    const listed = inFolder('status', '--porcelain=v1', '-z', '--ignored=matching', '--untracked-files=all');
     if (listed.status !== 0) return [];
     return listed.stdout.split('\0').filter((entry) => /^(\?\?|!!) /.test(entry)).map((entry) => entry.slice(3)).filter((path) => steersPreview(path, globs));
   }
@@ -216,8 +261,15 @@ export function previewRunner({ projectDir, git, checkout, runPackages, spawn, f
     const notes = [`Stopped the preview of ${active.key}: ${(active.apps ?? []).map(({ name }) => name).join(', ') || 'no app ran'}.${still.length > 0 ? ` Still answering: ${still.join(', ')}; stop it yourself.` : ''}`];
     // Named, never deleted: you may have made one yourself during the preview. A record from before this check has no list.
     if (Array.isArray(active.untracked)) {
-      const appeared = untrackedSteering(active.protected ?? []).filter((path) => !active.untracked.includes(path));
+      const appeared = untrackedSteering(active.protected ?? [], active.lane ? gitAt(active.lane) : git).filter((path) => !active.untracked.includes(path));
       if (appeared.length > 0) notes.push(`Files that steer a session appeared in the project folder during the preview, and git does not track them: ${appeared.join(', ')}. The apps of the PR may have written them, and /ao-preview --stop does not delete them: read each one, and delete those you did not make.`);
+    }
+    // A preview in a lane leaves the lane on its branch, and the item to its agents again.
+    if (active.lane) {
+      fs.rmSync(paths.active, { force: true });
+      drop(active.key);
+      notes.push(`The lane of ${active.key} stays on ${active.branch}.`);
+      return { home: true, notes };
     }
     const home = checkout({ branch: 'develop', pull: true });
     if (!home.ok) {

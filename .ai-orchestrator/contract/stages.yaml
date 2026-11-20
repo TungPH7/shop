@@ -40,12 +40,14 @@ stages:
       artifacts: [spec, design]
       other: "PR tài liệu của Epic vào develop, từ nhánh feature/<EPIC-KEY>-spec; bạn đọc diff của nó trước cổng ①"
     gate: spec-approval
+    # seo last, after ba opened the docs PR, and ao-step pushes its commit there: seo writes from web pages, and no agent
+    # with Bash reads that before you do at gate ① (second review of shop PR #79, Phiên 33 · Lượt 101).
     runs:
       - { role: ba, purpose: spec-write, done: spec-written }
       - { role: ux, purpose: design, when: spec-has-screens, done: design-written }
-      - { role: seo, purpose: seo-write, when: spec-has-seo-screens, done: spec-has-seo }
       - { role: sa, purpose: spec-nfr, done: spec-has-nfr }
       - { role: ba, purpose: docs-pr }
+      - { role: seo, purpose: seo-write, when: spec-has-seo-screens, done: spec-has-seo }
   - id: plan
     name: "Lập plan, tạo Story/Task"
     roles: [sa, ba]

@@ -10,10 +10,26 @@ export function searchFile(dir, session) {
   return join(dir, 'ao-web-search', `${session.replace(/[^\w-]/g, '_')}.txt`);
 }
 
-// The URLs in the response of a WebSearch, whatever its shape: every http or https address in it, without the
-// punctuation that can close a sentence after one.
+// The pages a WebSearch gave: the url of each result, from the response of Claude Code (2.1.329: { query, results,
+// durationSeconds, searchCount }, where results holds { tool_use_id, content: [{ title, url }] } and text). Not the
+// query, which the role typed, nor the text, which a page can write: either let it fetch an address of its choosing,
+// with the data in it (second review of shop PR #79). An http or https URL with no user, password or white space, so
+// it writes one line of the record. Any other shape gives none.
 export function resultUrls(response) {
-  const text = typeof response === 'string' ? response : JSON.stringify(response ?? '');
-  const found = (text.match(/https?:\/\/[^\s"'<>\\`)\]}]+/g) ?? []).map((url) => url.replace(/[.,;:!?]+$/, ''));
-  return [...new Set(found)];
+  const results = response && typeof response === 'object' && !Array.isArray(response) ? response.results : undefined;
+  if (!Array.isArray(results)) return [];
+  const urls = results
+    .flatMap((result) => (result && typeof result === 'object' && Array.isArray(result.content) ? result.content : []))
+    .map((entry) => entry?.url)
+    .filter((url) => typeof url === 'string' && /^https?:\/\/\S+$/i.test(url) && webAddress(url));
+  return [...new Set(urls)];
 }
+
+const webAddress = (text) => {
+  try {
+    const url = new URL(text);
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+};

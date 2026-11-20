@@ -151,6 +151,7 @@ function workflows(contract, mapping) {
     '2. Trong khung đó, phần **Rules** có bốn nhóm: Restrict transition, Request input, Validate details, Perform actions. Ở nhóm **Restrict transition**, bấm **Add restrict transition rule** (hoặc dấu **+**).',
     '3. Hộp **Add rule** mở ra. Kéo danh sách bên phải xuống cuối, chọn **Restrict who can move a work item** → **Select**.',
     '4. Ô **Restrict to** chọn **Groups** → chọn các group ghi ở dòng đó → **Add**.',
+    '5. Mỗi transition chỉ có **một** rule Restrict, chứa mọi group ghi ở dòng đó. Cần thêm một group cho transition đã có rule thì bấm vào rule có sẵn và thêm group vào đó, đừng thêm rule mới: Jira đòi người bấm qua mọi rule, tức phải thuộc mọi group (QA của SHOP-78 kẹt ở Pick up vì hai rule tách rời). `npm run jira:check` báo trường hợp này là `restrict-split`.',
     '',
     '**Rule đặt Resolution là Done:** trong khung **Transition**, nhóm **Perform actions** → **Add perform actions rule** → **Update an issue field** (có thể tên **Update a work item field**) → **Select** → ô **Update this field** chọn **Resolution** → giá trị **Done** → **Add**.',
     '',

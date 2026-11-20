@@ -16,9 +16,20 @@ const PROJECT = '_project';
 // Whether a command may start next to the live ones: { ok: true, name, slot } or { ok: false, reason }. live: the locks
 // of commands still running, [{ name, command, key, role, environment, slot, pid }]. cap: how many may run at once.
 // A slot is the smallest number from 0 no live lock holds: the lane's ports are offset by it (spec 5.2).
-export function admit({ live, command, key, role, environment, cap }) {
+// agentsPerRole: runs.agents_per_role, how many build or fix commands of a dev role may run at once (C2 spec section 6).
+// lanes: runs.worktrees is on, so /ao-preview runs from the lane of its item (C2 spec section 8). A preview in a lane
+// holds its item only: it runs no agent, takes no slot, and counts toward no cap.
+export function admit({ live: all, command, key, role, environment, cap, agentsPerRole = {}, lanes = false }) {
+  const live = all.filter((lock) => lock.command !== 'preview');
   const alone = live.find(({ name }) => name === PROJECT);
   if (alone) return { ok: false, reason: `ao-step is running ${what(alone)}, which runs alone` };
+  if (command === 'preview' && lanes) {
+    const same = all.find((lock) => lock.key === key);
+    if (same) return { ok: false, reason: `ao-step is already running ${same.command} on ${key} (process ${same.pid}): one run per item` };
+    return { ok: true, name: key, slot: -1 };
+  }
+  const previewing = all.find((lock) => lock.command === 'preview' && lock.key === key);
+  if (previewing) return { ok: false, reason: `the preview of ${key} runs (process ${previewing.pid}): /ao-preview ${key} --stop first` };
   if (!PARALLEL.includes(command) || cap <= 1) {
     if (live.length > 0) return { ok: false, reason: `ao-step is already running ${describe(live)}; ${PARALLEL.includes(command) ? 'agents run one at a time' : `/ao-${command} runs alone`}` };
     return { ok: true, name: PARALLEL.includes(command) ? key : PROJECT, slot: 0 };
@@ -30,8 +41,12 @@ export function admit({ live, command, key, role, environment, cap }) {
     if (testing) return { ok: false, reason: `qa is testing ${testing.key} on ${environment} (process ${testing.pid}): one QA at a time on an environment, since the E2E tests share its data` };
   }
   if (DEV_COMMANDS.includes(command) && role) {
-    const busy = live.find((lock) => DEV_COMMANDS.includes(lock.command) && lock.role === role);
-    if (busy) return { ok: false, reason: `${role} is at work on ${busy.key} (process ${busy.pid}): a dev agent builds one item at a time` };
+    const busy = live.filter((lock) => DEV_COMMANDS.includes(lock.command) && lock.role === role);
+    const most = agentsPerRole[role] ?? 1;
+    if (busy.length >= most) {
+      const why = most === 1 ? 'a dev agent builds one item at a time' : `runs.agents_per_role lets ${most} ${role} agents work at once`;
+      return { ok: false, reason: `${role} is at work on ${busy.map(({ key: k, pid }) => `${k} (process ${pid})`).join(', ')}: ${why}` };
+    }
   }
   if (live.length >= cap) return { ok: false, reason: `${live.length} runs are going already, the most runs.lanes_max allows: ${describe(live)}` };
   const taken = new Set(live.map(({ slot }) => slot));
@@ -105,12 +120,12 @@ async function underMutex(dir, pid, decide, { fs, alive, sleep, tries = 50 }) {
 
 // Takes a lock for a command: under a mutex file, reads the live locks, admits or refuses, and writes the lock.
 // Resolves { ok: true, file, slot } or { ok: false, reason }. fs adds writeFileSync and mkdirSync; sleep(ms).
-export async function takeLock(dir, holder, { fs, alive, cap, sleep, tries = 50 }) {
+export async function takeLock(dir, holder, { fs, alive, cap, sleep, tries = 50, agentsPerRole = {}, lanes = false }) {
   return underMutex(
     dir,
     holder.pid,
     () => {
-      const decided = admit({ live: liveLocks(dir, { fs, alive, clean: true }), ...holder, cap });
+      const decided = admit({ live: liveLocks(dir, { fs, alive, clean: true }), ...holder, cap, agentsPerRole, lanes });
       if (!decided.ok) return decided;
       const file = join(dir, `${decided.name}.json`);
       writeLock(fs, file, { ...holder, slot: decided.slot });
@@ -125,7 +140,8 @@ export async function takeLock(dir, holder, { fs, alive, cap, sleep, tries = 50 
 // command's run holds that role this one waits, looking again every poll ms, most times at most; its lock holds no role
 // meanwhile, so two commands that wait for each other's role cannot both wait. onWait(busy) is told once. Resolves
 // { ok: true, waited } or { ok: false, reason }.
-export async function claimRole(dir, file, role, { fs, alive, sleep, poll = 30_000, most = 240, onWait = () => {} }) {
+// limit: how many commands may hold the role at once (runs.agents_per_role, C2 spec section 6).
+export async function claimRole(dir, file, role, { fs, alive, sleep, poll = 30_000, most = 240, onWait = () => {}, limit = 1 }) {
   for (let attempt = 0; attempt <= most; attempt++) {
     const result = await underMutex(
       dir,
@@ -133,7 +149,8 @@ export async function claimRole(dir, file, role, { fs, alive, sleep, poll = 30_0
       () => {
         if (!fs.existsSync(file)) return { ok: false, reason: `the lock ${file} is gone` };
         const own = JSON.parse(fs.readFileSync(file, 'utf8'));
-        const busy = liveLocks(dir, { fs, alive, clean: true }).find((lock) => join(dir, `${lock.name}.json`) !== file && DEV_COMMANDS.includes(lock.command) && lock.role === role);
+        const holders = liveLocks(dir, { fs, alive, clean: true }).filter((lock) => join(dir, `${lock.name}.json`) !== file && DEV_COMMANDS.includes(lock.command) && lock.role === role);
+        const busy = holders.length >= limit ? holders[0] : null;
         writeLock(fs, file, { ...own, role: busy ? null : role });
         return busy ? { ok: false, busy } : { ok: true, waited: attempt > 0 };
       },
