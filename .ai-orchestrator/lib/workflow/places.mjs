@@ -30,6 +30,8 @@ export function laneDir(projectDir, key) {
 export function laneOf(run, { worktrees, command }) {
   // A review is known by its worktree, or by its purpose on the record of a run, which keeps no worktree.
   if (!worktrees || run.worktree || REVIEWS.includes(run.purpose) || !LANE_COMMANDS.includes(command)) return null;
+  // A run with no branch to work on, as the build of an ops Task: a lane of it would never be pruned (review of shop PR #78).
+  if (run.lane === false) return null;
   const key = run.story ?? run.key;
   return KEY.test(key ?? '') ? key : null;
 }

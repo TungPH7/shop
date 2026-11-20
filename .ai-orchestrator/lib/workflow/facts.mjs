@@ -6,12 +6,16 @@
 import { docsPullRequest, gatePassage } from '../quality/docs-pr.mjs';
 import { docsRule } from '../quality/gates.mjs';
 import { approved, botLogin, protectedPaths } from '../quality/merge-gate.mjs';
-import { acceptedRisks, findingId, openFindings, readReviewReport, stillBlocking } from '../quality/pull-request.mjs';
+import { acceptedRisks, findingCounts, findingId, openFindings, readReviewReport, stillBlocking } from '../quality/pull-request.mjs';
+import { pathTier, requiredReviewRoles } from '../quality/review-tiers.mjs';
+import { waiverOnHead } from '../quality/waivers.mjs';
 import { parseBranch } from '../tracker/conventions.mjs';
 import { expectedOptions } from '../tracker/expected.mjs';
-import { changesRequestedOn, githubGuards, jiraGuards, qaEnvironment, readChecks, readLatestQaReport } from '../tracker/facts.mjs';
+import { adfText, changesRequestedOn, githubGuards, jiraGuards, qaEnvironment, readChecks, readLatestQaReport } from '../tracker/facts.mjs';
 import { latestFlagComment } from '../tracker/flags.mjs';
 import { countRework } from '../tracker/rework.mjs';
+import { recordedLine } from './findings.mjs';
+import { labelLevel } from './levels.mjs';
 import { openRequests } from './requests.mjs';
 import { ownChanges } from './security-scope.mjs';
 import { cutPoint } from '../release/cut.mjs';
@@ -32,10 +36,18 @@ export function agentNames(contract, mapping) {
 // ao-effort-xhigh → xhigh. Only roles of the roster and efforts claude takes count; null when there is none.
 export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 export function workLabels(labels, mapping, roster) {
-  const { role_prefix: rolePrefix, effort_prefix: effortPrefix } = mapping.work_labels;
+  const { role_prefix: rolePrefix, effort_prefix: effortPrefix, level_prefix: levelPrefix, seo: seoLabel } = mapping.work_labels;
   const efforts = labels.filter((label) => label.startsWith(effortPrefix)).map((label) => label.slice(effortPrefix.length)).filter((e) => EFFORTS.includes(e));
-  const roles = labels.filter((label) => label.startsWith(rolePrefix) && !label.startsWith(effortPrefix)).map((label) => label.slice(rolePrefix.length)).filter((r) => roster.roles[r]);
-  return { role: roles[0] ?? null, roles, effort: efforts.sort((a, b) => EFFORTS.indexOf(b) - EFFORTS.indexOf(a))[0] ?? null };
+  // ao-seo marks an item with an SEO part (C1 spec 6.6), and is no role label though seo is a role of the roster.
+  const roles = labels.filter((label) => label.startsWith(rolePrefix) && !label.startsWith(effortPrefix) && label !== seoLabel).map((label) => label.slice(rolePrefix.length)).filter((r) => roster.roles[r]);
+  // level: the process level the label names, or null for standard (C1 spec section 2).
+  return {
+    role: roles[0] ?? null,
+    roles,
+    effort: efforts.sort((a, b) => EFFORTS.indexOf(b) - EFFORTS.indexOf(a))[0] ?? null,
+    level: levelPrefix ? labelLevel(labels, levelPrefix) : null,
+    seo: Boolean(seoLabel) && labels.includes(seoLabel),
+  };
 }
 
 // The contract work type and state of a Jira type and status, or nulls.
@@ -163,17 +175,31 @@ export async function readPullRequest(github, number, { gates, apps, approvers =
   const head = pr.head.sha;
   const [reviews, files, checks] = [await github.getAll(`/pulls/${number}/reviews`), await github.getAll(`/pulls/${number}/files`), await checksOf(github, head)];
   const on = now().toISOString().slice(0, 10);
-  const { reports, securityFull } = reviewReports(reviews, { roles: gates.github_apps.review.roles, bot: botLogin(apps.review), head, approvers, on });
-  // From the newest full security report to the head, for a review of the new part only (spec 2.6).
-  const since = reports.security && !reports.security.onHead ? securityFull?.sha : null;
-  const compare = since ? await maybe(() => github.get(`/compare/${since}...${head}`)) : null;
+  const { reports, securityFull, reviewerFull, reported, blockingEver, minor } = reviewReports(reviews, { roles: gates.github_apps.review.roles, bot: botLogin(apps.review), head, approvers, on });
+  // From the newest full report of each role to the head, for a review of the new part only (spec 2.6; the reviewer
+  // too since C1 spec 3.2). One compare per commit, when both roles count from the same one.
+  const compares = new Map();
+  const compareFrom = async (role, full) => {
+    const since = reports[role] && !reports[role].onHead ? full?.sha : null;
+    if (!since) return null;
+    if (!compares.has(since)) compares.set(since, await maybe(() => github.get(`/compare/${since}...${head}`)));
+    const compare = compares.get(since);
+    return compare && { base: since, status: compare.status, files: ownChanges((compare.files ?? []).map(({ filename, previous_filename: previous, additions, deletions }) => ({ filename, previous_filename: previous, additions, deletions })), files.map(({ filename }) => filename)) };
+  };
+  const securityCompare = await compareFrom('security', securityFull);
+  const reviewerCompare = await compareFrom('reviewer', reviewerFull);
+  // The tier of the PR, and the reports the merge needs, as merge-gate works them out (C1 spec 3.1, 3.2).
+  const cut = Number.isInteger(pr.changed_files) && files.length < pr.changed_files;
+  const { tier } = pathTier(files, gates, { truncated: cut });
+  const requiredRoles = requiredReviewRoles({ roles: gates.github_apps.review.roles, tier, reported });
   return {
     number: pr.number,
     title: pr.title,
     body: pr.body ?? '',
     state: pr.state,
     // Only the files the PR changes itself: a merge of develop into its branch brings no new part (PR #41 of shop).
-    securityCompare: compare && { base: since, status: compare.status, files: ownChanges((compare.files ?? []).map(({ filename, previous_filename: previous, additions, deletions }) => ({ filename, previous_filename: previous, additions, deletions })), files.map(({ filename }) => filename)) },
+    securityCompare,
+    reviewerCompare,
     merged: Boolean(pr.merged_at),
     mergeCommit: pr.merged_at ? pr.merge_commit_sha : null,
     mergedAt: pr.merged_at ?? null,
@@ -198,6 +224,13 @@ export async function readPullRequest(github, number, { gates, apps, approvers =
     ci: { green: checks.green, failed: checks.failed, pending: !checks.green && !checks.failed, started: checks.started },
     reports,
     securityFull,
+    reviewerFull,
+    tier,
+    requiredRoles,
+    blockingEver,
+    minorFindings: minor,
+    // The review waived by rule whose trace is on the head, or null (C1 spec 3.4).
+    waiverOnHead: waiverOnHead(reviews, { bot: botLogin(apps.review), head }),
     changesRequested: changesRequestedOn(reviews, head),
     approved: approved({ pr, reviews, approvers }),
   };
@@ -226,10 +259,21 @@ export function reviewReports(reviews, { roles, bot, head, approvers = [], on })
     const still = report.sha === head ? stillBlocking(open, accepted) : open;
     // Only a High can be accepted, so only Highs get an id to name (review round 4 of shop PR #13).
     const ids = still.filter(({ severity }) => severity === 'High').map(findingId);
-    return { sha: report.sha, at: report.at, ok: report.ok, blocking: still.length, open, ids, state: report.state, onHead: report.sha === head };
+    // counts: the findings of this report by severity, with the Mediums counted as Low for want of a repro (C1 spec 4.2).
+    return { sha: report.sha, at: report.at, ok: report.ok, blocking: still.length, open, ids, state: report.state, onHead: report.sha === head, counts: findingCounts(report) };
   };
   const reports = Object.fromEntries(roles.map((role) => [role, brief(all.filter((report) => report.role === role).at(-1))]));
-  return { reports, securityFull: brief(all.filter((report) => report.role === 'security' && !report.scope).at(-1)) };
+  const fullOf = (role) => brief(all.filter((report) => report.role === role && !report.scope).at(-1));
+  // reported: the roles with a report on the PR, on any commit: the merge then needs theirs (C1 spec 3.1).
+  // blockingEver: a report of the PR, on any commit, had a Critical or High: the level of the item goes up a step.
+  // minor: the Medium and Low of the newest report of each role on the head, for the findings Task of the Epic (C1 spec
+  // section 2).
+  const minor = roles.flatMap((role) => {
+    const newest = all.filter((report) => report.role === role).at(-1);
+    if (!newest || newest.sha !== head || !newest.ok) return [];
+    return newest.findings.filter(({ severity }) => ['Medium', 'Low'].includes(severity)).map(({ severity, where, finding, asked }) => ({ role, severity, where, finding, id: findingId({ where, finding }), ...(asked && { asked }) }));
+  });
+  return { reports, securityFull: fullOf('security'), reviewerFull: fullOf('reviewer'), reported: [...new Set(all.map(({ role }) => role).filter(Boolean))], blockingEver: all.some(({ blocking }) => (blocking?.length ?? 0) > 0), minor };
 }
 
 // The docs PR of an Epic: its branch, whether it is here or on GitHub, its newest PR, and the SPEC, design and plan on
@@ -290,8 +334,15 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
   const qa = command === 'qa' && pr ? await readQaFacts(ctx.deploys, pr, ctx) : undefined;
   // After QA fail the PR of an item In Progress is merged: /ao-build reads the newest QA report (human-loop spec 5.2).
   // /ao-qa --retest reads it for an item In QA: it runs again only after a NOT TESTED report.
-  const reportNeeded = (command === 'build' && item.state === 'in-progress' && pr?.merged) || (command === 'qa' && item.state === 'in-qa');
+  // /ao-qa reads it always: after a QA fail, a QA again at level standard checks only the criteria it failed (C1 spec
+  // section 2).
+  const reportNeeded = (command === 'build' && item.state === 'in-progress' && pr?.merged) || command === 'qa';
   const qaReport = reportNeeded ? await readLatestQaReport(jira, item.key) : undefined;
+  // /ao-qa records the Medium and Low of a merged PR in the findings Task of the Epic (C1 spec section 2): which Task,
+  // and whether it names the PR already.
+  const findings = command === 'qa' && epic && pr?.merged && pr.minorFindings?.length > 0 ? await readFindingsTask(jira, { epic: epic.key, space: ctx.space, label: ctx.mapping.work_labels.findings, pr: pr.number }) : undefined;
+  // /ao-qa of an item labelled light prints what to check, from its description (C1 spec section 2).
+  const description = command === 'qa' && item.level === 'light' ? await maybe(async () => adfText((await jira.get(`/rest/api/3/issue/${encodeURIComponent(item.key)}`, { fields: 'description' })).fields?.description)) : undefined;
   // A kit another project reviewed needs no agent (kit-copy-review spec 2.1). Only on an open PR with green CI, which
   // /ao-review would review, and while a report is missing on its head: the compare reads GitHub and renders the agents
   // (review of ao-pilot PR #24). ctx.kitCopy(pr) resolves to null when the PR claims no such thing.
@@ -310,6 +361,8 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
     dependenciesMerged: guards.includes('dependencies-merged'),
     ...(qa && { qa }),
     ...(qaReport !== undefined && { qaReport }),
+    ...(description !== undefined && { description }),
+    ...(findings !== undefined && { findings }),
     ...(kitCopy && { kitCopy }),
     wip: await readWip(jira, item, ctx),
     // A New Story or Task that meets DoR: /ao-build asks jira-sync to refine it (SHOP-39 of shop, Phiên 33).
@@ -318,7 +371,18 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
     // The Sub-tasks with a ledger: the agents of a split Story keep one per Sub-task.
     subtaskLedgers: (item.subtasks ?? []).filter(({ key: sub }) => local.ledger(sub)).map(({ key: sub }) => sub),
     run: local.runState(item.key),
+    // /ao-status <Epic> adds the runs of its items, for the cost per acceptance criterion (C1 spec section 7).
+    ...(command === 'status' && item.workType === 'epic' && { itemRuns: (item.children ?? []).flatMap((child) => [child, ...(child.subtasks ?? [])]).map(({ key: k }) => ({ key: k, runs: local.runState(k)?.runs ?? [] })) }),
   };
+}
+
+// The findings Task of an Epic, the oldest with the label, and whether one of its comments records PR `pr` already:
+// { key, recorded }, key null when the Epic has none yet.
+export async function readFindingsTask(jira, { epic, space, label, pr }) {
+  const [task] = await jira.searchAll(`project = "${space}" AND parent = "${epic}" AND labels = "${label}" ORDER BY created ASC`, ['summary']);
+  if (!task) return { key: null, recorded: false };
+  const comments = await jira.getAll(`/rest/api/3/issue/${encodeURIComponent(task.key)}/comment`, {}, 'comments');
+  return { key: task.key, recorded: comments.some(({ body }) => adfText(body).includes(recordedLine(pr))) };
 }
 
 // The account id of the agents' identity, whose unsigned comments are an agent's, not the human's (review of PR #21).

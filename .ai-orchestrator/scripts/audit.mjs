@@ -19,6 +19,7 @@ import { readGates } from '../lib/quality/gates.mjs';
 import { createGitHubClient, originRepo, readGitHubToken } from '../lib/tracker/github-client.mjs';
 import { bearerAuth, createJiraClient } from '../lib/tracker/jira-client.mjs';
 import { readMapping } from '../lib/tracker/mapping.mjs';
+import { itemLevel } from '../lib/workflow/levels.mjs';
 
 const kit = fileURLToPath(new URL('..', import.meta.url));
 const projectDir = process.env.GITHUB_WORKSPACE ?? process.cwd();
@@ -50,7 +51,11 @@ try {
   const gates = readGates(join(kit, 'quality'));
   // The merge of a docs PR passes on the Epic's state (dev-workflow spec 2.4), read with the same token.
   const docs = jiraToken
-    ? { jira: createJiraClient({ cloudId: mapping.cloud_id, authorization: bearerAuth(jiraToken) }), passage: gatePassage(readContract(join(kit, 'contract')), mapping, gates.docs_pull_requests.gate) }
+    ? (() => {
+        const reader = createJiraClient({ cloudId: mapping.cloud_id, authorization: bearerAuth(jiraToken) });
+        // levelOf: the level an item's label names, for a review waived by rule (C1 spec 3.4).
+        return { jira: reader, passage: gatePassage(readContract(join(kit, 'contract')), mapping, gates.docs_pull_requests.gate), levelOf: itemLevel(reader, mapping) };
+      })()
     : undefined;
   const { ok } = await runAudit({
     github: createGitHubClient({ repo, token }),

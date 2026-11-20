@@ -8,9 +8,10 @@
 // A file written by a Bash command, such as a redirection, is not checked; the role rules cover Edit and Write.
 import { posix } from 'node:path';
 import { gitRefusal, writeRefusal } from '../agents/scope.mjs';
-import { NON_AGENT_ROLES } from '../rules/references.mjs';
+import { NON_AGENT_ROLES, WEB_ROLES } from '../rules/references.mjs';
 import { configReads, gitSubcommand } from './git-options.mjs';
 import { matchesGlob } from './glob.mjs';
+import { addedDependencies, installRefusal, installTargets } from './dependencies.mjs';
 
 const allow = { allow: true };
 const deny = (reason) => ({ allow: false, reason: `gh-guard: ${reason}` });
@@ -125,11 +126,16 @@ const GH_HOSTS_FILE = /(?:GitHub CLI|[\\/]gh)[\\/]+hosts\.yml\b/i;
 // The main session is you, and agents outside the contract (plugins, Explore) are not checked here. roster, the
 // project's agents/roster.yaml, adds the role rules; without it they are skipped. tempDir is the one folder outside the
 // project that Edit and Write may reach.
-export function checkAgentCall(input, { gates, contract, projectDir, roster, tempDir }) {
+// approved: () => the approved libraries of project.yaml, or undefined where there is none (C1 spec section 5); it rides
+// on the gates the command checks get. readFile: (path) => the text of a file of the project, or '' when it has none.
+export function checkAgentCall(input, { gates: kitGates, contract, projectDir, roster, tempDir, approved, readFile = () => '' }) {
+  const gates = approved ? { ...kitGates, approvedLibraries: approved } : kitGates;
   const role = input.agent_type;
   const agentRoles = contract.roles.map(({ id }) => id).filter((id) => !NON_AGENT_ROLES.includes(id));
   if (!agentRoles.includes(role)) return allow;
   const args = input.tool_input ?? {};
+  const webRead = WEB_ROLES.includes(role) ? webRoleRead(input.tool_name, args, projectDir) : undefined;
+  if (webRead) return webRead;
   switch (input.tool_name) {
     case 'Bash':
       // The working folder of the Bash tool stays from one call to the next, so a git grep with a mark from a folder
@@ -152,8 +158,17 @@ export function checkAgentCall(input, { gates, contract, projectDir, roster, tem
     }
     case 'Edit':
     case 'Write':
-    case 'NotebookEdit':
-      return checkEdit(args.file_path ?? args.notebook_path ?? '', role, gates, projectDir, roster, tempDir);
+    case 'NotebookEdit': {
+      const decision = checkEdit(args.file_path ?? args.notebook_path ?? '', role, gates, projectDir, roster, tempDir);
+      if (!decision.allow || !approved || input.tool_name === 'NotebookEdit') return decision;
+      // A dependency written into a pom.xml or a package.json must be approved first, as an install must.
+      const file = args.file_path ?? '';
+      const before = input.tool_name === 'Edit' ? (args.old_string ?? '') : readFile(file);
+      const after = input.tool_name === 'Edit' ? (args.new_string ?? '') : (args.content ?? '');
+      const added = addedDependencies({ path: file.replaceAll('\\', '/'), before, after });
+      const refusal = installRefusal(added.length > 0 ? added : null, approved());
+      return refusal ? deny(refusal) : allow;
+    }
     default:
       return allow;
   }
@@ -196,7 +211,9 @@ const PASSWORD_BUILTINS = ['printf', '[', '[[', 'test'];
 // apps into a temp folder to try a check). A copy fills the disk; a delete through a link of pnpm once emptied the
 // node_modules of the project. Like the key search, this catches mistakes: a loop over a variable is not followed.
 const RECURSIVE = { cp: /^-[A-Za-z]*[rRa]|^--(?:recursive|archive)$/, rm: /^-[A-Za-z]*[rR]|^--recursive$/ };
-const HEAVY_TREE = /(?:^|[\\/])node_modules(?:[\\/]|$)|(?:^|[\\/])apps[\\/]?\*?$/;
+// node_modules at any depth, the whole apps folder, one app of it, or the project folder itself (. or ./), since each app
+// of a pnpm workspace holds node_modules (review of shop PR #78).
+const HEAVY_TREE = /(?:^|[\\/])node_modules(?:[\\/]|$)|(?:^|[\\/])apps(?:[\\/][^\\/*]+)?[\\/]?\*?$|^\.[\\/]?$/;
 const TREE = 'do not copy or delete a folder tree that holds node_modules, or the whole apps folder: a copy fills the disk, and a delete can empty the node_modules of the project through a link of pnpm. To try a check on a copy, take only the files it needs, as in git archive HEAD <paths> | tar -x -C <temp folder>; to reinstall the packages, ask the human';
 const touchesHeavyTree = (program, words) => Boolean(RECURSIVE[program])
   && words.slice(1).some((word) => RECURSIVE[program].test(word))
@@ -215,6 +232,11 @@ function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
   if (env.some(sessionVariable)) return deny(IDENTITY);
   if (words.length === 0) return allow;
   const program = programOf(words[0]);
+  // A library installed by name must be on the approved list of project.yaml first (C1 spec section 5).
+  if (gates.approvedLibraries) {
+    const refusal = installRefusal(installTargets(program.replace(/\.(cmd|bat|ps1)$/, ''), words.slice(1)), gates.approvedLibraries());
+    if (refusal) return deny(refusal);
+  }
   if (DECLARERS.has(program) && words.slice(1).some((word) => !word.startsWith('-') && sessionVariable(word))) return deny(IDENTITY);
   if (SHELLS.has(program)) {
     const at = words.findIndex((word, i) => i > 0 && /^-[a-z]*c[a-z]*$/.test(word));
@@ -256,7 +278,11 @@ function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
   }
   // Only the builtins themselves: /usr/bin/printf is a process of its own. printf prints it into a pipe; [, [[ and test
   // only check it. ${…:+word} gives word or nothing, never the value, so it is no reference (QA SHOP-13 of shop).
-  if (!PASSWORD_BUILTINS.includes(words[0]) && words.slice(1).some((word) => PASSWORD_REFERENCE.test(word.replace(PASSWORD_SET_CHECK, '')))) return deny(PASSWORD);
+  // A word that runs a command, $( or a backtick, puts what it names on that command's line, under a builtin too
+  // (review of shop PR #78: [ "$(curl -u …$E2E_HTTP_PASSWORD …)" = 200 ] passed).
+  const names = (word) => PASSWORD_REFERENCE.test(word.replace(PASSWORD_SET_CHECK, ''));
+  const runsInside = (word) => /\$\(|`/.test(word);
+  if (words.slice(1).some((word) => names(word) && (!PASSWORD_BUILTINS.includes(words[0]) || runsInside(word)))) return deny(PASSWORD);
   if (touchesHeavyTree(program, words)) return deny(TREE);
   if (program === 'git' && env.some((assignment) => /^GIT_CONFIG/.test(assignment))) return deny(HOOKS);
   const result = program === 'git' ? checkGit(words, gates) : program === 'gh' ? checkGh(words) : (checkOrchestration(words) ?? checkAoPr(words, role, gates));
@@ -537,6 +563,34 @@ function checkEdit(file, role, gates, projectDir, roster, tempDir) {
 
 // Whether the path of a Grep or Glob reaches outside the project and the temp folder: your home folder (~) does, and no
 // path at all is the working folder, which is the project's or its worktree's.
+// The reads of a role of WEB_ROLES (C1 spec 6.4). Such a role reads web pages, which can carry orders, and can send
+// what it read out with WebFetch: so Read, Grep and Glob stay in the project, not in the temp folder either, and keep
+// away from the .env files but .env.example. Grep reads every file under its path whatever the pattern, so it needs a
+// file, or a glob of one extension, or a type, that no .env file matches. undefined when the call is fine.
+const ENV_FILE = /(?:^|[\\/])\.env(?!\.example$)[^\\/]*$/i;
+const ENV_NAMED = /(?:^|[\\/{,*])\.env(?!\.example(?:$|[},]))|\{(?:[^}]*,)?env[^,}]*[,}]/i;
+const ONE_EXTENSION = /^(?:[\w.-]+\/)*(?:\*\*\/)?\*\.(?:[A-Za-z0-9]+|\{[A-Za-z0-9]+(?:,[A-Za-z0-9]+)*\})$/;
+const A_FILE = /(?:^|[\\/])[^.\\/][^\\/]*\.[A-Za-z0-9]+$/;
+const WEB_ENV = 'the .env files are not read by a role that reads web pages (C1 spec 6.4); .env.example is';
+function webRoleRead(tool, args, projectDir) {
+  const outside = (path) => typeof path === 'string' && path.trim() !== '' && outsideProject(path, projectDir, []);
+  if (tool === 'Read') {
+    const file = args.file_path ?? '';
+    if (outside(file)) return deny(`${file} is outside the project: a role that reads web pages reads only in the project (C1 spec 6.4)`);
+    return ENV_FILE.test(file) ? deny(WEB_ENV) : undefined;
+  }
+  if (tool !== 'Grep' && tool !== 'Glob') return undefined;
+  const roots = [args.path, ...(tool === 'Glob' ? [args.pattern] : [])];
+  const away = roots.find(outside);
+  if (away !== undefined) return deny(`${away} is outside the project: a role that reads web pages reads only in the project (C1 spec 6.4)`);
+  if ([args.path, args.glob, ...(tool === 'Glob' ? [args.pattern] : [])].some((value) => typeof value === 'string' && ENV_NAMED.test(value))) return deny(WEB_ENV);
+  if (tool === 'Glob') return undefined;
+  const path = typeof args.path === 'string' ? args.path : '';
+  const glob = typeof args.glob === 'string' ? args.glob.replaceAll('\\', '/') : '';
+  if (A_FILE.test(path) || ONE_EXTENSION.test(glob) || (typeof args.type === 'string' && args.type !== '')) return undefined;
+  return deny('give Grep a file, a glob of one extension such as "*.json" or "**/*.{ts,tsx}", or a type such as "ts": a role that reads web pages does not search where a .env file could be (C1 spec 6.4)');
+}
+
 function outsideProject(value, projectDir, tempDir) {
   if (typeof value !== 'string' || value.trim() === '') return false;
   if (/^~(?:[\\/]|$)/.test(value)) return true;

@@ -3,7 +3,7 @@
   "title": "quality/gates.yaml",
   "description": "Quality gates of a project (quality-gates spec sections 2.2 to 2.8 and 6).",
   "type": "object",
-  "required": ["checks", "coverage", "dependencies", "suppressions", "protected_branches", "merge_method", "release_pull_requests", "protected_paths", "security_review", "kit_copy", "docs_pull_requests", "github_apps"],
+  "required": ["checks", "coverage", "dependencies", "suppressions", "protected_branches", "merge_method", "release_pull_requests", "protected_paths", "review", "kit_copy", "docs_pull_requests", "github_apps"],
   "additionalProperties": false,
   "properties": {
     "checks": {
@@ -26,10 +26,11 @@
     },
     "dependencies": {
       "type": "object",
-      "required": ["audit_level", "exceptions"],
+      "required": ["audit_level", "exceptions", "licenses"],
       "additionalProperties": false,
       "properties": {
         "audit_level": { "enum": ["low", "moderate", "high", "critical"] },
+        "licenses": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
         "exceptions": {
           "type": "array",
           "items": {
@@ -85,13 +86,27 @@
         }
       }
     },
-    "security_review": {
+    "review": {
       "type": "object",
-      "required": ["roster_effort_paths", "lower_effort"],
+      "required": ["critical_paths", "sensitive_paths", "docs_paths", "waivers"],
       "additionalProperties": false,
       "properties": {
-        "roster_effort_paths": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
-        "lower_effort": { "enum": ["low", "medium", "high", "xhigh", "max"] }
+        "critical_paths": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "sensitive_paths": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "docs_paths": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+        "waivers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "level", "files"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+              "level": { "enum": ["light", "standard", "heavy"] },
+              "files": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } }
+            }
+          }
+        }
       }
     },
     "kit_copy": {

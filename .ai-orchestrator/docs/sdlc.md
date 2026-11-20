@@ -19,13 +19,15 @@ Bản đọc của hợp đồng trong `contract/`. Nội dung và lý do của 
 | `security` | Security Engineer | Security review, threat model |
 | `qa` | Tester/QA Engineer | E2E, regression, báo cáo QA |
 | `devops` | DevOps Engineer | Deploy, cắt release, ship, rollback |
+| `seo` | SEO Specialist | Mục SEO của SPEC cho trang mà công cụ tìm kiếm thấy: từ khóa, chữ vi và en, dữ liệu có cấu trúc, hreflang (C1 spec mục 6) |
 | `automation` | CI, webhook, Jira Automation | Chuyển trạng thái theo dữ kiện: CI xanh, merge, deploy xong |
+| `light-qa` | Phiên chính, QA của item mức light | Kiểm item mức light thay lượt qa, đăng báo cáo QA ngắn và chuyển item bằng token CI (C1 spec mục 2) |
 
 ## Giai đoạn và cổng
 
 | Stage id | Giai đoạn | Người làm | Đầu vào | Đầu ra | Điều kiện để qua |
 | --- | --- | --- | --- | --- | --- |
-| `spec` | Viết SPEC cho Epic | `ba` (chính), `ux`, `sa`; ux viết design khi Epic đụng tới giao diện | Epic ở new | SPEC của Epic (`spec`); Thiết kế màn hình (`design`); PR tài liệu của Epic vào develop, từ nhánh feature/<EPIC-KEY>-spec; bạn đọc diff của nó trước cổng ① | Cổng ① `spec-approval`: Bạn duyệt SPEC của Epic |
+| `spec` | Viết SPEC cho Epic | `ba` (chính), `ux`, `seo`, `sa`; ux viết design khi Epic đụng tới giao diện; seo viết mục SEO của SPEC khi design có màn hình của app seo: true | Epic ở new | SPEC của Epic (`spec`); Thiết kế màn hình (`design`); PR tài liệu của Epic vào develop, từ nhánh feature/<EPIC-KEY>-spec; bạn đọc diff của nó trước cổng ① | Cổng ① `spec-approval`: Bạn duyệt SPEC của Epic |
 | `plan` | Lập plan, tạo Story/Task | `sa` (chính), `ba` | SPEC đã duyệt | Plan (`plan`); Story (`story`); Task (`task`); Plan gồm hợp đồng API cho Story có cả FE và BE, vai trò của từng item và effort của item khó; các Story/Task nằm trên Jira. Plan và ADR vào cùng PR tài liệu, và merge-gate merge PR đó sau cổng ② mà không cần review hay approve trên GitHub | Cổng ② `plan-approval`: Bạn duyệt plan của Epic |
 | `build` | Code theo TDD | `fe-dev`, `be-dev` | Item ready | Nhánh, commit, test | Unit và integration test pass ở local; pre-commit pass |
 | `ci-gate` | Quality gate tự động | `automation` | PR | Kết quả CI | Mọi check CI xanh |
@@ -79,7 +81,7 @@ Bản đọc của hợp đồng trong `contract/`. Nội dung và lý do của 
 | Affects Version | `bug` | Bản cũ nhất đang có lỗi | ba đề xuất, bạn duyệt |
 | Severity | `bug` | Critical: Mất hoặc sai dữ liệu, lỗ hổng bảo mật, hệ thống hoặc luồng thanh toán ngừng; High: Luồng chính hỏng, không có cách né; Medium: Có cách né; Low: Giao diện, chính tả | ba đề xuất, bạn duyệt |
 | Fix Version | `story`, `task`, `bug` | Bug: suy ra từ bảng định tuyến (mục 2.6). Story, Task: gắn khi cắt release | automation, devops |
-| Agent | `story`, `sub-task`, `task`, `bug` | Project Manager, Business Analyst, UI/UX designer, Solution Architect, Frontend Developer, Backend Developer, Code Reviewer, Security Engineer, Tester/QA Engineer, DevOps Engineer. Vai trò agent đang giữ item. Mọi agent dùng chung một tài khoản Jira, nên assignee không cho biết agent nào; guard wip-available đếm WIP theo trường này | Agent, khi start và pick-up |
+| Agent | `story`, `sub-task`, `task`, `bug` | Project Manager, Business Analyst, UI/UX designer, Solution Architect, Frontend Developer, Backend Developer, Code Reviewer, Security Engineer, Tester/QA Engineer, DevOps Engineer, SEO Specialist. Vai trò agent đang giữ item. Mọi agent dùng chung một tài khoản Jira, nên assignee không cho biết agent nào; guard wip-available đếm WIP theo trường này | Agent, khi start và pick-up |
 | Rework count | `story`, `task`, `bug` | Số lần quay lại in-progress. Không lưu thành trường: là số transition có effect increment-rework trong lịch sử chuyển trạng thái của item | Không ai điền: tự tính từ lịch sử |
 | Flagged | `epic`, `story`, `sub-task`, `task`, `bug` | Lý do bị chặn hoặc cần bạn quyết | Bất kỳ ai |
 | Resolution | `epic`, `story`, `task`, `bug` | Won't do, Duplicate, Not a bug, Cannot reproduce. Điền khi item chuyển sang cancelled | Bạn |
@@ -139,8 +141,8 @@ stateDiagram-v2
 | `hand-over` | `in-progress` → `ready-for-qa` | `devops`: Chỉ Task vận hành: không có PR, devops ghi bằng chứng rồi giao cho QA | Item là Task vận hành: có nhãn ao-ops, không có commit hay PR; devops đã ghi bằng chứng của việc vận hành trong một comment có mục ## Ops evidence | `tracker` |  |
 | `request-changes` | `in-review` → `in-progress` | `reviewer`, `security`, `human`, `automation` | Review trên PR yêu cầu sửa, hoặc CI của PR đỏ | `github-pr` | `increment-rework` |
 | `deploy-to-qa` | `in-review` → `ready-for-qa` | `automation` | Bạn đã approve PR ở cổng ③ merge-approval; PR đã merge vào nhánh gốc; Deploy lên môi trường QA của item (mục 2.6) thành công | `github-pr`, `deploy` |  |
-| `pick-up` | `ready-for-qa` → `in-qa` | `qa` | Không có | Không có |  |
-| `qa-fail` | `in-qa` → `in-progress` | `qa` | Báo cáo QA mới nhất của item có kết quả FAIL | `tracker` (`qa-report`) | `increment-rework` |
+| `pick-up` | `ready-for-qa` → `in-qa` | `qa`, `light-qa` | Không có | Không có |  |
+| `qa-fail` | `in-qa` → `in-progress` | `qa`, `light-qa` | Báo cáo QA mới nhất của item có kết quả FAIL | `tracker` (`qa-report`) | `increment-rework` |
 | `accept` | `in-qa` → `done` | `human` | Báo cáo QA mới nhất của item có kết quả PASS; Item đạt DoD của loại đó (mục 2.5) | `tracker` (`qa-report`), `human` |  |
 | `cancel` | `new`, `ready`, `in-progress`, `in-review`, `ready-for-qa`, `in-qa` → `cancelled` | `human` | Item có Resolution: Won't do, Duplicate, Not a bug hoặc Cannot reproduce | `tracker` |  |
 

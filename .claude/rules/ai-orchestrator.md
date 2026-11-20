@@ -24,6 +24,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 | `security` | Security Engineer |
 | `qa` | Tester/QA Engineer |
 | `devops` | DevOps Engineer |
+| `seo` | SEO Specialist |
 
 - Start every comment you write on an item with the value of your Agent field and a colon, such as `Business Analyst: …`. Scripts tell from it which role wrote it.
 - To ask another role for something, comment on the item with your Agent value, then `Cần <role>:` and what you need, such as `Frontend Developer: Cần ba: tạo Task cho bảng sản phẩm tràn ở 320 px`. The request is done once that role comments on the item. Do not do the other role's work yourself.
@@ -99,7 +100,7 @@ Run a script of an app with `node .ai-orchestrator/scripts/run.mjs <app> <script
 - `<script>` is `lint`, `typecheck`, `test`, `test:coverage`, `build`, or another script of its `package.json`.
 - Examples: `run.mjs api test -- -Dtest=ProductServiceTest` for a Java app, `run.mjs user test -- product-card` for a JS one.
 
-It runs Maven with the JDK of the app, or the package manager of the project. It runs in the foreground, prints the counts of tests and the first failure, and keeps the whole output in `.ai/tmp/run-<app>-<script>.log`. Read that file only for what the summary leaves out. Never write a wrapper of your own around Maven, pnpm or npm.
+It runs Maven with the JDK of the app, or the package manager of the project. It runs in the foreground, prints the counts of tests and the first failure, and keeps the whole output in `.ai/tmp/run-<app>-<script>.log`. Read that file only for what the summary leaves out. For a Java app, `-Dtest=` takes class names only, such as `ProductServiceTest`: Maven on Windows cannot take `#` or `,` there. Never write a wrapper of your own around Maven, pnpm or npm.
 
 ## Commands that take long
 

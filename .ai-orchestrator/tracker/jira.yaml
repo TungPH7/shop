@@ -19,7 +19,7 @@ identities:
     account: orchestratoragent
     account_id: "712020:3c1a9503-577b-49c6-a70e-033f740c1f31"
     group: ao-agents
-    roles: [pm, ba, ux, sa, fe-dev, be-dev, reviewer, security, qa, devops]
+    roles: [pm, ba, ux, sa, fe-dev, be-dev, reviewer, security, qa, devops, seo]
     token_env: ATLASSIAN_AGENT_TOKEN
     token_expires_on: "2027-10-27"
     note: "Mọi agent trong Claude Code, qua Rovo MCP; vai trò cụ thể do hook kiểm"
@@ -28,7 +28,8 @@ identities:
     account: orchestratorci
     account_id: "712020:14a4a21d-167e-4ee7-87cb-386edf298b62"
     group: ao-automation
-    roles: [automation]
+    # light-qa: the main session, for the QA of an item of level light (C1 spec section 2).
+    roles: [automation, light-qa]
     token_env: JIRA_CI_TOKEN
     token_expires_on: "2027-10-27"
     note: "Vai trò automation, chạy jira-sync trong GitHub Actions"
@@ -112,10 +113,19 @@ needs_you_label: needs-you
 work_labels:
   role_prefix: ao-
   effort_prefix: ao-effort-
+  # The process level of an item, light, standard or heavy (C1 spec section 2): sa proposes it in the plan, you approve it
+  # at gate ②, ba labels the item. No label is standard.
+  level_prefix: ao-level-
+  # The one Task of an Epic that gathers the Medium and Low findings not fixed on their PR (C1 spec section 2).
+  findings: ao-findings
   # A Task vận hành: no commit and no PR, handed to QA with the evidence of devops (Pilot 3, SHOP-12 of shop).
   ops: ao-ops
   # Only you put it on an ops Task: devops gets the basic auth of Development and Staging for it.
   env_auth: ao-env-auth
+  # An item with an SEO part (C1 spec 6.6): ba puts it on the Stories and Tasks whose plan line names screens of the
+  # section ## SEO, and /ao-intake on a Task or a Bug that touches a page of an app with seo: true. Its build, review and
+  # QA are pointed to that part. Never a role label, though seo is a role.
+  seo: ao-seo
 
 # One Kanban board per space. Columns follow the board_column of the contract states; the first is the Kanban backlog.
 # `{key}` is the space key. Cancelled items have no column, so they leave the board.

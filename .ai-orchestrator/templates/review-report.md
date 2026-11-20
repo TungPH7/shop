@@ -11,7 +11,8 @@ Keep headings in English and write the content in Vietnamese. Delete the guidanc
 
 Role: <reviewer | security>
 
-<!-- A security review of only the changes since its last full report (dev-workflow spec 2.6) adds, under Role, the line
+<!-- A review of only the changes since the last full report of its role (dev-workflow spec 2.6; the reviewer too since
+C1) adds, under Role, the line
 Scope: changes since <short SHA of the commit of that report>
 Every other review covers the whole PR and has no Scope line. When the prompt lists Critical or High findings still
 open, such a review also adds, after Findings, a section "## Earlier findings": a table with the columns
@@ -34,7 +35,21 @@ Role line; one that does not read as above makes the report unreadable, and an u
 Critical: blocks merge (security hole, data loss, broken feature). High: must be fixed before merge.
 Medium: should be fixed; may wait for a follow-up item. Low: nit or suggestion.
 These map to the skill's labels Critical, required (no prefix), Optional/Consider, and Nit/FYI.
-The review stage passes only when no Critical or High finding is open. -->
+The review stage passes only when no Critical or High finding is open.
+
+Criteria by axis (C1 spec section 4):
+| Axis | High | Medium | Low |
+|---|---|---|---|
+| Correctness | an acceptance criterion is not met; a Task changes the UI or a public API | a wrong result in an edge case, with a way to reproduce it | wording of a message |
+| Data | data is lost or corrupted; a migration breaks the previous version | a value is not validated at a boundary, with a way to reproduce it | |
+| Compatibility | an API consumer or a stored format breaks | a deprecated call with a replacement | |
+| Tests | a new behaviour has no test at all | a new behaviour misses a test of an edge case | a test name |
+| Readability | | logic hard to follow that hides a bug risk | names, comments, style |
+
+A Medium says how to reproduce it: in its Finding cell write "Tái hiện:", then the input or state and the wrong result
+it leads to, such as "Tái hiện: giỏ có 0 sản phẩm, bấm Thanh toán → API trả 500". A Medium without it counts as Low.
+Medium and Low findings do not open a round of fixes: they go to the findings Task of the Epic, unless the human asks
+for a fix now. -->
 
 | Severity | Axis | Where | Finding | Suggested fix |
 |---|---|---|---|---|

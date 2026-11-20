@@ -70,7 +70,15 @@ export function readReviewReport(body, roles) {
     problems.push(`${name} ${index + 1}: severity '${cells[0]}' is not Critical, High, Medium or Low`);
     return [];
   });
-  findings.push(...read(found.Findings, FINDING_COLUMNS, 'finding'));
+  // A Medium says how to reproduce it, or it counts as Low (C1 spec 4.2): it does not block either way, but a Medium
+  // goes to the findings Task of the Epic as one to fix.
+  const downgraded = [];
+  findings.push(...read(found.Findings, FINDING_COLUMNS, 'finding').map((finding) => {
+    if (finding.severity !== 'Medium' || REPRO.test(`${finding.finding ?? ''} ${finding.fix ?? ''}`)) return finding;
+    const low = { ...finding, severity: 'Low', asked: 'Medium' };
+    downgraded.push(low);
+    return low;
+  }));
   // A security review of the new part only says from which commit (dev-workflow spec 2.6). A full review judges anew and
   // clears what was open, so a Scope line a little off, or Earlier findings without one, is no full review: unreadable.
   // The Scope line counts only above the first section, under the Role line, where the template puts it.
@@ -82,7 +90,19 @@ export function readReviewReport(body, roles) {
   const earlier = 'Earlier findings' in found ? read(found['Earlier findings'], EARLIER_COLUMNS, 'earlier finding') : [];
   const stillOpen = since ? earlier.filter(({ severity, status }) => BLOCKING.includes(severity) && !FIXED.test(status ?? '')) : [];
   const blocking = [...findings.filter(({ severity }) => BLOCKING.includes(severity)), ...stillOpen];
-  return { ok: problems.length === 0, role: header.role, findings, blocking, problems, ...(since && { scope: { since } }), ...(earlier.length > 0 && { earlier }) };
+  return { ok: problems.length === 0, role: header.role, findings, blocking, problems, ...(since && { scope: { since } }), ...(earlier.length > 0 && { earlier }), ...(downgraded.length > 0 && { downgraded }) };
+}
+
+// How a Medium reproduces (templates/review-report.md): "Tái hiện:" or "Repro:", then the input or state and the wrong
+// result, in its Finding or its Suggested fix cell.
+const REPRO = /(?:tái hiện|repro)\s*:/i;
+
+// The findings of a readable report by severity, as counts, and how many Mediums count as Low: { Critical, High,
+// Medium, Low, downgraded }. Pure.
+export function findingCounts(report) {
+  const counts = Object.fromEntries(SEVERITIES.map((severity) => [severity, 0]));
+  for (const { severity } of report?.findings ?? []) counts[severity] += 1;
+  return { ...counts, downgraded: report?.downgraded?.length ?? 0 };
 }
 
 // The rows of a Markdown table as cells, without its header and separator rows.

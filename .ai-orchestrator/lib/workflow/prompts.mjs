@@ -1,15 +1,39 @@
 // The prompt of each run ao-step.mjs starts (dev-workflow spec 2.2). Short, as in the live runs of agent-roster: the
 // agent's own definition already says how it works, so a prompt only says which item, which stage, and the state of the
 // checkout. Pure.
+import { WEB_ROLES } from '../rules/references.mjs';
 
-// Stage spec of an Epic: ba writes the SPEC, ux the screens, sa the non-functional requirements, then ba opens the docs
-// PR. Stage plan: sa writes the plan and pushes it to the docs PR, ba creates the items.
+// Where the SEO part of an item with the label ao-seo lives, and what each role does with it (C1 spec 6.6): the section
+// ## SEO of the SPEC of its Epic, or, outside an Epic, the comment seo wrote on it, or the SPEC its description points to.
+// kind: dev (build and fix), reviewer or qa. epic: the key of its Epic, or null.
+const SEO_DOES = {
+  dev: 'Build it word for word: the copy in messages/*.json, the title and meta description, the structured data, the canonical, hreflang and lang it gives for your pages.',
+  reviewer: 'Check that the code builds it word for word: the copy, the metadata, the structured data, the canonical and hreflang. A difference is a finding.',
+  qa: 'Check it in the served HTML of its pages on the environment: the title, the meta description, the structured data, the canonical, hreflang and the copy. Give each its line in your QA report.',
+};
+export function seoNote(kind, { key, epic }) {
+  const where = epic
+    ? `Its SEO part is the section ## SEO of docs/specs/${epic}/spec.md, for the screens ${key} touches.`
+    : `Its SEO part is the comment of SEO Specialist on ${key}, or, when its description points to the section ## SEO of a SPEC, that section.`;
+  return `${key} has the label ao-seo. ${where} ${SEO_DOES[kind]}`;
+}
+
+// Stage spec of an Epic: ba writes the SPEC, ux the screens, seo the SEO of the screens a search engine reaches, sa the
+// non-functional requirements, then ba opens the docs PR. Stage plan: sa writes the plan and pushes it to the docs PR,
+// ba creates the items.
+// seoOff: the reason you gave /ao-spec with no-seo, which ba writes in the SPEC (C1 spec 6.1); '' when you gave none.
+const seoOffLine = (seoOff) =>
+  seoOff === undefined ? '' : ` The human turned seo off for this Epic: write in the SPEC, just before its Open Questions, the one line "SEO: không, vì ${seoOff || 'bạn chọn `no-seo`'}", and no section ## SEO.`;
 // The public apps of an environment, each on its own host (project-scaffold part 2, spec 2.4), for the prompts of qa.
 const appsLine = (apps) => (apps ? ` Its public apps answer at: ${Object.entries(apps).map(([app, url]) => `${app} ${url}`).join(', ')}.` : '');
 
 export const PURPOSES = {
-  'spec-write': ({ key, branch }) => `Epic ${key} is in Specifying: do stage spec. Write its SPEC on the branch ${branch}, which is checked out, and commit it. Do not push.`,
+  'spec-write': ({ key, branch, seoOff }) => `Epic ${key} is in Specifying: do stage spec. Write its SPEC on the branch ${branch}, which is checked out, and commit it. Do not push.${seoOffLine(seoOff)}`,
   design: ({ key, branch }) => `Epic ${key} is in Specifying, and its SPEC is committed on the branch ${branch}, which is checked out. Write its design.md and commit it on that branch. Do not push.`,
+  // C1 spec 6.2: seo has no git, so ao-step commits what it wrote, and pushes it when the branch is on GitHub already.
+  // again: the SPEC has the line "SEO: không" of an earlier run, and you asked for seo with the word seo.
+  'seo-write': ({ key, branch, again }) =>
+    `Epic ${key} is in Specifying, and its SPEC and design.md are on the branch ${branch}, which is checked out. Write the section ## SEO of docs/specs/${key}/spec.md for its screens of an app with seo: true.${again ? ' The SPEC has a line "SEO: không" from an earlier run: the human now asks for SEO, so remove that line.' : ''} You have no git: ao-step commits your change after your run.`,
   'spec-nfr': ({ key, branch }) => `Epic ${key} is in Specifying, and its SPEC is committed on the branch ${branch}, which is checked out. Do your part of stage spec and commit it on that branch. Do not push.`,
   'docs-pr': ({ key, branch }) => `Stage spec of Epic ${key} is committed on the branch ${branch}, which is checked out. Push the branch and open the docs PR of the Epic into develop.`,
   'plan-write': ({ key, branch, pr, approved }) =>
@@ -25,11 +49,17 @@ export const PURPOSES = {
   // On the branch of an item (`item`), the request came from a change of its documents in /ao-fix or a rebuild, and the
   // dev agents go on after it (live-run-fixes spec 2.2). On Jira only, sa and ux may only comment, so they cannot flag
   // an item: what a merged document needs goes to the human through the comment and the final answer.
+  // seo, a web role, has no git (C1 spec 6.4): ao-step commits its change under docs/specs/ after its run, and pushes
+  // it when the branch is on GitHub (6.6).
   request: ({ key, role, from, at, branch, pr, item }) => {
-    const onItem = item && `The branch ${branch} of ${item} is checked out${pr ? ` and up to date with origin, with its PR #${pr} open` : ', new from develop'}: change only documents there, such as those in docs/specs/, commit, and push the branch${pr ? `, so PR #${pr} shows it` : ''}. Change no code: the dev agents of ${item} go on after you.`;
+    const noGit = WEB_ROLES.includes(role);
+    const byAoStep = (shows) => `change only files in docs/specs/ there. You have no git: ao-step commits your change after your run${pr ? `, and pushes it, so ${shows} shows it` : ''}.`;
+    const onItem = item && (noGit
+      ? `The branch ${branch} of ${item} is checked out${pr ? ` and up to date with origin, with its PR #${pr} open` : ', new from develop'}: ${byAoStep(`PR #${pr}`)} Change no code: the dev agents of ${item} go on after you.`
+      : `The branch ${branch} of ${item} is checked out${pr ? ` and up to date with origin, with its PR #${pr} open` : ', new from develop'}: change only documents there, such as those in docs/specs/, commit, and push the branch${pr ? `, so PR #${pr} shows it` : ''}. Change no code: the dev agents of ${item} go on after you.`);
     const where = onItem || (branch
-      ? `The branch ${branch} is checked out: commit your change there${pr ? `, then push it, so the docs PR #${pr} shows it` : ''}.`
-      : 'The branch develop is checked out: commit nothing, and work on Jira only. If the request needs a change to a document that is already merged, say what has to change in your comment and in your final answer: it is not made from here, and the human decides how.');
+      ? noGit ? `The branch ${branch} is checked out: ${byAoStep(`the docs PR #${pr}`)}` : `The branch ${branch} is checked out: commit your change there${pr ? `, then push it, so the docs PR #${pr} shows it` : ''}.`
+      : `The branch develop is checked out: ${noGit ? 'change no file' : 'commit nothing'}, and work on Jira only. If the request needs a change to a document that is already merged, say what has to change in your comment and in your final answer: it is not made from here, and the human decides how.`);
     // An unsigned comment of the agents' account is an agent's, never the human's (review of ao-sample PR #21).
     const who = from === 'agent' ? "An agent that did not start its comment with its Agent value" : from ?? 'The human';
     const unsigned = from === 'agent' ? " It is an agent's request, not the human's: do only what your role does on its own, and leave anything that changes acceptance criteria, scope or items to the human, with a comment that says so." : '';
@@ -63,16 +93,25 @@ Object.assign(PURPOSES, {
   review: ({ pr }) => `Review PR #${pr}.`,
   // earlier: the Critical and High findings still open, which the report lists as Fixed or Open (spec 2.6; Pilot 1,
   // second review of ao-sample PR #13). Their text is that of ao-review's own reports, on one line each.
-  'review-delta': ({ pr, since, at, earlier = [] }) => [
+  'review-delta': ({ role = 'security', pr, since, at, earlier = [] }) => [
     `Review PR #${pr}, only the changes since ${since.slice(0, 7)}; your full report on ${since.slice(0, 7)} is the review of ${day(at)}. Write the line Scope: changes since ${since.slice(0, 7)} in your report.`,
     ...(earlier.length > 0 ? [
-      `The security reports before this one left ${earlier.length} Critical or High finding${earlier.length === 1 ? '' : 's'} open. Check each against the head, and list every one in a section "## Earlier findings" after Findings, as a table with the columns Severity | Where | Finding | Status. Copy Severity, Where and Finding as they stand below: merge-gate knows a finding by its Where and Finding. Status is Open, or Fixed, alone or with a colon and how; a finding fixed only in part is Open. merge-gate counts a finding you do not list as open.`,
+      `The ${role} reports before this one left ${earlier.length} Critical or High finding${earlier.length === 1 ? '' : 's'} open. Check each against the head, and list every one in a section "## Earlier findings" after Findings, as a table with the columns Severity | Where | Finding | Status. Copy Severity, Where and Finding as they stand below: merge-gate knows a finding by its Where and Finding. Status is Open, or Fixed, alone or with a colon and how; a finding fixed only in part is Open. merge-gate counts a finding you do not list as open.`,
       earlier.map(({ severity, where, finding }) => `- ${[severity, where, finding].map((text) => String(text ?? '').replace(/\s+/g, ' ').replaceAll('|', '/').trim()).join(' | ')}`).join('\n'),
     ] : []),
   ].join('\n\n'),
   // release-workflow spec 2.5: qa on the environment that runs the merge of the item.
-  qa: ({ key, type, environment, sha, url, pr, auth, apps }) =>
-    `QA ${type} ${key} on ${environment}. ${environment} runs ${sha.slice(0, 8)} at ${url}, which holds the merge of PR #${pr}.${appsLine(apps)} Check ${key} against its acceptance criteria there, and run the E2E of the repo with E2E_BASE_URL${apps ? ', the E2E_<APP>_URL of each app' : ''}${auth ? ', E2E_HTTP_USER and E2E_HTTP_PASSWORD' : ''}, which ${auth || apps ? 'are' : 'is'} set. Save your screenshots in .ai/qa/${key}/. Write your QA report on ${key}, then move it as your definition says.`,
+  // again (C1 spec section 2): a QA again at level standard, after the FAIL report `id` of `at`: only its failed
+  // criteria are checked again by hand, with the whole E2E suite.
+  qa: ({ key, type, environment, sha, url, pr, auth, apps, again }) =>
+    [
+      `QA ${type} ${key} on ${environment}. ${environment} runs ${sha.slice(0, 8)} at ${url}, which holds the merge of PR #${pr}.${appsLine(apps)} Check ${key} against its acceptance criteria there, and run the E2E of the repo with E2E_BASE_URL${apps ? ', the E2E_<APP>_URL of each app' : ''}${auth ? ', E2E_HTTP_USER and E2E_HTTP_PASSWORD' : ''}, which ${auth || apps ? 'are' : 'is'} set. Save your screenshots in .ai/qa/${key}/. Write your QA report on ${key}, then move it as your definition says.`,
+      ...(again ? [
+        `This is QA again: your report${again.id ? ` ${again.id}` : ''} of ${day(again.at)} failed ${again.failed.length} criteri${again.failed.length === 1 ? 'on' : 'a'}, and the fix is merged. Check again by hand only these, each with new evidence:`,
+        again.failed.map((criterion) => `- ${String(criterion).replace(/\s+/g, ' ').trim()}`).join('\n'),
+        `Write every other criterion as PASS with the Evidence "PASS ở báo cáo${again.id ? ` ${again.id}` : ' trước'}", without checking it by hand. Run the whole E2E suite as always: a criterion that passed and that the fix broke fails its E2E test. For a Task, check again by hand every Verification line that has no E2E test.`,
+      ] : []),
+    ].join('\n\n'),
   // An ops Task (label ao-ops; kit followups, batch 4 item 14): no PR and no deploy to wait for.
   'qa-ops': ({ key }) =>
     `QA ops Task ${key}. It has no PR and no deploy: devops did its work on the environments its Verification names, and left its evidence in a comment with the heading Ops evidence. Pick it up, then check each line of its Verification on those environments yourself, without changing their data: open the pages, or call the API with curl. E2E_HTTP_USER and E2E_HTTP_PASSWORD hold the basic auth of Development and Staging: give them to curl on stdin, as in printf 'user = "%s:%s"\\n' "$E2E_HTTP_USER" "$E2E_HTTP_PASSWORD" | curl -K - <url>. Save your screenshots and answers in .ai/qa/${key}/. Write your QA report on ${key}, then move it as your definition says.`,

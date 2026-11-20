@@ -3,7 +3,7 @@
   "title": "agents/roster.yaml",
   "description": "The agent roles: model, effort, tools, permissions and skills (agent-roster spec sections 2.1 to 2.3, 2.7 and 6).",
   "type": "object",
-  "required": ["jira_tools", "mcp_tools", "vendored_skills", "roles"],
+  "required": ["jira_tools", "mcp_tools", "vendored_skills", "adapted_skills", "roles"],
   "additionalProperties": false,
   "properties": {
     "jira_tools": {
@@ -44,6 +44,12 @@
         }
       }
     },
+    "adapted_skills": {
+      "description": "Skills the kit adapted from another repository (D3): the adapted_from block of each SKILL.md names the original.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    },
     "roles": {
       "type": "object",
       "minProperties": 1,
@@ -69,7 +75,7 @@
         "model": { "enum": ["haiku", "sonnet", "opus"] },
         "effort": { "enum": ["low", "medium", "high", "xhigh", "max"] },
         "max_turns": { "type": "integer", "minimum": 1 },
-        "tools": { "type": "array", "uniqueItems": true, "items": { "enum": ["Bash", "Edit", "Write"] } },
+        "tools": { "type": "array", "uniqueItems": true, "items": { "enum": ["Bash", "Edit", "Write", "WebFetch", "WebSearch"] } },
         "mcp": {
           "type": "object",
           "propertyNames": { "$ref": "#/$defs/id" },

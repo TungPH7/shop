@@ -61,8 +61,10 @@ export function readDesign(text) {
     for (const [, alt, src] of line.matchAll(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
       design.images.push({ alt, src, code: alt.match(/^(S\d+)\b/)?.[1] ?? null, line: number });
     }
+    const cells = /^\|.*\|\s*$/.test(line) ? line.trim().slice(1, -1).split('|').map((cell) => cell.trim()) : null;
+    if (cells?.[0] === 'Code' && !design.screenColumns) design.screenColumns = cells;
     const row = line.match(/^\|\s*(S\d+)\s*\|/);
-    if (row) design.rows.push({ code: row[1], line: number });
+    if (row) design.rows.push({ code: row[1], line: number, cells });
   });
   if (fence) addFence(design, fence);
   return design;
@@ -75,6 +77,14 @@ function addFence(design, fence) {
   else if (lang === 'text' && /^S\d+\b/.test(body[0]?.text ?? '')) {
     design.drawings.push({ code: body[0].text.match(/^(S\d+)/)[1], line, body });
   }
+}
+
+// The app of each screen of the table of Screens, from its column App, which ux fills (C1 spec 6.1): [{ code, app }],
+// app null when the table has no such column or the row leaves it empty, as in a design.md written before C1.
+export function screenApps(text) {
+  const design = readDesign(text ?? '');
+  const at = design.screenColumns?.findIndex((column) => /^app$/i.test(column)) ?? -1;
+  return design.rows.map(({ code, cells }) => ({ code, app: (at >= 0 && cells?.[at]) || null }));
 }
 
 // images: the files of the design/ folder next to design.md, as a Map of file name → bytes. Without it the files of

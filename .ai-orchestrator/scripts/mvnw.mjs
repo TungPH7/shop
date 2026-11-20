@@ -47,7 +47,15 @@ if (script === 'dev') {
   }
 }
 
-const { file, args: wrapperArgs, cwd, windowsVerbatimArguments } = wrapperCommand(app, args);
+// An argument cmd.exe cannot take safely, such as -Dtest=A#b, ends with its reason, not a stack trace (review of shop
+// PR #78). -Dtest= takes class names only.
+let command;
+try {
+  command = wrapperCommand(app, args);
+} catch (error) {
+  fail(error.message);
+}
+const { file, args: wrapperArgs, cwd, windowsVerbatimArguments } = command;
 const run = spawnSync(file, wrapperArgs, { cwd, env, stdio: 'inherit', windowsVerbatimArguments });
 if (run.error) fail(run.error.message);
 process.exit(run.status ?? 1);

@@ -45,11 +45,21 @@ vendored_skills:
   - { name: playwright-cli, repo: microsoft/playwright-cli, path: skills/playwright-cli, commit: 83368cb3bfc0b2bd8ff8af4ade8e0107461ed421 }
   - { name: sentry-security-review, repo: getsentry/skills, path: skills/security-review, commit: 6d20de492725c78e805aa0741507bb90d1982cc7, upstream_name: security-review }
   - { name: gha-security-review, repo: getsentry/skills, path: skills/gha-security-review, commit: b11ee5163295996fa6449c4842749811c82ac77c }
-  # Last, so the fixtures keep their indexes. The main session brainstorms with it in /ao-intake (human-loop spec 3.1);
-  # no agent loads it.
+  # After the others, so the fixtures keep their indexes. The main session brainstorms with idea-refine in /ao-intake
+  # (human-loop spec 3.1); no agent loads it.
   - { name: idea-refine, repo: addyosmani/agent-skills, path: skills/idea-refine, commit: aeac41d4d005999432bb7312f7ff06383a91d59d }
+  # seo (C1 spec 6.5): read in full, with its six references, before it was vendored (T17). The last commit that changed
+  # its folder by 2026-11-20.
+  - { name: nextjs-seo, repo: laguagu/claude-code-nextjs-skills, path: skills/nextjs-seo, commit: 3621047938241b1e3d1dc7850192f5f834ea9e14 }
 
-# Every agent also has Read, Glob and Grep. No agent has Skill, Agent, WebFetch or WebSearch (spec 2.3).
+# Skills the kit adapted from a skill of another repository (D3; C1 spec 6.5). They sit in kit/.claude/skills/<name>/ like
+# the vendored ones, but the kit keeps them: skills:vendor never touches them. The adapted_from block of each SKILL.md
+# names the original, its commit, license and copyright; docs/skills.md says how to compare one with a new version of
+# its original. A role preloads them like vendored skills.
+adapted_skills: [seo-content-brief, blog-schema, blog-taxonomy]
+
+# Every agent also has Read, Glob and Grep. No agent has Skill or Agent (spec 2.3); only seo has WebFetch and WebSearch
+# (rule A1, C1 spec 6.4).
 # tools: Bash, Edit, Write. jira: read, create, edit, comment, link, transition. git: read or write (read only: spec 2.10).
 # writes: the files Edit and Write may touch; the protected paths of quality/gates.yaml still apply. max_turns: twice
 # the most model turns of a live run of the role, rounded up to tens (spec 2.2; runs of tasks/archive/agent-roster/
@@ -120,7 +130,8 @@ roles:
   reviewer:
     description: "Code Reviewer: reviews a PR on five axes and posts the report. Give it the PR number."
     model: opus
-    effort: xhigh
+    # high by default; ao-step raises it to xhigh on a PR of a critical path (C1 spec 3.1, quality/gates.yaml review).
+    effort: high
     max_turns: 70
     tools: [Bash, Write]
     jira: [read]
@@ -133,7 +144,8 @@ roles:
     effort: max
     max_turns: 120
     tools: [Bash, Write]
-    jira: [read]
+    # comment: security answers a "Cần security:" request about a library with a comment, which closes it (C1 spec section 5).
+    jira: [read, comment]
     git: read
     writes: [".ai/**"]
     skills: [security-and-hardening, sentry-security-review]
@@ -157,3 +169,19 @@ roles:
     git: write
     writes: ["**"]
     skills: [ci-cd-and-automation, shipping-and-launch]
+  seo:
+    description: "SEO Specialist: writes the SEO section of the SPEC of an Epic whose screens a search engine indexes: keywords, the copy in vi and en, structured data, hreflang. Give it the Epic key."
+    model: sonnet
+    effort: high
+    max_turns: 60
+    # WebSearch and WebFetch: seo is the one role with them (C1 spec 6.4), to see which pages rank on a keyword. In
+    # return it has no Bash, so it runs nothing and no git, and gh-guard keeps its reads in the project, away from the
+    # .env files. ao-step commits its change in docs/specs/ after its run.
+    tools: [Edit, Write, WebFetch, WebSearch]
+    # comment: seo answers a "Cần seo:" request with a comment, which closes it (C1 spec 6.6).
+    jira: [read, comment]
+    git: read
+    writes: ["docs/specs/**", ".ai/**"]
+    # nextjs-seo: what the dev agents can build with the Metadata API; seo-content-brief: the SEO of each screen;
+    # blog-schema and blog-taxonomy: the pages of a blog (C1 spec 6.5).
+    skills: [nextjs-seo, seo-content-brief, blog-schema, blog-taxonomy]

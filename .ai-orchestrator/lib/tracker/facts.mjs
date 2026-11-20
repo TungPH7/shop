@@ -7,7 +7,7 @@ const ITEM_FIELDS = ['issuetype', 'status', 'labels', 'description', 'parent', '
 // dor-met as automation checks it (contract note on `refine`): a Story or Task under an Epic whose plan is approved,
 // that is an Epic in progress, and with a description.
 const DOR_TYPES = ['story', 'task'];
-const JIRA_GUARDS = ['dor-met', 'wip-available', 'subtasks-done', 'qa-report-failed', 'qa-report-passed', 'ops-task', 'ops-evidence'];
+const JIRA_GUARDS = ['dor-met', 'wip-available', 'subtasks-done', 'qa-report-failed', 'qa-report-passed', 'ops-evidence'];
 const BLOCKS = new Set(['paragraph', 'heading', 'listItem', 'codeBlock', 'blockquote', 'tableRow', 'rule', 'mediaSingle', 'panel']);
 
 export async function readItem(client, key) {
@@ -38,7 +38,6 @@ export async function jiraGuards(client, { key, item, actor, needed, contract, m
     'subtasks-done': () => current.subtasks.every(({ done }) => done),
     'qa-report-failed': async () => (await latestQaResult()) === 'FAIL',
     'qa-report-passed': async () => (await latestQaResult()) === 'PASS',
-    'ops-task': () => isOpsTask(current, mapping),
     'ops-evidence': () => opsEvidence(client, current.key, contract, mapping),
   };
   const holds = [];
@@ -104,10 +103,33 @@ async function readLatestQaResult(client, key) {
 export async function readLatestQaReport(client, key) {
   const comments = await client.getAll(`/rest/api/3/issue/${encodeURIComponent(key)}/comment`, { orderBy: '-created' }, 'comments');
   const [newest] = comments
-    .map(({ body, created }) => ({ result: qaReportResult(body), at: jiraTime(created) }))
+    .map(({ id, body, created }) => ({ id, body, result: qaReportResult(body), at: jiraTime(created) }))
     .filter(({ result }) => result)
     .sort((a, b) => b.at - a.at);
-  return newest ? { result: newest.result, at: new Date(newest.at).toISOString() } : null;
+  // id and failed: which comment, and the criteria it failed, for a QA again of only those (C1 spec section 2).
+  return newest ? { result: newest.result, at: new Date(newest.at).toISOString(), id: newest.id ?? null, failed: failedCriteria(newest.body) } : null;
+}
+
+// The criteria a QA report failed: the first cell of each table row whose Result cell is FAIL. A Jira table is read by
+// its rows and cells; a Markdown table, or one posted as paragraphs (lib/tracker/adf.mjs), by its lines. Pure.
+export function failedCriteria(body) {
+  const clean = (cell) => cell.replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim();
+  const tableRows = [];
+  const walk = (node) => {
+    if (!node || typeof node !== 'object') return;
+    if (node.type === 'tableRow') tableRows.push((node.content ?? []).map((cell) => clean(adfText(cell))));
+    else (node.content ?? []).forEach(walk);
+  };
+  if (typeof body !== 'string') walk(body);
+  const text = typeof body === 'string' ? body : adfText({ ...body, content: (body?.content ?? []).filter(({ type }) => type !== 'table') });
+  const lineRows = text
+    .split('\n')
+    .filter((line) => line.includes('|'))
+    .map((line) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(clean));
+  const failed = [...tableRows, ...lineRows]
+    .filter((cells) => cells.length >= 2 && cells.slice(1).includes('FAIL') && cells[0] && !/^acceptance criterion$/i.test(cells[0]))
+    .map(([criterion]) => criterion);
+  return [...new Set(failed)];
 }
 
 // Milliseconds of a Jira timestamp such as 2026-10-28T10:00:00.000+0700, whose offset has no colon.
@@ -136,7 +158,7 @@ export function adfText(node) {
   return BLOCKS.has(node.type) ? `${inner}\n` : inner;
 }
 
-const GITHUB_GUARDS = ['branch-created', 'dependencies-merged', 'pr-open', 'ci-green', 'changes-requested', 'merge-approved', 'pr-merged', 'qa-deployed', 'work-committed'];
+const GITHUB_GUARDS = ['ops-task', 'branch-created', 'dependencies-merged', 'pr-open', 'ci-green', 'changes-requested', 'merge-approved', 'pr-merged', 'qa-deployed', 'work-committed'];
 const BRANCH_KINDS = ['feature', 'bugfix', 'hotfix'];
 const PASSED = ['success', 'neutral', 'skipped'];
 // The jobs of the kit that are check runs on a PR head but not CI: that of kit/.github/workflows/jira-sync.yml, which ran
@@ -165,10 +187,14 @@ export async function githubGuards(github, { item, needed, contract, mapping, ap
   const checks = (sha) => once(`checks ${sha}`, () => readChecks(github, sha));
   const reviews = (number) => once(`reviews ${number}`, () => github.getAll(`/pulls/${number}/reviews`));
   const intoBase = (pr) => checkBranch(pr.head.ref, { workType, base: pr.base.ref }).ok;
+  const opsTask = () => once('ops-task', async () => workType === 'task' && isOpsTask(item, mapping) && (await branchesOf(github, item.key)).length === 0 && (await pullsOf(item.key)).length === 0);
 
   const check = {
+    // A Task with the label ao-ops, no branch and no PR (review of shop PR #78: the label alone, which any agent can put,
+    // let devops hand a Story with a PR to QA past submit and review).
+    'ops-task': async () => opsTask(),
     // An ops Task has no branch (contract guard branch-created).
-    'branch-created': async () => isOpsTask(item, mapping) || (await branchesOf(github, item.key)).some((name) => checkBranch(name, { workType }).ok),
+    'branch-created': async () => (await opsTask()) || (await branchesOf(github, item.key)).some((name) => checkBranch(name, { workType }).ok),
     'dependencies-merged': async () => {
       for (const key of item.blockedBy) {
         const [pr] = await pullsOf(key);

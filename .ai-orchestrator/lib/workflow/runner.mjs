@@ -13,7 +13,9 @@
 //                                 its head; qa: the release that runs, with its packages); add resolves { ok, path,
 //                                 reason }, remove { ok, reason } (optional)
 //   after(run, { tree, facts })   what ao-step does once a run ends and before its worktree goes (qa: the evidence to
-//                                 Jira); run carries its startedAt; resolves notes for state.json and last.md (optional)
+//                                 Jira; seo: the commit of its change); run carries its startedAt; resolves notes for
+//                                 state.json and last.md, or { notes, stop } where stop is the reason the command stops
+//                                 there (optional)
 //   act(step)                     a script step of a release command, such as cutting the release branch; resolves notes
 //                                 for last.md. It is the one step of its command (optional)
 //   wip                           { save(run), restore(wip, run) } (lib/workflow/wip.mjs): save puts aside the work a run left
@@ -70,7 +72,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       log(`jira-sync for ${next.key}`);
       await dispatch(next);
       made.push({ action: 'jira-sync', key: next.key });
-      ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined, note: undefined }), (d) => !(d.go && d.runs[0]?.action === 'jira-sync'), limits.syncWaitMs, { sleep, now, limits }));
+      ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined, note: undefined, lightReport: undefined }), (d) => !(d.go && d.runs[0]?.action === 'jira-sync'), limits.syncWaitMs, { sleep, now, limits }));
       if (decision.go && decision.runs[0]?.action === 'jira-sync') reason = `jira-sync ran, but ${next.key} is not done after ${Math.round(limits.syncWaitMs / 60000)} minutes: see the jira-sync and merge-gate runs on GitHub`;
       // With continue, jira-sync is a first step, as for an item it refines before its build: the command goes on.
       if (next.continue) continue;
@@ -84,12 +86,12 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       // one step of its command.
       if (next.continue) {
         const again = (d) => d.go && d.runs[0]?.action === next.action;
-        ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined, note: undefined }), (d) => !again(d), limits.syncWaitMs, { sleep, now, limits }));
+        ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined, note: undefined, lightReport: undefined }), (d) => !again(d), limits.syncWaitMs, { sleep, now, limits }));
         if (again(decision)) reason = `${next.action} ran on ${next.key}, but the facts still ask for it after ${Math.round(limits.syncWaitMs / 60000)} minutes: run the command again`;
         continue;
       }
       facts = await gather();
-      decision = decide(command, facts, { ...options, answers: undefined, note: undefined });
+      decision = decide(command, facts, { ...options, answers: undefined, note: undefined, lightReport: undefined });
       break;
     }
     // The same run again right after it ended well means the agent did not do what the facts look for.
@@ -166,11 +168,15 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     let superseded;
     let stopped;
     let runNotes = [];
+    let afterStop;
     try {
       ({ lines, stopped, superseded } = await agent(notes.length > 0 ? { ...next, prompt: [next.prompt, ...notes].join('\n\n') } : next, { log: logName }));
       // With the start of the run: qa attaches only what it wrote since (live-run-fixes spec 2.5).
       // A superseded qa run attaches nothing: what it saw was a version that no longer runs.
-      if (after && !superseded) runNotes = await after({ ...next, startedAt }, { tree, facts });
+      if (after && !superseded) {
+        const done = await after({ ...next, startedAt }, { tree, facts });
+        ({ notes: runNotes = [], stop: afterStop } = Array.isArray(done) ? { notes: done } : (done ?? {}));
+      }
     } finally {
       if (tree) {
         const removed = await worktree.remove(next.worktree);
@@ -220,6 +226,11 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     }
     if (read.outcome === 'unfinished') {
       reason = `${next.role} stopped without a result: run the same command again; the run goes on in its session${aside}`;
+      break;
+    }
+    // What ao-step does after the run found something you decide, such as a change of seo outside docs/specs/.
+    if (afterStop) {
+      reason = afterStop;
       break;
     }
     // After a run that may have pushed, wait for CI before deciding again, but not for a CI that never starts.

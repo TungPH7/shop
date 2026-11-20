@@ -1,7 +1,13 @@
 // Rule R3: every id the contract names is declared: roles, guards, effects, work types, severities,
-// Fix Version rules, artifacts, gates and environments. The values of the Agent field are agent roles.
+// Fix Version rules, artifacts, gates, environments and the conditions of the runs of a stage. The values of the Agent
+// field are agent roles, and so are the roles of those runs.
+import { CONDITIONS } from '../workflow/conditions.mjs';
 
-export const NON_AGENT_ROLES = ['human', 'automation'];
+// light-qa: the main session, which checks an item of level light with the CI token (C1 spec section 2).
+export const NON_AGENT_ROLES = ['human', 'automation', 'light-qa'];
+// The roles that may have WebSearch and WebFetch (C1 spec 6.4). A page of the web can carry orders for an agent, so such
+// a role has no Bash, and gh-guard keeps its reads in the project and away from the .env files.
+export const WEB_ROLES = ['seo'];
 
 export function checkReferences(contract) {
   const errors = [];
@@ -17,6 +23,7 @@ export function checkReferences(contract) {
     artifact: new Set(contract.artifacts.map(({ id }) => id)),
     gate: new Set(contract.gates.map(({ id }) => id)),
     environment: new Set(contract.environments.map(({ id }) => id)),
+    condition: new Set(Object.keys(CONDITIONS)),
   };
   const check = (kind, ids = [], path) => {
     for (const id of ids.filter((i) => !declared[kind].has(i))) errors.push({ rule: 'R3', path, message: `unknown ${kind} '${id}'` });
@@ -63,13 +70,19 @@ export function checkReferences(contract) {
 
   // stages.yaml
   for (const { id, approvers } of contract.gates) check('role', approvers, `gates[id=${id}].approvers`);
-  for (const { id, roles, lead, guards, outputs, gate } of contract.stages) {
+  for (const { id, roles, lead, guards, outputs, gate, runs = [] } of contract.stages) {
     const at = `stages[id=${id}]`;
     check('role', roles, `${at}.roles`);
     if (lead) check('role', [lead], `${at}.lead`);
     check('guard', guards, `${at}.guards`);
     check('artifact', outputs.artifacts, `${at}.outputs.artifacts`);
     if (gate) check('gate', [gate], `${at}.gate`);
+    // The runs of the stage's command (C1 spec section 6): agents only, and conditions lib/workflow/conditions.mjs has.
+    runs.forEach(({ role, when, done }, index) => {
+      check('agent role', [role], `${at}.runs[${index}].role`);
+      if (when) check('condition', [when], `${at}.runs[${index}].when`);
+      if (done) check('condition', [done], `${at}.runs[${index}].done`);
+    });
   }
   contract.cadence.schedule.forEach(({ gates }, index) => check('gate', gates, `cadence.schedule[${index}].gates`));
   return errors;
