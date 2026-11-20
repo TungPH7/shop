@@ -29,6 +29,8 @@ apps:
       default: 3000
     health: /en
     public: true
+    # C1 spec 6.1: seo writes the SEO of the screens of this app at stage spec (SHOP-78).
+    seo: true
     # The localhost URLs the apps give each other, here so that a lane moves them by its offset (review of shop PR #21);
     # the .env files keep the rest.
     env:
@@ -52,6 +54,8 @@ apps:
       default: 5173
     health: /
     public: true
+    # C1 spec 6.1: the admin pages are not for search engines, so seo writes no SEO for them (SHOP-78).
+    seo: false
     env:
       API_URL: http://localhost:3001
     # Test helpers, not code of the app: the changed-lines check skips them (SHOP-38; PR #20 went red on setup.ts).
