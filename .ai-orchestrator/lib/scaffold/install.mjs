@@ -13,7 +13,7 @@ import { OLD_PREVIEW_FILE, readPreviewConfig } from '../workflow/preview.mjs';
 export const PROJECT_SCRIPTS = [
   'ao-agent.mjs', 'ao-git-credential.mjs', 'ao-pr.mjs', 'ao-step.mjs', 'audit.mjs', 'check-design.mjs', 'check-policy.mjs', 'ci-java.mjs', 'ci-package-manager.mjs',
   'commit-msg.mjs',
-  'coverage-diff.mjs', 'install-hooks.mjs', 'jira-sync.mjs', 'merge-gate.mjs', 'mvnw.mjs', 'pre-commit.mjs', 'pre-push.mjs', 'render-agents.mjs', 'run.mjs',
+  'coverage-diff.mjs', 'dep-check.mjs', 'install-hooks.mjs', 'jira-sync.mjs', 'merge-gate.mjs', 'mvnw.mjs', 'pre-commit.mjs', 'pre-push.mjs', 'render-agents.mjs', 'run.mjs',
 ];
 // The scripts that run from the kit only: setting a project up, the deployer on the VPS, the kit's own checks.
 export const KIT_ONLY_SCRIPTS = [
@@ -29,13 +29,17 @@ const ROOT_DIRS = ['.claude/hooks', '.githooks'];
 // pr-review.yml relays reviews to jira-sync, which no longer runs on pull_request_review (review of shop PR #21), and
 // pr-events.yml the events of a PR, since jira-sync no longer runs on pull_request_target (Pilot 3).
 const ROOT_FILES = ['.mcp.json', '.jira/config.yml', '.github/workflows/ci.yml', '.github/workflows/jira-sync.yml', '.github/workflows/merge-gate.yml', '.github/workflows/pr-events.yml', '.github/workflows/pr-review.yml'];
+// Files of kit/ the project owns once they exist (C1, SPEC-c1.md section 10): copied only when missing, never over the
+// project's. ci.project.yml holds the project's own CI jobs, which ci.yml calls; a kit copy used to drop them.
+export const SEED_FILES = ['.github/workflows/ci.project.yml'];
 
 // The files under a folder, relative to `base`, with forward slashes; [] when there is none.
 const listed = (base, dir) => (existsSync(join(base, dir))
   ? readdirSync(join(base, dir), { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => relative(base, join(e.parentPath ?? e.path, e.name)).replaceAll('\\', '/'))
   : []);
 
-// Copies the kit at kitDir into the project. Returns { removed }: the files of an older copy the kit no longer has.
+// Copies the kit at kitDir into the project. Returns { removed, seeded }: the files of an older copy the kit no longer
+// has, and the SEED_FILES it wrote because the project had none.
 export function installKit({ kitDir, projectDir }) {
   const removed = [];
   // A folder of the kit replaces the one of the project: what is in the old one only goes.
@@ -64,7 +68,12 @@ export function installKit({ kitDir, projectDir }) {
     mkdirSync(join(projectDir, file, '..'), { recursive: true });
     cpSync(join(kitDir, 'kit', file), join(projectDir, file));
   }
-  return { removed };
+  const seeded = SEED_FILES.filter((file) => !existsSync(join(projectDir, file)));
+  for (const file of seeded) {
+    mkdirSync(join(projectDir, file, '..'), { recursive: true });
+    cpSync(join(kitDir, 'kit', file), join(projectDir, file));
+  }
+  return { removed, seeded };
 }
 
 // Each kit file a copy holds: [path in the kit, path in the project].
@@ -81,10 +90,11 @@ function kitFiles(kitDir) {
 }
 
 // The kit files of the project that are not those of the kit at kitDir, missing ones included (ao-kit doctor). A
-// checkout on Windows writes CRLF, so line ends do not count.
+// checkout on Windows writes CRLF, so line ends do not count. A seed file is the project's: only its absence counts.
 export function kitDrift({ kitDir, projectDir }) {
   const text = (path) => readFileSync(path, 'utf8').replaceAll('\r\n', '\n');
-  return kitFiles(kitDir).filter(([from, to]) => !existsSync(join(projectDir, to)) || text(join(kitDir, from)) !== text(join(projectDir, to))).map(([, to]) => to);
+  const drift = kitFiles(kitDir).filter(([from, to]) => !existsSync(join(projectDir, to)) || text(join(kitDir, from)) !== text(join(projectDir, to))).map(([, to]) => to);
+  return [...drift, ...SEED_FILES.filter((file) => !existsSync(join(projectDir, file)))];
 }
 
 // The lines .gitignore needs: the packages of the kit, your local settings, what agents write, playwright-cli snapshots.

@@ -21,9 +21,10 @@ export function readGates(dir = 'quality') {
   }
 }
 
-// The job ids of a workflow file, for rule Q2.
+// The job ids of a workflow file that are checks, for rule Q2. A job that calls another workflow, such as project, which
+// calls ci.project.yml (C1, SPEC-c1.md section 10), is no check of its own: its jobs are, as "project / <job>".
 export function readCiJobs(file) {
-  return Object.keys(parse(readFileSync(file, 'utf8')).jobs ?? {});
+  return Object.entries(parse(readFileSync(file, 'utf8')).jobs ?? {}).filter(([, job]) => !job?.uses).map(([id]) => id);
 }
 
 // Returns every rule violation as { rule, path, message }; the contract must already be valid. ciJobs, the jobs of

@@ -150,7 +150,7 @@ artifacts:
     template: templates/ledger.md
     created_by: assignee
     stored_in:
-      - { place: local, path: ".ai/ledger/<KEY>.md", note: "không commit" }
+      - { place: local, path: ".ai/ledger/<KEY>.md", note: "không commit; seo ghi .ai/ledger/<KEY>.seo.md" }
 
 artifact_notes:
   - "Mọi đường dẫn tính từ gốc repo của dự án."

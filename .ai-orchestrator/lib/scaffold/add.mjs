@@ -56,6 +56,9 @@ export function addApp({ kitDir, projectDir, app, options, git, run }) {
     return stop(error.message);
   }
   if (stack.requires_template && !options.from) return stop(`the stack ${stack.name} has no skeleton of its own: ao-kit add needs --from <your template>`);
+  // C1 spec 6.1: a public app says whether a search engine indexes it, so seo writes the SEO of its screens or not.
+  if (options.public && options.seo === undefined) return stop(`${app} is public: say whether a search engine indexes its pages, with --seo for a site people find on Google, or --no-seo, as for an admin app (C1 spec 6.1)`);
+  if (options.seo === true && !options.public) return stop(`--seo goes with --public: no search engine reaches an app that is not public`);
 
   const used =new Set(Object.values(config.apps ?? {}).map((other) => other.port.default));
   let port = stack.port;
@@ -101,7 +104,7 @@ export function addApp({ kitDir, projectDir, app, options, git, run }) {
     dev: devCommand('pnpm', path, devScript),
     port: { env: 'PORT', default: port },
     health,
-    ...(options.public && { public: true }),
+    ...(options.public && { public: true, seo: options.seo === true }),
   });
   // A Dockerfile made for the app folder builds from it; a JVM app gets a memory cap and time to start (part 3, 2.5).
   const deployApp = {

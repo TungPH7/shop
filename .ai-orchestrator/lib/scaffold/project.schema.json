@@ -67,6 +67,49 @@
       "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
       "additionalProperties": { "$ref": "#/$defs/app" }
     },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "approved": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ecosystem", "name", "range", "by", "on"],
+            "additionalProperties": false,
+            "properties": {
+              "ecosystem": { "enum": ["npm", "maven"] },
+              "name": { "type": "string", "minLength": 1 },
+              "range": { "type": "string", "minLength": 1 },
+              "by": { "type": "string", "minLength": 1 },
+              "on": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+            }
+          }
+        },
+        "exceptions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["advisory", "reason", "expires"],
+            "additionalProperties": false,
+            "properties": {
+              "advisory": { "type": "string", "pattern": "^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$" },
+              "reason": { "type": "string", "minLength": 1 },
+              "expires": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+            }
+          }
+        }
+      }
+    },
+    "review": {
+      "description": "Paths the project adds to a review tier of quality/gates.yaml (review of shop PR #79): its own files that decide who calls, or what the browser runs. They only add to the kit's lists.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "critical_paths": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "sensitive_paths": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
     "roles": {
       "type": "object",
       "additionalProperties": false,
@@ -145,6 +188,10 @@
           "items": { "type": "string", "pattern": "^(?![/\\\\])(?!.*(^|/)\\.\\.(/|$))\\S+$" }
         },
         "public": { "type": "boolean" },
+        "seo": {
+          "description": "A search engine indexes the pages of this app, so seo writes the SEO of its screens at stage spec (C1 spec 6.1). Only a public app; an admin app has false.",
+          "type": "boolean"
+        },
         "hosts": {
           "description": "The host of a public app in each environment, the same as under projects of /etc/ao/deployer.yaml on the VPS: qa reaches the app there, and ao-kit doctor prints those lines (project-scaffold part 2, spec 2.4).",
           "type": "object",

@@ -26,17 +26,26 @@ gates:
 # roles: who works in the stage; lead: the main role when the spec names one.
 # outputs.artifacts are ids from the artifact catalog in policies.yaml; outputs.other describes the rest.
 # A stage is passed by its exit condition, its gate, or both.
+# runs: the agent runs of the stage's command, in order (C1 spec section 6). when: the run applies; done: its output
+# exists, so it does not run again. Both name a condition of lib/workflow/conditions.mjs. ao-step decides again after
+# each run, so the list it prints after the first run is a forecast.
 stages:
   - id: spec
     name: "Viết SPEC cho Epic"
-    roles: [ba, ux, sa]
+    roles: [ba, ux, seo, sa]
     lead: ba
-    note: "ux viết design khi Epic đụng tới giao diện"
+    note: "ux viết design khi Epic đụng tới giao diện; seo viết mục SEO của SPEC khi design có màn hình của app seo: true"
     input: "Epic ở new"
     outputs:
       artifacts: [spec, design]
       other: "PR tài liệu của Epic vào develop, từ nhánh feature/<EPIC-KEY>-spec; bạn đọc diff của nó trước cổng ①"
     gate: spec-approval
+    runs:
+      - { role: ba, purpose: spec-write, done: spec-written }
+      - { role: ux, purpose: design, when: spec-has-screens, done: design-written }
+      - { role: seo, purpose: seo-write, when: spec-has-seo-screens, done: spec-has-seo }
+      - { role: sa, purpose: spec-nfr, done: spec-has-nfr }
+      - { role: ba, purpose: docs-pr }
   - id: plan
     name: "Lập plan, tạo Story/Task"
     roles: [sa, ba]
@@ -46,6 +55,9 @@ stages:
       artifacts: [plan, story, task]
       other: "Plan gồm hợp đồng API cho Story có cả FE và BE, vai trò của từng item và effort của item khó; các Story/Task nằm trên Jira. Plan và ADR vào cùng PR tài liệu, và merge-gate merge PR đó sau cổng ② mà không cần review hay approve trên GitHub"
     gate: plan-approval
+    runs:
+      - { role: sa, purpose: plan-write, done: plan-written }
+      - { role: ba, purpose: plan-items, done: plan-items-created }
   - id: build
     name: "Code theo TDD"
     roles: [fe-dev, be-dev]
@@ -53,6 +65,11 @@ stages:
     outputs:
       other: "Nhánh, commit, test"
     exit: "Unit và integration test pass ở local; pre-commit pass"
+    # The order of the dev agents of a Story: be-dev first, then fe-dev on its API, then devops.
+    runs:
+      - { role: be-dev }
+      - { role: fe-dev }
+      - { role: devops }
   - id: ci-gate
     name: "Quality gate tự động"
     roles: [automation]
@@ -69,6 +86,9 @@ stages:
       artifacts: [review-report]
     exit: "Không còn finding Critical/High"
     gate: merge-approval
+    runs:
+      - { role: reviewer }
+      - { role: security }
   - id: merge
     name: "Merge PR"
     roles: [automation]

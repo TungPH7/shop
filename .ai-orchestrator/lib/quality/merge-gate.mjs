@@ -10,6 +10,8 @@ import { docsConditions, docsPullRequest, readDocsFacts } from './docs-pr.mjs';
 import { touchedPaths } from './diff-paths.mjs';
 import { matchesGlob } from './glob.mjs';
 import { acceptedRisks, checkDescription, findingId, openFindings, readReviewReport, stillBlocking } from './pull-request.mjs';
+import { pathTier, requiredReviewRoles } from './review-tiers.mjs';
+import { waiverCandidates, waiverFor, waiverOnHead } from './waivers.mjs';
 
 const OPEN_PRS = { state: 'open', sort: 'created', direction: 'asc' };
 // GitHub's answers to a merge it will not make now: 405, the PR cannot be merged; 409, the head moved.
@@ -208,9 +210,22 @@ async function readMergeFacts(github, number, { docs, gates, apps, auditMain }) 
     reviews: await github.getAll(`/pulls/${number}/reviews`),
     checks: await readChecks(github, pr.head.sha),
     docs: key && docs ? { ...(await readDocsFacts({ github, jira: docs.jira, key, branch: pr.head.ref })), passage: docs.passage } : undefined,
+    label: await waiverLabel({ pr, files, gates, docs }),
     ...(isBackMerge(pr) && { tags: await releaseTags(github), brought: auditMain ? await auditMain(pr) : undefined }),
     ...(notesVersion(pr) && { baseHead: (await github.get(`/git/ref/heads/${pr.base.ref}`)).object?.sha }),
   };
+}
+
+// The level the label of a PR's item names, read with the Jira client of `docs` (its levelOf), only when a waiver of
+// review could take in every file of the PR (C1 spec 3.4). null when it cannot be read: no waiver then holds.
+export async function waiverLabel({ pr, files, gates, docs }) {
+  const key = parseBranch(pr.head?.ref ?? '')?.key;
+  if (!key || !docs?.levelOf || waiverCandidates(files, gates).length === 0) return null;
+  try {
+    return await docs.levelOf(key);
+  } catch {
+    return null;
+  }
 }
 
 // The tags vX.Y.Z of the repository and the commit each names. merge-gate and the hotfix step of ao-step make
@@ -281,7 +296,7 @@ function skipReason(pr, apps, gates) {
 // the audit of the commits it brings from main, [{ sha, ok, problems }], as auditBroughtBack gives it, or undefined when
 // merge-gate could not run it. `baseHead`, for the PR of a release report: the commit at the head of its release branch.
 // `today` (YYYY-MM-DD) is the day a High you accept must still hold on; without it no acceptance counts.
-export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, approvers, docs, space, tags = [], brought, baseHead, today }) {
+export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, approvers, docs, space, tags = [], brought, baseHead, today, label = null }) {
   const reason = skipReason(pr, apps, gates);
   if (reason) return skip(reason);
   // null means GitHub has not worked it out yet; the merge call itself refuses a conflict.
@@ -332,7 +347,7 @@ export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, 
     return missing.length > 0 ? { action: 'wait', missing, docs: verdict.key } : { ...merge, docs: verdict.key };
   }
   const note = verdict ? { note: verdict.reason } : {};
-  const missing = [...unmetConditions({ pr, checks, reviews, gates, apps, approvers, on: today }), ...conflicts];
+  const missing = [...unmetConditions({ pr, checks, reviews, gates, apps, approvers, on: today, files, label }), ...conflicts];
   const paths = protectedPaths(files, gates);
   if (paths.length > 0) return { action: 'needs-you', paths, missing };
   if (missing.length > 0) return { action: 'wait', missing, ...note };
@@ -376,14 +391,38 @@ export function docsUnmet({ pr, checks, reviews, verdict }) {
 // paths, as phrases of what it waits for. audit checks a merged PR against them too, and passes authorApproves: a PR
 // one of your logins opened counts as approved, since GitHub does not let you approve your own PR. `on` (YYYY-MM-DD) is
 // the day a High you accept must still hold on (Pilot 3, spec 2.9 part 5); without it no acceptance counts.
-export function unmetConditions({ pr, checks, reviews, gates, apps, approvers, authorApproves = false, on }) {
+export function unmetConditions({ pr, checks, reviews, gates, apps, approvers, authorApproves = false, on, files = [], label = null }) {
   const head = pr.head.sha;
   const at = `on head ${head.slice(0, 7)}`;
   const missing = baseConditions({ pr, checks });
-  missing.push(...reportGaps(reviews, head, at, gates.github_apps.review.roles, botLogin(apps.review), { approvers, on }));
+  // A review waived by rule needs its trace on the head instead of the reports (C1 spec 3.4), worked out again here.
+  const waiver = reviewWaiver({ pr, files, reviews, gates, apps, label });
+  if (waiver) {
+    if (waiverOnHead(reviews, { bot: botLogin(apps.review), head }) !== waiver.id) missing.push(`review waiver ${waiver.id} ${at}, which ao-step review posts`);
+  } else missing.push(...reportGaps(reviews, head, at, reviewRolesNeeded({ pr, files, reviews, gates, apps }), botLogin(apps.review), { approvers, on }));
   if (changesRequestedOn(reviews, head)) missing.push(`answer to the changes requested ${at}`);
   if (!approved({ pr, reviews, approvers, authorApproves })) missing.push(`approval ${at}`);
   return missing;
+}
+
+// The review roles whose report the merge needs (C1 spec 3.1): reviewer always; security when the PR's own files touch
+// a sensitive or critical path, or when security reported on the PR before. Without the files, or with only part of
+// them (GitHub lists at most 3,000), the PR counts as critical, and both are needed.
+export function reviewRolesNeeded({ pr, files, reviews, gates, apps }) {
+  const roles = gates.github_apps.review.roles;
+  const bot = botLogin(apps.review);
+  const reported = [...new Set(reviews.filter((r) => r.user?.login === bot).map((r) => readReviewReport(r.body, roles).role).filter(Boolean))];
+  const { tier } = pathTier(files, gates, { truncated: truncated(pr, files) });
+  return requiredReviewRoles({ roles, tier, reported });
+}
+
+// The waiver of review that holds for the PR (lib/quality/waivers.mjs), or null: from its own files, the level its
+// item's label names (`label`, read by the caller; null when it could not), and the Critical or High of any report.
+export function reviewWaiver({ pr, files, reviews, gates, apps, label }) {
+  const roles = gates.github_apps.review.roles;
+  const bot = botLogin(apps.review);
+  const blockingFound = reviews.filter((r) => r.user?.login === bot).some((r) => (readReviewReport(r.body, roles).blocking?.length ?? 0) > 0);
+  return waiverFor({ files, gates, label, blockingFound, truncated: truncated(pr, files) });
 }
 
 // The conditions of every PR, the docs PR included: branch, title, description and CI on the head commit.

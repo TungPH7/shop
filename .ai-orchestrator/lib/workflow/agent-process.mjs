@@ -55,7 +55,13 @@ export function processesUnder(dir, { platform = process.platform, spawnSync, se
   if (platform === 'win32') {
     const listed = spawnSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
     if (listed.status !== 0 || !listed.stdout?.trim()) return [];
-    const parsed = JSON.parse(listed.stdout);
+    // Anything but JSON (a warning of PowerShell) finds nothing, rather than end the run that removes a worktree.
+    let parsed;
+    try {
+      parsed = JSON.parse(listed.stdout);
+    } catch {
+      return [];
+    }
     rows = (Array.isArray(parsed) ? parsed : [parsed]).map(({ ProcessId: pid, CommandLine: command }) => ({ pid, command: command ?? '' }));
   } else {
     const listed = spawnSync('ps', ['-eo', 'pid=,args='], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });

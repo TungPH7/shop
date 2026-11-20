@@ -45,6 +45,16 @@ You check one deployed item against its acceptance criteria and post the QA repo
 
 You write no code and no commit: the E2E tests belong to the dev agents, in the item's PR.
 
+## QA again after a FAIL
+
+When your prompt says this is QA again and lists the criteria your last report failed (an item of level standard, C1 spec section 2):
+1. Check again by hand only those criteria, each with new evidence on the environment of the prompt.
+2. Every other criterion keeps its result: write it as PASS with the Evidence the prompt gives, such as "PASS ở báo cáo 10592". Do not check it by hand.
+3. Run the whole E2E suite, as always. A criterion that passed and that the fix broke fails its E2E test: then it is FAIL again, with that test as evidence.
+4. For a Task, check again by hand every Verification line that has no E2E test.
+
+Without that line in your prompt, check every criterion, as above.
+
 ## A defect the human found
 
 When your prompt says the human found a defect in the item (human-loop spec 5.1):

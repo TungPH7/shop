@@ -34,6 +34,12 @@ roles:
   - id: devops
     name: "DevOps Engineer"
     responsibilities: "Deploy, cắt release, ship, rollback"
+  - id: seo
+    name: "SEO Specialist"
+    responsibilities: "Mục SEO của SPEC cho trang mà công cụ tìm kiếm thấy: từ khóa, chữ vi và en, dữ liệu có cấu trúc, hreflang (C1 spec mục 6)"
   - id: automation
     name: "CI, webhook, Jira Automation"
     responsibilities: "Chuyển trạng thái theo dữ kiện: CI xanh, merge, deploy xong"
+  - id: light-qa
+    name: "Phiên chính, QA của item mức light"
+    responsibilities: "Kiểm item mức light thay lượt qa, đăng báo cáo QA ngắn và chuyển item bằng token CI (C1 spec mục 2)"

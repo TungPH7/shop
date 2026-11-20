@@ -1,0 +1,86 @@
+# The CI jobs of this project (ai-orchestrator, C1: SPEC-c1.md section 10). The kit's ci.yml calls this workflow in
+# every CI run as its job project, so the jobs here gate a PR like those of the kit: merge-gate merges only when every
+# check run passed. They show as "project / <job>".
+# ao-kit init writes this stub once, and ao-kit sync never writes over it: a kit copy keeps your jobs. The file must
+# stay, since a CI run fails when a workflow it calls is missing. It is a protected path, so only devops or you change it.
+#
+# To add a job:
+# - check out the commit under test, ref: ${{ inputs.head_sha }}; inputs.base_sha is where the changes start, the base of
+#   the PR or the commit before the push, and empty or all zeros on a new branch;
+# - give it the first step of each job of ci.yml, "By hand only on develop, main or release/*", so a run by hand on
+#   another branch fails rather than passes;
+# - it gets no secret, and the permissions below at most.
+name: CI of the project
+
+on:
+  workflow_call:
+    inputs:
+      head_sha:
+        type: string
+        required: true
+      base_sha:
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  # SHOP-57: the Caddyfile of the admin image, run as a proxy in Docker by apps/admin/scripts/check-caddy-proxy.mjs,
+  # keeps X-Forwarded-Proto, X-Forwarded-Host and X-Forwarded-For of Caddy of the VPS. When it lost them, the api read
+  # http and answered every POST of the browser with 403 "Invalid CORS request" (SHOP-56). Moved here from ci.yml by
+  # SHOP-78, so a kit copy no longer drops it.
+  caddy-proxy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: By hand only on develop, main or release/*
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/develop|refs/heads/main|refs/heads/release/*) ;;
+            *) echo "::error::CI runs by hand only on develop, main or release/*, not on $GITHUB_REF"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.head_sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # pnpm, by packageManager of package.json, installed as in build-test. The script needs Docker and Node alone, but
+      # `pnpm run` installs the packages of the workspace first (pnpm 11), so the step takes the time of an install
+      # (review of PR #60, SHOP-62).
+      - name: pnpm
+        run: node .ai-orchestrator/scripts/ci-package-manager.mjs
+      # --fail-if-no-match: when the filter matches no project, as after apps/admin moves, pnpm prints "No projects
+      # matched the filters" and exits 0; with it the step fails instead of passing with nothing checked (SHOP-62).
+      - run: pnpm --fail-if-no-match --filter ./apps/admin run check:caddy
+
+  # SHOP-61: the product not found page S6 answers HTTP 404 on the build of user, as Production serves it (AC26). Next
+  # renders it one way under `next dev`, where the E2E tests run, and another in the build, so
+  # apps/user/scripts/check-not-found.mjs builds the app, runs `next start` against a stub api, and loads three paths
+  # (SHOP-58). Moved here from ci.yml by SHOP-78, with caddy-proxy.
+  not-found:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: By hand only on develop, main or release/*
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/develop|refs/heads/main|refs/heads/release/*) ;;
+            *) echo "::error::CI runs by hand only on develop, main or release/*, not on $GITHUB_REF"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.head_sha }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      # pnpm, by packageManager of package.json, installed as in build-test. Only user and what it needs are installed.
+      - name: pnpm
+        run: node .ai-orchestrator/scripts/ci-package-manager.mjs
+      # --fail-if-no-match, as in caddy-proxy: a filter that matches no project fails the step (SHOP-62).
+      - run: pnpm install --frozen-lockfile --fail-if-no-match --filter ./apps/user...
+      - run: pnpm --fail-if-no-match --filter ./apps/user run check:not-found

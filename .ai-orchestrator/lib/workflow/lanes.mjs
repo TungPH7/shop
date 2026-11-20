@@ -272,6 +272,9 @@ export function laneKeeper({ projectDir, gitIn, install, fs, pullsOf, isProtecte
       ...newerHome.map((name) => `.ai/ledger/${name} of the project folder is newer and stays`),
       ...(previewBack ? [`its preview in .ai/runs/${lane.key}/preview/`] : []),
     ];
+    // The lane is no longer ready once its packages go: if git cannot remove it, the next run installs them again
+    // (review of shop PR #78).
+    fs.rmSync(join(lane.dir, READY), { force: true });
     removePackages(lane.dir);
     const removed = git('worktree', 'remove', '--force', lane.dir);
     if (removeFolder(lane.dir)) return `Removed the lane of ${lane.key}: its PR is ${merged ? 'merged' : 'closed'}${kept.length > 0 ? `; ${kept.join(', ')}` : ''}.`;

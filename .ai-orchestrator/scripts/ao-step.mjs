@@ -19,7 +19,9 @@ import { mergeLocal, readRoster } from '../lib/agents/roster.mjs';
 import { readContract } from '../lib/contract.mjs';
 import { projectSettings, setting } from '../lib/project-settings.mjs';
 import { touchedPaths, unquotePath } from '../lib/quality/diff-paths.mjs';
-import { readGates } from '../lib/quality/gates.mjs';
+import { readProjectYaml } from '../lib/quality/approved-file.mjs';
+import { epicOfDocsBranch, readGates } from '../lib/quality/gates.mjs';
+import { withProjectPaths } from '../lib/quality/review-tiers.mjs';
 import { matchesGlob } from '../lib/quality/glob.mjs';
 import { DOCKER_INFO, dockerAnswered } from '../lib/quality/maven.mjs';
 import { markReadyForReview, READY_PERMISSIONS } from '../lib/quality/pr-ready.mjs';
@@ -28,6 +30,9 @@ import { npmCli } from '../lib/quality/npm.mjs';
 import { installArgs, managerFromLockfile, pnpmCli, runManager } from '../lib/quality/package-manager.mjs';
 import { attachEvidence } from '../lib/tracker/attachments.mjs';
 import { createGitHubClient, readGitHubToken } from '../lib/tracker/github-client.mjs';
+import { markdownToAdf } from '../lib/tracker/adf.mjs';
+import { findingsComment, findingsTask, recordedLine } from '../lib/workflow/findings.mjs';
+import { waiverBody } from '../lib/quality/waivers.mjs';
 import { bearerAuth, createJiraClient } from '../lib/tracker/jira-client.mjs';
 import { readMapping } from '../lib/tracker/mapping.mjs';
 import { startAgentProcess, killTree, stopProcessesUnder } from '../lib/workflow/agent-process.mjs';
@@ -51,6 +56,7 @@ import { admitAgent, claimRole, claimsRole, jiraWipStop, liveLocks, releaseAgent
 import { wipHolders } from '../lib/tracker/facts.mjs';
 import { runsAtOnce } from '../lib/workflow/ports.mjs';
 import { hookKitDrift, hookKitNote } from '../lib/workflow/hook-kit.mjs';
+import { seoChange } from '../lib/workflow/seo-commit.mjs';
 
 const COMMANDS = ['status', 'intake', 'preview', 'spec', 'plan', 'request', 'build', 'review', 'fix', 'qa', 'release', 'ship', 'rollback'];
 const USAGE = 'usage: node .ai-orchestrator/scripts/ao-step.mjs <status|intake|preview|spec|plan|request|build|review|fix|qa|release|ship|rollback> [<KEY>|<PR>|<vX.Y.0> <sha>|<vX.Y.Z>|<environment> [<sha>]] [--go] [--answers <file>] [--note <file>] [--change <word>] [--stop] [--retest]';
@@ -159,17 +165,17 @@ const secret = (name) => userSecret(name);
 export function runsFile(projectDir, file) {
   const path = resolve(projectDir, file);
   const inside = relative(join(projectDir, '.ai', 'runs'), path);
-  if (inside === '' || inside.startsWith('..') || resolve(inside) === inside) throw new Error(`--note and --answers read only a file in .ai/runs/, not ${file}`);
+  if (inside === '' || inside.startsWith('..') || resolve(inside) === inside) throw new Error(`--note, --answers and --light-report read only a file in .ai/runs/, not ${file}`);
   return path;
 }
 
 
 async function main() {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { go: { type: 'boolean', default: false }, answers: { type: 'string' }, note: { type: 'string' }, change: { type: 'string' }, stop: { type: 'boolean', default: false }, retest: { type: 'boolean', default: false } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { go: { type: 'boolean', default: false }, answers: { type: 'string' }, note: { type: 'string' }, change: { type: 'string' }, stop: { type: 'boolean', default: false }, retest: { type: 'boolean', default: false }, 'light-report': { type: 'string' }, full: { type: 'boolean', default: false } } });
   const [command, arg, extra] = positionals;
   const settings = projectSettings(projectDir);
   const space = setting('AO_JIRA_SPACE', settings);
-  const wrong = checkArgument(command, arg, space, extra) ?? checkChange(command, values.change, Boolean(values.note)) ?? (values.stop && command !== 'preview' ? '--stop goes with /ao-preview only' : null);
+  const wrong = checkArgument(command, arg, space, extra) ?? checkChange(command, values.change, Boolean(values.note)) ?? (values.stop && command !== 'preview' ? '--stop goes with /ao-preview only' : null) ?? (values['light-report'] && command !== 'qa' ? '--light-report goes with /ao-qa only' : null) ?? (values.full && command !== 'review' ? '--full goes with /ao-review only' : null);
   if (wrong) {
     console.log(`STOP: ${wrong}`);
     return;
@@ -200,7 +206,8 @@ async function main() {
 
   const contract = readContract(join(kitDir, 'contract'));
   const mapping = readMapping(join(kitDir, 'tracker'));
-  const gates = readGates(join(kitDir, 'quality'));
+  // The project's own paths of a review tier, from its project.yaml (review of shop PR #79).
+  const gates = withProjectPaths(readGates(join(kitDir, 'quality')), readProjectYaml(projectDir));
   const onBranch = () => git('branch', '--show-current').stdout?.trim() ?? '';
   const wrongCheckout = checkoutStop(command, onBranch(), gates.protected_branches);
   if (wrongCheckout) {
@@ -278,8 +285,11 @@ async function main() {
   const read = (file) => readFileSync(runsFile(projectDir, file), 'utf8');
   // The dev agent of each app by its profile: /ao-fix gives a blocking finding to the side of its app (kit followups,
   // batch 2; PR #62 of shop, Pilot 3).
-  const appRoles = appRolesOf(existsSync(projectYaml) ? parse(readFileSync(projectYaml, 'utf8'))?.apps : {});
-  const options = { roster, contract, gates, mapping, appRoles, ...(values.answers && { answers: read(values.answers) }), ...(values.note && { note: read(values.note) }), ...(values.change && { change: values.change }), ...(values.retest && { retest: true }) };
+  const projectApps = existsSync(projectYaml) ? (parse(readFileSync(projectYaml, 'utf8'))?.apps ?? {}) : {};
+  const appRoles = appRolesOf(projectApps);
+  // The apps whose screens seo writes the SEO of (C1 spec 6.1).
+  const seoApps = Object.entries(projectApps).filter(([, app]) => app?.seo === true).map(([name]) => name);
+  const options = { roster, contract, gates, mapping, appRoles, seoApps, ...(values.answers && { answers: read(values.answers) }), ...(values.note && { note: read(values.note) }), ...(values.change && { change: values.change }), ...(values.retest && { retest: true }), ...(values['light-report'] && { lightReport: read(values['light-report']) }), ...(values.full && { full: true }) };
 
   const facts = await gather();
   // A Java app needs Docker for the tests be-dev and qa run (project-scaffold part 3, spec 2.2).
@@ -330,7 +340,6 @@ async function main() {
     return;
   }
   const lock = taken.file;
-  const projectApps = existsSync(projectYaml) ? (parse(readFileSync(projectYaml, 'utf8'))?.apps ?? {}) : {};
   const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
   try {
     console.log('');
@@ -393,16 +402,24 @@ async function main() {
           if (cap > 1) await releaseAgent(activeDir, lock, { fs: lockFs, alive, sleep });
         }
       },
-      // A defect you reported is checked like a QA run: its evidence goes to the item too (human-loop spec 5.1).
-      after: (run, { tree }) => (['qa', 'qa-defect', 'qa-ops'].includes(run.purpose) ? afterQa(run, tree, { deploys, mapping }) : []),
+      // A defect you reported is checked like a QA run: its evidence goes to the item too (human-loop spec 5.1). seo has
+      // no git: its change is committed here (C1 spec 6.6).
+      after: (run, { tree }) => {
+        if (run.role === 'seo') return afterSeo(run, gates);
+        return ['qa', 'qa-defect', 'qa-ops'].includes(run.purpose) ? afterQa(run, tree, { deploys, mapping }) : [];
+      },
       act: (step) => {
         if (step.action === 'release-pr') return releasePr(step, { repo, settings });
         if (step.action === 'hotfix-ship') return hotfixShip(step, { repo, settings, userToken });
         if (step.action === 'deploy-request') return deployRequest(step, { repo, userToken });
         if (step.action === 'kit-copy-reports') return kitCopyReports(step, { repo, appEnv });
+        if (step.action === 'review-waiver') return reviewWaiverNote(step, { repo, appEnv });
         if (step.action === 'pr-ready') return prReady(step, { repo, settings });
         if (step.action === 'preview-start') return preview.start(step);
         if (step.action === 'preview-stop') return preview.stop().then(({ notes }) => notes);
+        if (step.action === 'qa-light-start') return qaLightStart(step, { mapping });
+        if (step.action === 'qa-light-report') return qaLightReport(step, { mapping });
+        if (step.action === 'findings-task') return findingsTaskAction(step, { mapping, contract, space });
         return releaseCut(step, { repo, mapping, userToken });
       },
       git: (checkout, run) => keeper.checkout(checkout, run, command),
@@ -648,6 +665,15 @@ async function kitCopyReports(step, { repo, appEnv }) {
   return postKitCopyReports({ github: createGitHubClient({ repo, token, write: true }), step });
 }
 
+// /ao-review of a PR whose review is waived by rule (C1 spec 3.4): the trace on its head, a COMMENT review of the review
+// App, in place of the reports. merge-gate and audit work the rule out again; they never take this review on trust.
+async function reviewWaiverNote({ key, number, sha, waiver, level, files }, { repo, appEnv }) {
+  const { token } = await installationToken({ ...appCredentials('review', { env: appEnv }), repo, permissions: { pull_requests: 'write' } });
+  const github = createGitHubClient({ repo, token, write: true });
+  await github.request('POST', `/pulls/${number}/reviews`, {}, { commit_id: sha, event: 'COMMENT', body: waiverBody({ id: waiver, level, files, key, sha }) });
+  return [`Posted the waiver ${waiver} on the head ${sha.slice(0, 7)} of PR #${number}: no review runs.`];
+}
+
 // The first step of /ao-review on a draft PR (human-loop spec 4.6): marks it ready as the ao-dev App, which opened it.
 async function prReady({ number }, { repo, settings }) {
   const slug = setting('AO_DEV_APP', settings);
@@ -832,8 +858,79 @@ function listFiles(dir) {
     .map((path) => ({ path: path.replaceAll('\\', '/'), mtimeMs: statSync(path).mtimeMs }));
 }
 
+// The Jira client of the CI token: a user variable of your Windows account, which an agent running as you can read past
+// gh-guard, a risk you accept until the CI token leaves the machine (reviews of shop PR #21).
+function ciJira(mapping) {
+  const ciToken = secret('JIRA_CI_TOKEN');
+  if (!ciToken) throw new Error('JIRA_CI_TOKEN is not set in your session');
+  return createJiraClient({ cloudId: mapping.cloud_id, authorization: bearerAuth(ciToken), write: true });
+}
+
+// The Jira name of a contract transition of the work items, from tracker/jira.yaml.
+const transitionName = (mapping, id) => Object.values(mapping.workflows).map(({ transitions = {} }) => transitions[id]?.name).find(Boolean) ?? id;
+
+// /ao-qa of an item of level light (C1 spec section 2): the main session checks it in place of a qa run. The item moves
+// and the report goes up with the CI token, as contract/workflows.yaml lets automation pick up and fail an item.
+async function qaLightStart({ key }, { mapping }) {
+  await ciJira(mapping).transition(key, transitionName(mapping, 'pick-up'));
+  return [`${key} is In QA, picked up with the CI token: level light, no qa run.`];
+}
+
+async function qaLightReport({ key, result, body }, { mapping }) {
+  const jira = ciJira(mapping);
+  await jira.request('POST', `/rest/api/3/issue/${encodeURIComponent(key)}/comment`, {}, { body: markdownToAdf(body) });
+  const notes = [`Posted the ${result} report of the main session on ${key}, with the CI token.`];
+  if (result === 'FAIL') {
+    await jira.transition(key, transitionName(mapping, 'qa-fail'));
+    notes.push(`${key}: QA fail, back to In Progress.`);
+  }
+  return notes;
+}
+
+// The Medium and Low a review left on a merged PR, to the findings Task of its Epic (C1 spec section 2), with the CI
+// token: the Task made at the first of them, labelled, a child of the Epic that blocks it, then one comment per PR.
+// It searches again before it makes or comments, so a second run adds nothing.
+async function findingsTaskAction({ key, epic, task, pr, findings }, { mapping, contract, space }) {
+  const jira = ciJira(mapping);
+  const label = mapping.work_labels.findings;
+  const notes = [];
+  let found = task ?? (await jira.searchAll(`project = "${space}" AND parent = "${epic}" AND labels = "${label}" ORDER BY created ASC`, ['summary']))[0]?.key ?? null;
+  if (!found) {
+    const { summary, description } = findingsTask({ epic });
+    const typeName = contract.work_types.find(({ id }) => id === 'task').jira_issue_type;
+    ({ key: found } = await jira.request('POST', '/rest/api/3/issue', {}, { fields: { project: { key: space }, issuetype: { name: typeName }, summary, description: markdownToAdf(description), labels: [label], parent: { key: epic } } }));
+    // The item that comes first is the inward one, as ba links them (agents/prompts/ba.md): the Epic waits for it.
+    await jira.request('POST', '/rest/api/3/issueLink', {}, { type: { name: 'Blocks' }, inwardIssue: { key: found }, outwardIssue: { key: epic } });
+    notes.push(`Made ${found}, the findings Task of ${epic}: label ${label}, it blocks ${epic}.`);
+  }
+  const comments = await jira.getAll(`/rest/api/3/issue/${encodeURIComponent(found)}/comment`, {}, 'comments');
+  if (comments.some(({ body }) => adfText(body).includes(recordedLine(pr)))) return [...notes, `${found} names PR #${pr} already.`];
+  await jira.request('POST', `/rest/api/3/issue/${encodeURIComponent(found)}/comment`, {}, { body: markdownToAdf(findingsComment({ key, pr, findings })) });
+  return [...notes, `Added the ${findings.length} Medium and Low finding${findings.length === 1 ? '' : 's'} of PR #${pr} to ${found}.`];
+}
+
 // After a qa run, before its worktree goes: the evidence to the item with the CI token, which only this session holds,
 // and whether the environment still runs the release qa tested (release-workflow spec 2.5).
+// C1 spec 6.6: seo has no git, so ao-step commits what it changed under docs/specs/, in the project folder where the
+// runs of an Epic and of /ao-request work, with your git; and pushes it when its branch is on GitHub already, as for an
+// open docs PR. A new docs branch goes up with the docs PR ba opens. Resolves the notes of the run, or { notes, stop }.
+function afterSeo(run, gates) {
+  const branch = git('branch', '--show-current').stdout.trim();
+  const change = seoChange({ status: git('status', '--porcelain=v1', '-z', '--untracked-files=all').stdout, branch, key: run.key, docsEpic: epicOfDocsBranch(gates, branch) });
+  if (!change) return [];
+  if (change.stop) return { notes: [], stop: change.stop };
+  const last = (result) => `${result.stderr || result.stdout}`.trim().split('\n').at(-1);
+  const added = git('add', '--', ...change.paths);
+  if (added.status !== 0) return { notes: [], stop: `ao-step could not stage the change of seo on ${branch}: ${last(added)}` };
+  const committed = git('commit', '--quiet', '-m', change.message);
+  if (committed.status !== 0) return { notes: [], stop: `ao-step could not commit the change of seo on ${branch}: ${last(committed)}` };
+  const notes = [`ao-step committed the change of seo on ${branch}: ${change.paths.join(', ')}`];
+  if (git('rev-parse', '--verify', '--quiet', `refs/remotes/origin/${branch}`).status !== 0) return notes;
+  const pushed = git('push', '--quiet', 'origin', branch);
+  if (pushed.status !== 0) return { notes, stop: `ao-step committed the change of seo on ${branch} but could not push it: ${last(pushed)}. Push it yourself, then run the command again` };
+  return [...notes, `ao-step pushed it to origin/${branch}`];
+}
+
 function afterQa(run, tree, { deploys, mapping }) {
   const ciToken = secret('JIRA_CI_TOKEN');
   const jira = ciToken ? createJiraClient({ cloudId: mapping.cloud_id, authorization: bearerAuth(ciToken), write: true }) : null;

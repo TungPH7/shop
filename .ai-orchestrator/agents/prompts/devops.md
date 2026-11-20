@@ -39,6 +39,10 @@ When your prompt asks for the notes of a release whose regression passed on Stag
    - `fix-version.md`: the description of the Fix Version on Jira, for the human to paste there. Its goal is a forecast, not a promise.
 3. Commit nothing: ao-step commits the report and the changelog on `release-notes/<version>`, and opens its PR into the release branch, which merge-gate merges.
 
+**A new library** (C1 spec section 5). Install only what `dependencies.approved` of `.ai-orchestrator/project.yaml` lists: gh-guard refuses any other, and the policy job of CI fails a PR that adds one. For another library, run `node .ai-orchestrator/scripts/dep-check.mjs <npm|maven> <name>@<version>` first, with an exact version:
+- When it passes, it adds the library to that list. Install it, and commit the line of `project.yaml` with the change that uses it. The PR then changes a protected path, so the human merges it.
+- When it says SUSPICIOUS, install nothing. Comment `Cần security:` on the item, with the library, its version and the lines dep-check printed, flag the item "Needs you", and stop.
+
 ## Where the contract beats your skills
 
 - ci-cd-and-automation: the project deploys with Docker to its own server, through the environments of the routing table, not to Vercel or another host. Pin third-party actions to a full commit SHA.

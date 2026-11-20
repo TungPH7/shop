@@ -4,7 +4,7 @@
 // Rules of the file: P1 the schema project.schema.json, kept next to this file so a project's copy of lib/ has it; P2
 // exactly one repo, until the multi-repo module; P3 each app in a repo of the file; P4 each path inside its repo; P5
 // optional roles the kit has; P6 dev commands that run with no shell; P7 one default port per app; P8 hosts for a public
-// app only; P9 no host twice (project-scaffold part 2, spec 2.4).
+// app only; P9 no host twice (project-scaffold part 2, spec 2.4); P10 seo for a public app only (C1 spec 6.1).
 // checkProject compares the file with the rest of the project: C1 deploy.yaml, C2 package.json (pnpm-workspace.yaml for
 // pnpm), C3 the folders, C4 the lockfile of its package manager, C5 the hosts of each public app when two or more are.
 import { readFileSync } from 'node:fs';
@@ -58,6 +58,7 @@ export function validateProjectConfig(config, { optionalRoles = [] } = {}) {
     if (other) add('P7', `apps.${name}.port.default`, `${app.port.default} is the port of ${other} too`);
     else seen.set(app.port.default, name);
     if (app.hosts && !app.public) add('P8', `apps.${name}.hosts`, `${name} is not public, so it has no host: only Caddy of the VPS reaches a host, and it serves the public apps`);
+    if (app.seo && !app.public) add('P10', `apps.${name}.seo`, `${name} is not public, so no search engine reaches it: seo: true needs public: true`);
   }
   const hosts = new Map();
   for (const [name, app] of Object.entries(config.apps)) {

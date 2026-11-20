@@ -8,7 +8,7 @@ import { adfText, readChecks } from '../tracker/facts.mjs';
 import { raiseFlag } from '../tracker/sync.mjs';
 import { touchedPaths } from './diff-paths.mjs';
 import { docsPullRequest, readDocsFacts } from './docs-pr.mjs';
-import { approved, botLogin, docsUnmet, docsVerdict, isBackMerge, isReleasePr, notesPaths, notesVersion, protectedPaths, releaseTags, truncated, unmetConditions } from './merge-gate.mjs';
+import { approved, botLogin, docsUnmet, docsVerdict, isBackMerge, isReleasePr, notesPaths, notesVersion, protectedPaths, releaseTags, truncated, unmetConditions, waiverLabel } from './merge-gate.mjs';
 
 // Who may merge a PR that needs no approval of yours, a merge back or the release report: merge-gate, with ao-merge
 // (Pilot 3, spec 2.9), or with ao-dev only in a project that has no ao-merge yet; or you. In a project with ao-merge, a
@@ -30,7 +30,7 @@ export function mergedPull(pulls, sha, branch) {
 // merge back: the release tags of the repository, [{ name, sha }], as releaseTags reads them, and `brought`, the audit of
 // the commits it brought from main, as auditBroughtBack gives it. A High you accepted counts on the day of the merge
 // (Pilot 3, spec 2.9 part 5).
-export function decideAudit({ sha, branch, message, pull, files = [], reviews = [], checks, gates, apps, approvers, docs, space, tags = [], brought }) {
+export function decideAudit({ sha, branch, message, pull, files = [], reviews = [], checks, gates, apps, approvers, docs, space, tags = [], brought, label = null }) {
   const short = sha.slice(0, 7);
   // Every commit comes through a PR. The release report of /ao-ship did not, before Pilot 3, spec 2.9: whoever held the
   // token of ao-dev, an agent included, could change the release notes that way.
@@ -76,7 +76,7 @@ export function decideAudit({ sha, branch, message, pull, files = [], reviews = 
     const verdict = docsVerdict({ pr: pull, files, gates, apps, docs, space });
     if (verdict?.docs) missing = docsUnmet({ pr: pull, checks, reviews, verdict });
     else {
-      missing = unmetConditions({ pr: pull, checks, reviews, gates, apps, approvers, authorApproves: true, on: pull.merged_at?.slice(0, 10) });
+      missing = unmetConditions({ pr: pull, checks, reviews, gates, apps, approvers, authorApproves: true, on: pull.merged_at?.slice(0, 10), files, label });
       if (verdict && missing.length > 0) missing[missing.length - 1] += ` (${verdict.reason})`;
     }
     const paths = protectedPaths(files, gates);
@@ -159,6 +159,7 @@ export async function readAuditFacts({ github, docs, sha, branch, gates, apps, a
     reviews: await github.getAll(`/pulls/${pull.number}/reviews`),
     checks: await readChecks(github, pull.head.sha),
     docs: docsKey && docs ? { ...(await readDocsFacts({ github, jira: docs.jira, key: docsKey, branch: pull.head.ref })), passage: docs.passage } : undefined,
+    label: await waiverLabel({ pr: pull, files, gates, docs }),
     parents,
     // A merge back passes once the head of main it merged was a version you shipped (Pilot 3, spec 2.9), and every
     // commit it brought from main passed audit (review round 3 of shop PR #13).

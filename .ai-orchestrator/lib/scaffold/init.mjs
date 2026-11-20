@@ -171,8 +171,9 @@ export function initProject({ kitDir, projectDir, options, env = process.env, gi
   }
   mkdirSync(join(projectDir, '.ai-orchestrator'), { recursive: true });
   writeFileSync(join(projectDir, PROJECT_FILE), text);
-  const { removed } = installKit({ kitDir, projectDir });
+  const { removed, seeded } = installKit({ kitDir, projectDir });
   notes.push(`Copied the kit${removed.length > 0 ? `, and removed ${removed.length} files of an older copy` : ''}`);
+  if (seeded.length > 0) notes.push(`Wrote ${seeded.join(', ')}, where the project keeps its own CI jobs: ci.yml calls it, and ao-kit sync never writes over it`);
   notes.push(...ensureGitignore(projectDir), ...ensurePrepare(projectDir), ...ensureOrigin(projectDir, values.repo, git));
   // The rulesets count only a code owner's approval (Pilot 3, spec 2.9).
   const approvers = readProjectConfig(text).config?.github?.approvers;
@@ -234,8 +235,9 @@ export function syncKit({ kitDir, projectDir, options, git, run }) {
     rmSync(join(projectDir, OLD_PREVIEW_FILE), { force: true });
     notes.push(`Wrote ${PROJECT_FILE} from .claude/settings.json, ${OLD_PREVIEW_FILE} and deploy.yaml, and removed preview.yaml`);
   }
-  const { removed } = installKit({ kitDir, projectDir });
+  const { removed, seeded } = installKit({ kitDir, projectDir });
   notes.push(`Copied the kit${removed.length > 0 ? `; removed ${removed.length} files the kit no longer has: ${removed.join(', ')}` : ''}`);
+  if (seeded.length > 0) notes.push(`Wrote ${seeded.join(', ')}, where the project keeps its own CI jobs: ci.yml calls it, and ao-kit sync never writes over it`);
   notes.push(...ensureGitignore(projectDir), ...ensurePrepare(projectDir));
   // The rulesets count only a code owner's approval (Pilot 3, spec 2.9).
   const approvers = readProjectConfig(readFileSync(file, 'utf8')).config?.github?.approvers;

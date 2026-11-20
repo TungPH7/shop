@@ -109,6 +109,7 @@ work_item_fields:
       - { id: security, name: "Security Engineer" }
       - { id: qa, name: "Tester/QA Engineer" }
       - { id: devops, name: "DevOps Engineer" }
+      - { id: seo, name: "SEO Specialist" }
     filled_by: "Agent, khi start và pick-up"
     note: "Vai trò agent đang giữ item. Mọi agent dùng chung một tài khoản Jira, nên assignee không cho biết agent nào; guard wip-available đếm WIP theo trường này"
   - id: rework-count

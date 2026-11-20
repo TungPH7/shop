@@ -1,6 +1,6 @@
 ---
 name: ao-request
-description: Run the open requests "Cần ba:", "Cần ux:" or "Cần sa:" on an item with the role each one asks, oldest first.
+description: Run the open requests "Cần ba:", "Cần ux:", "Cần sa:", "Cần security:" or "Cần seo:" on an item with the role each one asks, oldest first.
 argument-hint: <KEY>
 disable-model-invocation: true
 ---

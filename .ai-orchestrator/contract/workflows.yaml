@@ -51,14 +51,16 @@ workflows:
         to: ready-for-qa
         actors: [automation]
         guards: [merge-approved, pr-merged, qa-deployed]
+      # light-qa: the main session checks an item of level light in place of a qa run, and moves it with the CI token
+      # (C1 spec section 2). Not automation: jira-sync makes every move of automation whose guards hold.
       - id: pick-up
         from: ready-for-qa
         to: in-qa
-        actors: [qa]
+        actors: [qa, light-qa]
       - id: qa-fail
         from: in-qa
         to: in-progress
-        actors: [qa]
+        actors: [qa, light-qa]
         guards: [qa-report-failed]
         effects: [increment-rework]
       - id: accept

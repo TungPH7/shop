@@ -49,7 +49,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 
 ## Ledger
 
-When you work on an item, write `.ai/ledger/<KEY>.md` from the ledger template after each step, so the next session picks up where you stopped. `.ai/` is never committed.
+When you work on an item, write `.ai/ledger/<KEY>.md` from the ledger template after each step, so the next session picks up where you stopped. `.ai/` is never committed. seo, which reads web pages, writes `.ai/ledger/<KEY>.seo.md` instead, and no other agent reads that one.
 
 ## Hooks
 
@@ -66,7 +66,7 @@ Run a script of an app with `node .ai-orchestrator/scripts/run.mjs <app> <script
 - `<script>` is `lint`, `typecheck`, `test`, `test:coverage`, `build`, or another script of its `package.json`.
 - Examples: `run.mjs api test -- -Dtest=ProductServiceTest` for a Java app, `run.mjs user test -- product-card` for a JS one.
 
-It runs Maven with the JDK of the app, or the package manager of the project. It runs in the foreground, prints the counts of tests and the first failure, and keeps the whole output in `.ai/tmp/run-<app>-<script>.log`. Read that file only for what the summary leaves out. Never write a wrapper of your own around Maven, pnpm or npm.
+It runs Maven with the JDK of the app, or the package manager of the project. It runs in the foreground, prints the counts of tests and the first failure, and keeps the whole output in `.ai/tmp/run-<app>-<script>.log`. Read that file only for what the summary leaves out. For a Java app, `-Dtest=` takes class names only, such as `ProductServiceTest`: Maven on Windows cannot take `#` or `,` there. Never write a wrapper of your own around Maven, pnpm or npm.
 
 ## Commands that take long
 

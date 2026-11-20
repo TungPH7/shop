@@ -21,9 +21,18 @@ coverage:
   exclude: ["**/*.{test,spec}.*", "**/*.e2e-spec.*", "**/*.d.ts", "**/*.config.*", "**/migrations/**", "{,apps/*/}e2e/**", "{,apps/*/}scripts/**", ".ai-orchestrator/**", ".claude/**"]
 
 # npm audit fails on this level and above. An exception names a GitHub advisory, why it is accepted, and when it ends.
+# A project keeps its own exceptions in dependencies.exceptions of its project.yaml, which a kit copy leaves alone; the
+# policy job reads both (C1 spec section 5). licenses: the SPDX ids dep-check accepts for a new library.
 dependencies:
   audit_level: high
   exceptions: []
+  # What the kit's own prompts and skills run with npx, which gh-guard lets an agent download as an approved library;
+  # anything else npx or a dlx would download must be approved first (review of shop PR #79). range: the versions
+  # allowed, all when left out.
+  tools:
+    - { ecosystem: npm, name: "@playwright/cli", range: "0.1.22" }
+    - { ecosystem: npm, name: playwright }
+  licenses: [MIT, MIT-0, ISC, Apache-2.0, BSD-2-Clause, BSD-3-Clause, 0BSD, Unlicense, CC0-1.0, BlueOak-1.0.0, MPL-2.0, EPL-2.0, Python-2.0]
 
 # Lines that switch a check off. A line that also carries the reason marker passes, so the reviewer can read why;
 # a `never` pattern fails even with a reason.
@@ -84,67 +93,115 @@ protected_paths:
   - { path: ".ai-orchestrator/**" }
   - { path: ".mcp.json" }
   - { path: ".github/CODEOWNERS" }
+  # A .claude folder in an app, which Claude Code loads as the root's once an agent reads a file there (review of shop
+  # PR #79). A CLAUDE.md or an AGENTS.md there stays editable, in a PR reviewed as critical (review-tiers.mjs).
+  - { path: "**/.claude/**" }
+  # Where a package manager reads its registry, at any depth: written by an agent, it would install an approved name
+  # from elsewhere, as --registry would (review of shop PR #79).
+  - { path: "**/.npmrc" }
+  - { path: "**/.yarnrc*" }
+  - { path: "**/bunfig.toml" }
 
-# The effort of a full security review (Pilot 1, review cost): the roster's when the PR touches a protected path or one
-# of these paths, or when its item or one of its Sub-tasks has an effort label; lower_effort otherwise. A review of only
-# the changes since the last report stays at high (dev-workflow spec 2.6).
-security_review:
-  roster_effort_paths:
-    # dependencies and how the app is built and run
-    - "**/package.json"
-    - "**/package-lock.json"
-    - "**/Dockerfile*"
-    - "**/docker-compose*.{yml,yaml}"
-    - "**/compose*.{yml,yaml}"
-    - "**/.npmrc"
-    - "**/pnpm-lock.yaml"
-    # pnpm 10 and later: which packages run install scripts (allowBuilds), skip the release cooldown, or are overridden
-    - "**/pnpm-workspace.yaml"
-    - "**/yarn.lock"
-    - "**/.env*"
-    - "**/next.config.*"
-    - "**/main.ts"
-    # where requests come in or are checked: NestJS and Next.js
-    - "**/*.module.ts"
-    - "**/*.controller.*"
-    - "**/*.guard.*"
-    - "**/*.pipe.*"
-    - "**/*.filter.*"
-    - "**/*.interceptor.*"
-    - "**/*.middleware.*"
-    - "**/*.strategy.*"
-    - "**/*.dto.*"
-    - "**/middleware.*"
-    - "**/proxy.*"
-    - "**/route.*"
-    - "**/actions.*"
+# Review by risk (C1 spec section 3): the tier of a PR is the highest its files touch, a renamed file by both names
+# (lib/quality/review-tiers.mjs). critical: the protected paths above and critical_paths: reviewer at xhigh, security
+# at the roster's max. sensitive: security at high. normal, any other file: reviewer at high, no security; CI still
+# runs its SAST, secret and osv-scanner jobs. docs: every file under docs_paths and none critical, as normal. A review
+# of only the new part runs at high, or at the critical efforts when the new part is critical. merge-gate and audit
+# ask for the security report by the same tiers, and always once security has reported on the PR.
+review:
+  critical_paths:
     # who the user is, and secrets
     - "**/auth/**"
     - "**/*auth*.*"
     - "**/*session*.*"
     - "**/*crypto*.*"
-    # where data is read and written. Services are left out: most backend PRs change one, and would all be at max.
-    - "**/*.repository.*"
-    - "**/*.entity.*"
-    - "**/prisma/**"
-    - "**/migrations/**"
-    - "**/*.sql"
-    # Spring Boot (project-scaffold part 3, spec 2.3): how it is built, its config, where requests come in or are
-    # checked, who the user is, and what it reads and writes. Services stay out, as for NestJS.
-    - "**/pom.xml"
-    - "**/.mvn/**"
-    - "**/mvnw*"
-    - "**/application*.{yml,yaml,properties}"
-    - "**/*Controller.java"
-    - "**/*Filter.java"
-    - "**/*Interceptor.java"
+    - "**/.env*"
+    - "**/.npmrc"
+    # NestJS: who may call
+    - "**/*.guard.*"
+    - "**/*.strategy.*"
+    # Spring Boot (project-scaffold part 3, spec 2.3): security configuration and who the user is
     - "**/*Security*.java"
     - "**/*Auth*.java"
     - "**/security/**"
+    # migrations that touch the data already there
+    - "**/migrations/**"
+    - "**/db/migration/**"
+    # how the app is built and shipped: an image, a wrapper that downloads the build tool, the deploy file
+    - "**/Dockerfile*"
+    - "**/docker-compose*.{yml,yaml}"
+    - "**/compose*.{yml,yaml}"
+    - "**/.mvn/**"
+    - "**/mvnw*"
+    - "**/deploy.yaml"
+    # What steers an agent session at any depth, such as CLAUDE.md, AGENTS.md or a .claude/ in an app, is critical in
+    # code, whatever this list says (lib/quality/review-tiers.mjs, review of shop PR #79).
+  sensitive_paths:
+    # dependencies, and how the app is configured and started
+    - "**/package.json"
+    - "**/package-lock.json"
+    - "**/pnpm-lock.yaml"
+    # pnpm 10 and later: which packages run install scripts (allowBuilds), skip the release cooldown, or are overridden
+    - "**/pnpm-workspace.yaml"
+    - "**/yarn.lock"
+    - "**/pom.xml"
+    - "**/next.config.*"
+    - "**/main.ts"
+    - "**/application*.{yml,yaml,properties}"
+    # where requests come in or are checked: NestJS and Next.js
+    - "**/*.module.ts"
+    - "**/*.controller.*"
+    - "**/*.pipe.*"
+    - "**/*.filter.*"
+    - "**/*.interceptor.*"
+    - "**/*.middleware.*"
+    - "**/middleware.*"
+    - "**/proxy.*"
+    - "**/route.*"
+    - "**/actions.*"
+    - "**/*.dto.*"
+    # where data is read and written, and the services around it
+    - "**/*.service.*"
+    - "**/*.repository.*"
+    - "**/*.entity.*"
+    - "**/prisma/**"
+    - "**/*.sql"
+    # Spring Boot: where requests come in, and what it reads and writes
+    - "**/*Controller.java"
+    - "**/*Filter.java"
+    - "**/*Interceptor.java"
+    - "**/*Service.java"
     - "**/*Repository.java"
+    - "**/service/**"
     - "**/domain/**"
     - "**/dto/**"
-  lower_effort: high
+    # What keeps the browser and the API safe outside those (review of shop PR #79, where security found them normal):
+    # security headers and CSP, the env an app puts in its bundle, the proxy in front of it, the lint rules that ban
+    # unsafe code, the client that sends the API its token, the pages that log in, and how errors and authors are written
+    - "**/*security*.*"
+    - "**/env.*"
+    - "**/env/**"
+    - "**/Caddyfile*"
+    - "**/eslint.config.*"
+    - "**/.eslintrc*"
+    - "**/*api-client*.*"
+    - "**/*http-client*.*"
+    - "**/{login,logout,signin,signup,register}/**"
+    - "**/*ExceptionHandler*.*"
+    - "**/*Auditor*.*"
+  # A project adds paths of its own to critical_paths and sensitive_paths with review in its project.yaml, a protected
+  # file the kit copy leaves alone; it cannot take one away (lib/quality/review-tiers.mjs, withProjectPaths).
+  docs_paths:
+    - "docs/**"
+    - "**/*.md"
+  # Review waived by rule (C1 spec section 3.4): a PR whose every file is in `files`, for an item whose effective level
+  # is `level`, needs no report. ao-step posts a COMMENT review on the head with the line "Waiver: <id>" instead;
+  # merge-gate and audit work the rule out again from the PR's files and the item's label (lib/quality/waivers.mjs).
+  # A critical file makes the item heavy, so no waiver covers one. /ao-review <PR> full still reviews such a PR.
+  waivers:
+    - id: light-docs
+      level: light
+      files: ["docs/**", "**/*.md", "**/*.png", "**/*.jpg", "**/*.webp", "**/messages/*.json", "**/locales/**"]
 
 # A PR that copies a kit another project reviewed in full (kit-copy-review spec 2.2, 2.3): ao-step compares it with the
 # reviewed head and writes both reports, with no agent. A project's own files, such as .ai-orchestrator/project.yaml

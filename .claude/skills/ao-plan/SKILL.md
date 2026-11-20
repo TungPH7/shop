@@ -26,6 +26,12 @@ $ARGUMENTS
 - On any other STOP, and no text after the key, tell the human the reason and the command or clicks it names, in
   Vietnamese, and stop. When the reason gives how many items have an effort label, say it: the human approves those
   efforts with the plan.
+- When the check prints "New libraries of the plan" at gate ②, run `node .ai-orchestrator/scripts/dep-check.mjs <npm|maven>
+  <name>@<version> --dry-run` for each, and tell the human, in Vietnamese, which pass and which are suspicious, with the
+  lines dep-check printed (C1 spec section 5). For a suspicious one, the human drops it from the plan with
+  `/ao-plan <EPIC> <change>`, or asks security: a comment `Cần security: <library>@<version> …` on the Epic, then
+  `/ao-request <EPIC>`. dep-check writes nothing here; the dev agent runs it again, and writes the approval, when it
+  installs the library.
 - On GO, run `node .ai-orchestrator/scripts/ao-step.mjs plan $0 --go` with the Bash tool in the background, with a
   timeout of 7200000 ms, and wait for its notification. Do not poll. After gate ② this run asks GitHub to run jira-sync
   with the human's gh login, which is expected.

@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import Ajv from 'ajv/dist/2020.js';
 import { parse } from 'yaml';
-import { NON_AGENT_ROLES } from '../rules/references.mjs';
+import { NON_AGENT_ROLES, WEB_ROLES } from '../rules/references.mjs';
 import { schemaErrors } from '../rules/schema.mjs';
 
 const schema = JSON.parse(readFileSync(new URL('../../agents/schema/roster.schema.json', import.meta.url), 'utf8'));
@@ -42,8 +42,8 @@ export function mergeLocal(roster, local, { skillExists }) {
 }
 
 // Returns every rule violation as { rule, path, message }; the contract must already be valid. gates, the project's
-// quality/gates.yaml, says which roles use a GitHub App (A5). skills holds the SKILL.md text of each vendored skill
-// in kit/.claude/skills/, by name, undefined when it is missing (A4). prompts lists the roles that have a file in
+// quality/gates.yaml, says which roles use a GitHub App (A5). skills holds the SKILL.md text of each vendored or adapted
+// skill in kit/.claude/skills/, by name, undefined when it is missing (A4). prompts lists the roles that have a file in
 // agents/prompts/ (A2). Without one of them, that part is skipped.
 export function validateRoster(roster, contract, { gates, skills, prompts } = {}) {
   if (!validateSchema(roster)) return schemaErrors(roster, validateSchema.errors, 'A1', 'agents/roster.yaml');
@@ -55,7 +55,21 @@ export function validateRoster(roster, contract, { gates, skills, prompts } = {}
     ...checkSkills(roster),
     ...(skills ? checkVendored(roster, skills) : []),
     ...checkWriting(roster, gates),
+    ...checkWeb(roster),
   ];
+}
+
+// Rule A1, beyond the schema: WebSearch and WebFetch only for the roles of WEB_ROLES, which have no Bash in return
+// (C1 spec 6.4).
+const WEB_TOOLS = ['WebFetch', 'WebSearch'];
+function checkWeb(roster) {
+  return Object.entries(roster.roles).flatMap(([id, { tools }]) => {
+    const web = tools.filter((tool) => WEB_TOOLS.includes(tool));
+    if (web.length === 0) return [];
+    const path = `roles.${id}.tools`;
+    if (!WEB_ROLES.includes(id)) return [{ rule: 'A1', path, message: `${web.join(' and ')} only for ${WEB_ROLES.join(', ')} (C1 spec 6.4)` }];
+    return tools.includes('Bash') ? [{ rule: 'A1', path, message: `a role with ${web.join(' and ')} has no Bash (C1 spec 6.4)` }] : [];
+  });
 }
 
 // Rule A1, beyond the schema: a role's MCP tool groups are groups the roster offers for that server.
@@ -103,31 +117,71 @@ function checkTransitions(roster, contract) {
 // The folders of kit/.claude/skills/ that are the kit's own commands, not vendored skills (dev-workflow spec 2.9).
 export const KIT_SKILL_PREFIX = 'ao-';
 
-// Rule A4: every preloaded skill is a vendored skill, and vendored names are unique. The vendored folders are checked
-// when they exist (T9).
+// Rule A4: every preloaded skill is a vendored or an adapted skill, and vendored names are unique. The skill folders are
+// checked when they exist (T9).
 function checkSkills(roster) {
   const names = roster.vendored_skills.map(({ name }) => name);
+  const adapted = roster.adapted_skills;
   const errors = [];
   const twice = [...new Set(names.filter((name, index) => names.indexOf(name) !== index))];
   if (twice.length > 0) errors.push({ rule: 'A4', path: 'vendored_skills', message: `${twice.join(', ')} vendored twice` });
   // kit/.claude/skills/ao-* are the kit's own commands (dev-workflow T13): a vendored skill there would overwrite one.
   const kitNamed = names.filter((name) => name.startsWith(KIT_SKILL_PREFIX));
   if (kitNamed.length > 0) errors.push({ rule: 'A4', path: 'vendored_skills', message: `${kitNamed.join(', ')} uses the prefix ${KIT_SKILL_PREFIX} of the kit's commands` });
+  // An adapted skill is the kit's own text (D3): skills:vendor would overwrite it if it were vendored too.
+  const both = adapted.filter((name) => names.includes(name));
+  if (both.length > 0) errors.push({ rule: 'A4', path: 'adapted_skills', message: `${both.join(', ')} is also a vendored skill, which skills:vendor would write over` });
+  const adaptedKitNamed = adapted.filter((name) => name.startsWith(KIT_SKILL_PREFIX));
+  if (adaptedKitNamed.length > 0) errors.push({ rule: 'A4', path: 'adapted_skills', message: `${adaptedKitNamed.join(', ')} uses the prefix ${KIT_SKILL_PREFIX} of the kit's commands` });
   for (const [id, { skills }] of Object.entries(roster.roles)) {
-    const missing = skills.filter((skill) => !names.includes(skill));
-    if (missing.length > 0) errors.push({ rule: 'A4', path: `roles.${id}.skills`, message: `${missing.join(', ')} not a vendored skill` });
+    const missing = skills.filter((skill) => !names.includes(skill) && !adapted.includes(skill));
+    if (missing.length > 0) errors.push({ rule: 'A4', path: `roles.${id}.skills`, message: `${missing.join(', ')} not a vendored or adapted skill` });
   }
   return errors;
 }
 
-// Rule A4, on disk: each vendored skill has its folder in kit/.claude/skills/, with a SKILL.md named like the skill.
+// The keys of the adapted_from block in the frontmatter of an adapted skill (D3, C1 spec 6.5).
+export const ADAPTED_FROM_KEYS = ['repo', 'path', 'commit', 'license', 'copyright'];
+const ADAPTED_FROM_VALID = {
+  repo: (value) => /^[\w.-]+\/[\w.-]+$/.test(value),
+  path: (value) => /^[\w.-]+(\/[\w.-]+)*$/.test(value),
+  commit: (value) => /^[0-9a-f]{40}$/.test(value),
+  license: (value) => value.length > 0,
+  copyright: (value) => value.length > 0,
+};
+
+// The parsed frontmatter of a SKILL.md, or undefined when it has none or it is not YAML.
+function skillFrontmatter(text) {
+  const block = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
+  if (block === undefined) return undefined;
+  try {
+    return parse(block) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Rule A4, on disk: each vendored or adapted skill has its folder in kit/.claude/skills/, with a SKILL.md named like the
+// skill; the SKILL.md of an adapted skill also names its original in adapted_from.
 function checkVendored(roster, skills) {
   const errors = [];
-  for (const { name } of roster.vendored_skills) {
+  const folder = (list, name) => {
     const text = skills.get(name);
     const declared = text?.match(/^---\r?\n(?:.*\r?\n)*?name:\s*(\S+)\s*$/m)?.[1];
-    if (text === undefined) errors.push({ rule: 'A4', path: `vendored_skills.${name}`, message: `has no SKILL.md in kit/.claude/skills/${name}` });
-    else if (declared !== name) errors.push({ rule: 'A4', path: `vendored_skills.${name}`, message: `SKILL.md is named ${declared ?? 'nothing'}, not ${name}` });
+    if (text === undefined) errors.push({ rule: 'A4', path: `${list}.${name}`, message: `has no SKILL.md in kit/.claude/skills/${name}` });
+    else if (declared !== name) errors.push({ rule: 'A4', path: `${list}.${name}`, message: `SKILL.md is named ${declared ?? 'nothing'}, not ${name}` });
+    else return text;
+    return undefined;
+  };
+  for (const { name } of roster.vendored_skills) folder('vendored_skills', name);
+  for (const name of roster.adapted_skills) {
+    const text = folder('adapted_skills', name);
+    if (text === undefined) continue;
+    const from = skillFrontmatter(text)?.adapted_from;
+    const wrong = ADAPTED_FROM_KEYS.filter((key) => typeof from?.[key] !== 'string' || !ADAPTED_FROM_VALID[key](from[key]));
+    if (wrong.length > 0) {
+      errors.push({ rule: 'A4', path: `adapted_skills.${name}`, message: `the adapted_from block of SKILL.md needs repo, path, a full commit, license and copyright; wrong or missing: ${wrong.join(', ')}` });
+    }
   }
   return errors;
 }

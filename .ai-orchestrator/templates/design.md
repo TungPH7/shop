@@ -16,13 +16,15 @@ Delete the guidance comments and the Example section when you are done.
 
 <!-- One row per screen. Codes S1, S2… never change after the SPEC is approved: a removed screen leaves its code unused.
 Kind is ASCII when the screen has no design yet, Figma when it has a Figma design, and Image when the human gave a
-screenshot or a mockup made with another tool. -->
+screenshot or a mockup made with another tool.
+App is the app of apps/ the screen belongs to, a key of apps: in .ai-orchestrator/project.yaml: seo writes the SEO of
+the screens of an app with seo: true, and no other (C1 spec 6.1). -->
 
-| Code | Name | Route | User story | Kind |
-|---|---|---|---|---|
-| S1 | <name> | <route> | <user story of the SPEC> | ASCII |
-| S2 | <name> | <route> | <user story of the SPEC> | Figma |
-| S3 | <name> | <route> | <user story of the SPEC> | Image |
+| Code | Name | Route | User story | Kind | App |
+|---|---|---|---|---|---|
+| S1 | <name> | <route> | <user story of the SPEC> | ASCII | <app> |
+| S2 | <name> | <route> | <user story of the SPEC> | Figma | <app> |
+| S3 | <name> | <route> | <user story of the SPEC> | Image | <app> |
 
 ## Flow
 
@@ -143,10 +145,10 @@ mobile layout, message texts, values the image does not show clearly. -->
 > **Figma version:** Checkout v3, duyệt ngày 2026-11-04
 
 ## Screens
-| Code | Name | Route | User story | Kind |
-|---|---|---|---|---|
-| S1 | Giỏ hàng | /cart | Là khách, tôi muốn nhập mã giảm giá để trả ít hơn | ASCII |
-| S2 | Thanh toán | /checkout | Là khách, tôi muốn thấy số tiền đã giảm trước khi trả | Figma |
+| Code | Name | Route | User story | Kind | App |
+|---|---|---|---|---|---|
+| S1 | Giỏ hàng | /cart | Là khách, tôi muốn nhập mã giảm giá để trả ít hơn | ASCII | user |
+| S2 | Thanh toán | /checkout | Là khách, tôi muốn thấy số tiền đã giảm trước khi trả | Figma | user |
 
 ## Flow
 ```mermaid

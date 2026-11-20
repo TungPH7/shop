@@ -143,8 +143,22 @@ export function checkToolCall(input, { mapping, space }) {
   if (args.cloudId && !isProjectSite(args.cloudId, mapping)) return deny(`${args.cloudId} is not the Jira site of the project`);
   // The label that gives devops the basic auth on an ops Task is yours to put (kit followups, batch 4 item 14).
   const envAuth = mapping.work_labels.env_auth;
-  if (input.agent_type && ['createJiraIssue', 'editJiraIssue'].includes(name) && namesLabel(args, envAuth)) {
+  // A transition takes fields and update too (review of shop PR #78).
+  if (input.agent_type && ['createJiraIssue', 'editJiraIssue', 'transitionJiraIssue'].includes(name) && namesLabel(args, envAuth)) {
     return deny(`only you put the label ${envAuth} on an item: it gives devops the basic auth of Development and Staging`);
+  }
+  // The level label sets how much review and QA an item gets, and only you lower it (review of shop PR #79): ba puts it
+  // when it creates the items of the plan you approved, and no agent adds or removes one afterwards. The whole list an
+  // agent writes in fields.labels to flag an item passes, since this hook cannot read the item: ao-step, merge-gate and
+  // audit leave out a level the agents' account changed (lib/workflow/levels.mjs).
+  const level = mapping.work_labels.level_prefix;
+  if (input.agent_type && level) {
+    if (name === 'createJiraIssue' && input.agent_type !== 'ba' && namesLabelOf(args, level)) {
+      return deny(`only ba, from the plan you approved, and you put a level label (${level}*) on an item: it sets how much review and QA the item gets`);
+    }
+    if (['editJiraIssue', 'transitionJiraIssue'].includes(name) && updatesLabelOf(args, level)) {
+      return deny(`only you change the level label (${level}*) of an item: it sets how much review and QA the item gets`);
+    }
   }
   if (name === 'createJiraIssue') return args.projectKey === space ? allow : deny(`${args.projectKey} is outside the project space ${space}`);
   const [key] = extractKeys(String(args.issueIdOrKey ?? ''));
@@ -156,7 +170,24 @@ export function checkToolCall(input, { mapping, space }) {
 // additional_fields.labels, update.labels with add or set. Words in a description or a comment are not a label.
 function namesLabel(value, label) {
   if (!value || typeof value !== 'object') return false;
-  return Object.entries(value).some(([key, inner]) => (key === 'labels' ? JSON.stringify(inner).includes(JSON.stringify(label)) : namesLabel(inner, label)));
+  // The label as a whole word of the field, in a list or in one string such as "ao-ops ao-env-auth".
+  const word = new RegExp(`(?:^|[^a-z0-9-])${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[^a-z0-9-])`, 'i');
+  return Object.entries(value).some(([key, inner]) => (key === 'labels' ? word.test(JSON.stringify(inner)) : namesLabel(inner, label)));
+}
+
+// A label that starts with `prefix`, as a whole word of a labels field at any depth.
+const prefixWord = (prefix) => new RegExp(`(?:^|[^a-z0-9-])${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}[a-z0-9]`, 'i');
+function namesLabelOf(value, prefix) {
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value).some(([key, inner]) => (key === 'labels' ? prefixWord(prefix).test(JSON.stringify(inner)) : namesLabelOf(inner, prefix)));
+}
+
+// Whether an update block adds, removes or sets a label that starts with `prefix`: update.labels with add, remove or set.
+function updatesLabelOf(value, prefix) {
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value).some(([key, inner]) => (key === 'update' && inner && typeof inner === 'object' && 'labels' in inner
+    ? prefixWord(prefix).test(JSON.stringify(inner.labels))
+    : updatesLabelOf(inner, prefix)));
 }
 
 // The one operation executeWrite may run: a Blocks link between two items of the project space, which `ba` makes from

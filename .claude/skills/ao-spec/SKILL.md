@@ -1,7 +1,7 @@
 ---
 name: ao-spec
-description: Do stage spec of an Epic in Specifying with ba, ux and sa, up to its docs PR at gate ①; with text after the key, change the SPEC as the human asks before the gate.
-argument-hint: <EPIC> [change]
+description: Do stage spec of an Epic in Specifying with ba, ux, seo and sa, up to its docs PR at gate ①; with text after the key, change the SPEC as the human asks before the gate; the word seo or no-seo [reason] turns seo on or off.
+argument-hint: <EPIC> [change | seo | no-seo [reason]]
 disable-model-invocation: true
 ---
 
@@ -19,6 +19,10 @@ $ARGUMENTS
   SPEC: write it, as it is, to `.ai/runs/<KEY>/note.md`, where KEY is the Epic, and add
   `--note .ai/runs/<KEY>/note.md` to the command below. Never put that text in a shell command. With such text, run the
   command below whatever the check said: ao-step decides with the change.
+- The word `seo` alone, or `no-seo` with an optional reason, after the key is not a change: it turns `seo` on or off for
+  this Epic (C1 spec 6.1). Pass it the same way, in `.ai/runs/<KEY>/note.md` with `--note`: ao-step tells the word from
+  a change. Tell the human, in Vietnamese, the line of the check that starts with `seo`, which says what the word did,
+  such as why `seo` does not run when no screen of `design.md` belongs to an app with `seo: true`.
 - On STOP with Questions, show the human each question in Vietnamese, one list, and ask for the answers. When they
   answer, copy their reply word for word to `.ai/runs/<KEY>/answers.md`, where KEY is the Epic: add nothing, and do
   not restate the questions or the proposals. Then run the command below with `--answers .ai/runs/<KEY>/answers.md`

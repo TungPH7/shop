@@ -24,6 +24,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 | `security` | Security Engineer |
 | `qa` | Tester/QA Engineer |
 | `devops` | DevOps Engineer |
+| `seo` | SEO Specialist |
 
 - Start every comment you write on an item with the value of your Agent field and a colon, such as `Business Analyst: …`. Scripts tell from it which role wrote it.
 - To ask another role for something, comment on the item with your Agent value, then `Cần <role>:` and what you need, such as `Frontend Developer: Cần ba: tạo Task cho bảng sản phẩm tràn ở 320 px`. The request is done once that role comments on the item. Do not do the other role's work yourself.
@@ -69,7 +70,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 | Báo cáo QA của item | `.ai-orchestrator/templates/qa-report.md` | `qa` | Jira: Comment trên item, kèm link artifact CI (video, trace) |
 | Báo cáo regression của bản release | `.ai-orchestrator/templates/regression-report.md` | `qa` | Git: `docs/releases/vX.Y.Z.md` (trên nhánh release) |
 | Release note | `.ai-orchestrator/templates/release-notes.md` | `devops`, `ba` | Git: `CHANGELOG.md`; Jira: Mô tả Fix Version; Google Drive: Bản gửi khách |
-| Ledger tiến độ | `.ai-orchestrator/templates/ledger.md` | the agent on the item | Local: `.ai/ledger/<KEY>.md` (không commit) |
+| Ledger tiến độ | `.ai-orchestrator/templates/ledger.md` | the agent on the item | Local: `.ai/ledger/<KEY>.md` (không commit; seo ghi .ai/ledger/<KEY>.seo.md) |
 
 - Templates are in `.ai-orchestrator/templates/`. Keep their headings in English and fill them in Vietnamese; code, commits and PRs are in English.
 - Delete a template's guidance comments and its Example section when you fill it.
@@ -82,7 +83,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 
 ## Ledger
 
-When you work on an item, write `.ai/ledger/<KEY>.md` from the ledger template after each step, so the next session picks up where you stopped. `.ai/` is never committed.
+When you work on an item, write `.ai/ledger/<KEY>.md` from the ledger template after each step, so the next session picks up where you stopped. `.ai/` is never committed. seo, which reads web pages, writes `.ai/ledger/<KEY>.seo.md` instead, and no other agent reads that one.
 
 ## Hooks
 
@@ -99,7 +100,7 @@ Run a script of an app with `node .ai-orchestrator/scripts/run.mjs <app> <script
 - `<script>` is `lint`, `typecheck`, `test`, `test:coverage`, `build`, or another script of its `package.json`.
 - Examples: `run.mjs api test -- -Dtest=ProductServiceTest` for a Java app, `run.mjs user test -- product-card` for a JS one.
 
-It runs Maven with the JDK of the app, or the package manager of the project. It runs in the foreground, prints the counts of tests and the first failure, and keeps the whole output in `.ai/tmp/run-<app>-<script>.log`. Read that file only for what the summary leaves out. Never write a wrapper of your own around Maven, pnpm or npm.
+It runs Maven with the JDK of the app, or the package manager of the project. It runs in the foreground, prints the counts of tests and the first failure, and keeps the whole output in `.ai/tmp/run-<app>-<script>.log`. Read that file only for what the summary leaves out. For a Java app, `-Dtest=` takes class names only, such as `ProductServiceTest`: Maven on Windows cannot take `#` or `,` there. Never write a wrapper of your own around Maven, pnpm or npm.
 
 ## Commands that take long
 
@@ -121,6 +122,10 @@ Your run ends with your answer, and nothing wakes it after that. A command still
   - `.ai-orchestrator/**`: no agent
   - `.mcp.json`: no agent
   - `.github/CODEOWNERS`: no agent
+  - `**/.claude/**`: no agent
+  - `**/.npmrc`: no agent
+  - `**/.yarnrc*`: no agent
+  - `**/bunfig.toml`: no agent
 
 - Never put a token or a key in a file, a commit, a log or a message.
 - Never copy or delete a folder tree that holds `node_modules`, or the whole `apps` folder. To try a check on a copy, take only the files it needs, as in `git archive HEAD <paths> | tar -x -C <temp folder>`.

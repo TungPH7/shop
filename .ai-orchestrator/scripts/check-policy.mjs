@@ -15,6 +15,7 @@ import { auditArgs, managerFromLockfile, PNPM_MISSING, runManager } from '../lib
 import { checkDesignFile } from '../lib/quality/design-files.mjs';
 import { auditProblems, checkConventions, designFilesToCheck, osvProblems, pomsToScan, scanTries } from '../lib/quality/policy.mjs';
 import { addedLines, deletedTests, findSuppressions, loweredThresholds } from '../lib/quality/suppressions.mjs';
+import { auditRule, projectDependencies, unapprovedDependencies } from '../lib/quality/dependencies.mjs';
 
 function run(command, args, options = {}) {
   return spawnSync(command, args, { encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, ...options });
@@ -41,6 +42,10 @@ try {
   const gates = readGates(gatesDir);
   const root = git('rev-parse', '--show-toplevel');
   const pr = pullRequest();
+  // The project's own file: its approved libraries and its audit exceptions (C1 spec section 5). The kit repo has none.
+  const projectFile = join(root, '.ai-orchestrator', 'project.yaml');
+  const project = existsSync(projectFile) ? parse(readFileSync(projectFile, 'utf8')) : null;
+  const rule = auditRule(gates, project);
   // The paths the PR changes, or null on a push.
   let changed = null;
 
@@ -68,6 +73,28 @@ try {
       .filter(Boolean)
       .map((line) => ({ status: line[0], path: unquotePath(line.split('\t').at(-1)) }));
     changed = changes.map(({ path }) => path);
+    // A direct dependency the PR adds must be approved first, at the plan or by dep-check (C1 spec section 5).
+    if (project) {
+      const manifests = changes.filter(({ path }) => /(^|\/)(package\.json|pom\.xml)$/.test(path) && !path.split('/').includes('node_modules'));
+      const at = (ref, path) => {
+        const shown = run('git', ['show', `${ref}:${path}`]);
+        return shown.status === 0 ? shown.stdout : '';
+      };
+      // The packages of the project itself, such as its apps in a workspace: not libraries to approve.
+      const own = git('ls-files', '*package.json')
+        .split('\n')
+        .filter(Boolean)
+        .map((path) => {
+          try {
+            return JSON.parse(readFileSync(join(root, path), 'utf8')).name;
+          } catch {
+            return null;
+          }
+        })
+        .filter(Boolean);
+      const added = manifests.map(({ status, path }) => ({ path, before: status === 'A' ? '' : at(base, path), after: status === 'D' ? '' : at('HEAD', path) }));
+      sections.push(['New dependencies', unapprovedDependencies(added, projectDependencies(project).approved, own)]);
+    } else notes.push('no .ai-orchestrator/project.yaml: new dependencies are not checked');
     const designs = designFilesToCheck(changes, (path) => existsSync(join(root, path)));
     sections.push(['Design', designs.flatMap((path) => checkDesignFile(join(root, path)).map(({ rule, line, message }) => `${path}:${line} ${rule} ${message}`))]);
   }
@@ -79,7 +106,7 @@ try {
     if (audit.error) throw new Error(`${manager} audit: ${manager === 'pnpm' ? PNPM_MISSING : audit.error.message}`);
     const report = JSON.parse(audit.stdout || '{}');
     if (report.error) throw new Error(`${manager} audit: ${report.error.summary ?? report.error.message ?? report.error.code}`);
-    sections.push(['Dependencies', auditProblems(report, gates.dependencies, new Date().toISOString().slice(0, 10))]);
+    sections.push(['Dependencies', auditProblems(report, rule, new Date().toISOString().slice(0, 10))]);
   } else notes.push('no package-lock.json or pnpm-lock.yaml: the audit is skipped');
 
   // A Java app: osv-scanner on its pom.xml, with the dependencies Maven resolves from Maven Central (project-scaffold
@@ -97,7 +124,7 @@ try {
       // It exits 0 when it finds nothing and 1 when it finds advisories; anything else is a failed scan, tried again.
       const scan = scanTries(() => run(scanner, ['scan', 'source', '--format', 'json', '--data-source', 'native', '--lockfile', pom], { cwd: root }), { pause });
       if (scan.status !== 0 && scan.status !== 1) throw new Error(`osv-scanner on ${pom}: ${`${scan.stderr ?? scan.error?.message ?? ''}`.trim().split('\n').at(-1)}`);
-      problems.push(...osvProblems(JSON.parse(scan.stdout || '{}'), gates.dependencies, new Date().toISOString().slice(0, 10)));
+      problems.push(...osvProblems(JSON.parse(scan.stdout || '{}'), rule, new Date().toISOString().slice(0, 10)));
     }
     sections.push(['Java dependencies', problems]);
   }

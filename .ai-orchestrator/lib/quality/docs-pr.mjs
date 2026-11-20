@@ -4,6 +4,7 @@
 // branch is on its head and started before you moved the Epic through that gate. Every push to the PR starts a run, so
 // a later push, even back to a commit you read, makes it a PR like any other. Pure, but readDocsFacts.
 import { jiraTime } from '../tracker/facts.mjs';
+import { isSteeringPath } from '../workflow/review-tree.mjs';
 import { touchedPaths } from './diff-paths.mjs';
 import { docsRule, epicOfDocsBranch } from './gates.mjs';
 import { matchesGlob } from './glob.mjs';
@@ -13,13 +14,15 @@ const CI_WORKFLOW = 'CI';
 
 // The Epic of a docs PR, or null when it is not one: its head is the docs branch of an Epic of the project `space`
 // (when given), the ao-dev App opened it, and every file it changes, by its old name too when renamed, matches the docs
-// paths of that Epic. Whether the key is really an Epic is for docsConditions, which reads Jira.
+// paths of that Epic. Whether the key is really an Epic is for docsConditions, which reads Jira. A file that steers an
+// agent session, such as a CLAUDE.md under the specs, makes it a PR like any other, reviewed in full: you read the SPEC
+// at the gate, not such a file, which the dev agents would load as instructions (review of shop PR #79).
 export function docsPullRequest({ pr, files, gates, apps, space }) {
   const epic = epicOfDocsBranch(gates, pr.head?.ref ?? '');
   if (!epic || (space && !epic.startsWith(`${space}-`)) || pr.user?.login !== `${apps.dev}[bot]`) return null;
   const names = touchedPaths(files);
   const { paths } = docsRule(gates, epic);
-  const inside = (name) => !name.split('/').includes('..') && paths.some((glob) => matchesGlob(glob, name));
+  const inside = (name) => !name.split('/').includes('..') && !isSteeringPath(name) && paths.some((glob) => matchesGlob(glob, name));
   return names.length > 0 && names.every(inside) ? epic : null;
 }
 

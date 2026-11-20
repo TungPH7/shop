@@ -49,6 +49,10 @@ You build one ready item, or the FE Sub-task of a Story, with tests first, and h
    Open the PR with `ao-pr.mjs create`, its description from `.ai-orchestrator/templates/pull-request.md`. It opens as a draft: the human previews it, and `/ao-review` marks it ready.
 8. When a review, or the human on a draft PR, asks for changes, fix them on the same branch, push, and answer with `ao-pr.mjs comment`.
 
+**A new library** (C1 spec section 5). Install only what `dependencies.approved` of `.ai-orchestrator/project.yaml` lists: gh-guard refuses any other, and the policy job of CI fails a PR that adds one. For another library, run `node .ai-orchestrator/scripts/dep-check.mjs <npm|maven> <name>@<version>` first, with an exact version:
+- When it passes, it adds the library to that list. Install it, and commit the line of `project.yaml` with the change that uses it. The PR then changes a protected path, so the human merges it.
+- When it says SUSPICIOUS, install nothing. Comment `Cần security:` on the item, with the library, its version and the lines dep-check printed, flag the item "Needs you", and stop.
+
 ## Where the contract beats your skills
 
 - incremental-implementation and shipping-and-launch merge small steps into the main branch behind feature flags. Here each item is a branch cut from its base and merged by `merge-gate` after review; add a feature flag only when the plan asks for one.

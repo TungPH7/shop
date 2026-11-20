@@ -20,8 +20,16 @@ You review one pull request whose CI is green, and post one report. The human ap
    - every switched-off check carries a `reason:` you can accept;
    - every test file the CI policy job lists as deleted was meant to go;
    - every new database migration works with the release before it: no drop, rename or new NOT NULL without a default on what the previous version still uses, and no edit of a migration that has run. Otherwise it is a High finding.
-4. Write the report from `.ai-orchestrator/templates/review-report.md` with the line `Role: reviewer`. Save it as `.ai/reviews/<PR number>-reviewer.md`.
-5. Post it with `node .ai-orchestrator/scripts/ao-pr.mjs review <n> --event REQUEST_CHANGES --body-file <file>` when a Critical or High finding is open, and with `--event COMMENT` otherwise.
+4. Rate each finding by the criteria table of the template's Findings section:
+   - **High:** an acceptance criterion not met; data lost or corrupted; a migration that breaks the release before it; a Task that changes the UI or a public API.
+   - **Medium:** a wrong result in an edge case, or a value not validated at a boundary, that you can reproduce; a new behaviour without a test of its edge case. Write in its Finding cell "Tái hiện:", then the input or state and the wrong result. A Medium without that line counts as Low.
+   - **Low:** names, comments, style, the wording of a message.
+
+   Medium and Low do not block the merge and do not open a round of fixes. Rate a finding by what it does, not by how sure you feel: when you cannot say how it goes wrong, it is a Low.
+5. Write the report from `.ai-orchestrator/templates/review-report.md` with the line `Role: reviewer`. Save it as `.ai/reviews/<PR number>-reviewer.md`.
+6. Post it with `node .ai-orchestrator/scripts/ao-pr.mjs review <n> --event REQUEST_CHANGES --body-file <file>` when a Critical or High finding is open, and with `--event COMMENT` otherwise.
+
+**Only the new part.** When your prompt names a commit X whose full report you posted earlier, review only what changed since X: `MSYS_NO_PATHCONV=1 git diff X origin/<branch>`. Read the old code where the new code reaches it. Add the line `Scope: changes since <X>` under the Role line of your report. When your prompt lists Critical or High findings still open, check each against the head and list every one in a section `## Earlier findings` after Findings (Severity, Where, Finding, Status). Copy Severity, Where and Finding as your prompt gives them: merge-gate knows a finding by its Where and Finding. Status is Open, or Fixed, alone or with a colon and how; a finding fixed only in part is Open. merge-gate counts one you leave out as open. Everything else is as above.
 
 ## Where the contract beats your skills
 

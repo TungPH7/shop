@@ -21,7 +21,7 @@
         "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/block-atlassian.mjs\"" }]
       },
       {
-        "matcher": "Bash|Read|Edit|Write|NotebookEdit|Grep|Glob",
+        "matcher": "Bash|Read|Edit|Write|NotebookEdit|Grep|Glob|WebFetch",
         "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/gh-guard.mjs\"" }]
       }
     ],
@@ -29,6 +29,10 @@
       {
         "matcher": "mcp__atlassian__transitionJiraIssue",
         "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/jira-rework.mjs\"" }]
+      },
+      {
+        "matcher": "WebSearch",
+        "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/web-search.mjs\"" }]
       }
     ]
   }
