@@ -37,6 +37,41 @@ export function labelLevel(labels = [], prefix) {
   return named.sort((a, b) => LEVELS.indexOf(b) - LEVELS.indexOf(a))[0] ?? null;
 }
 
+// The labels of an item without the changes of a level label the agents' account made after the item was created
+// (review of shop PR #79). Only the human lowers a level, but an agent with the Jira permission edit writes the whole
+// label list when it flags an item, so it could write a lower level there; block-atlassian cannot tell, since it does
+// not read the item. ba creates the items of the plan with their level, which the changelog does not show, so that
+// stays. histories: the values of GET /issue/{key}/changelog. agentAccount: the account id of the agents' identity;
+// without it, the labels as they are. Changes are undone newest first, so a level the human set after an agent's
+// change stays.
+export function trustedLabels(labels = [], histories = [], { agentAccount, prefix }) {
+  if (!agentAccount) return labels;
+  const levels = (text) => (text ?? '').split(/\s+/).filter((label) => label.startsWith(prefix));
+  const kept = new Set(labels);
+  const newestFirst = [...histories].sort((a, b) => Date.parse(b.created ?? 0) - Date.parse(a.created ?? 0));
+  for (const { author, items = [] } of newestFirst) {
+    if (author?.accountId !== agentAccount) continue;
+    for (const { fromString, toString } of items.filter((item) => item.field === 'labels')) {
+      const before = levels(fromString);
+      const after = levels(toString);
+      for (const label of after.filter((l) => !before.includes(l))) kept.delete(label);
+      for (const label of before.filter((l) => !after.includes(l))) kept.add(label);
+    }
+  }
+  return labels.filter((label) => kept.has(label)).concat([...kept].filter((label) => !labels.includes(label)));
+}
+
+// The account id of the agents' identity of tracker/jira.yaml, or undefined: its unsigned comments are an agent's, not
+// the human's (review of PR #21), and its changes of a level label do not count.
+export const agentsAccount = (mapping) => mapping.identities?.find(({ id }) => id === 'agents')?.account_id;
+
 // A reader of the level an item's label names, with a Jira client: for merge-gate and audit, which work a review
-// waiver out again (C1 spec 3.4). Resolves to null when the item has no level label.
-export const itemLevel = (jira, mapping) => async (key) => labelLevel((await jira.get(`/rest/api/3/issue/${encodeURIComponent(key)}`, { fields: 'labels' })).fields?.labels ?? [], mapping.work_labels.level_prefix);
+// waiver out again (C1 spec 3.4). A level the agents' account changed does not count (trustedLabels). Resolves to null
+// when the item has no level label.
+export const itemLevel = (jira, mapping) => async (key) => {
+  const path = `/rest/api/3/issue/${encodeURIComponent(key)}`;
+  const labels = (await jira.get(path, { fields: 'labels' })).fields?.labels ?? [];
+  const histories = await jira.getAll(`${path}/changelog`);
+  const prefix = mapping.work_labels.level_prefix;
+  return labelLevel(trustedLabels(labels, histories, { agentAccount: agentsAccount(mapping), prefix }), prefix);
+};

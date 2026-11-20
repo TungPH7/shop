@@ -113,7 +113,7 @@ function carryOn(command, facts, options, asker) {
     // session, and is made afresh (reviewer of ao-pilot PR #23).
     if (!last.session) return null;
     // The head and the note stay on the record of the run: /ao-fix reads them to know a note is done.
-    const goOn = { role: last.role, key, effort: last.effort, purpose: last.purpose, resume: last.session, prompt: resumePrompt(key), ...(last.head && { head: last.head }), ...(last.note && { note: last.note }), ...(last.rebuild && { rebuild: last.rebuild }), ...(last.request && { request: last.request }) };
+    const goOn = { role: last.role, key, effort: last.effort, purpose: last.purpose, resume: last.session, prompt: resumePrompt(key, last.role), ...(last.head && { head: last.head }), ...(last.note && { note: last.note }), ...(last.rebuild && { rebuild: last.rebuild }), ...(last.request && { request: last.request }) };
     if (REVIEWS.includes(last.purpose)) {
       // A review goes on only on the head it was reviewing, with its worktree back, while its report is not on that
       // head: on a new head, ao-pr would post what it wrote about the old one as the report of the new head.
@@ -1030,7 +1030,7 @@ function decideQa(facts, options) {
   // the evidence of devops, with the basic auth and no worktree. No sha: nothing to watch for a new deploy.
   if (item.ops) {
     const opsRun = run('qa', 'qa-ops', { key: item.key }, options, { qa: { environment: null, sha: null, auth: true } });
-    if (stopped) return go([{ ...opsRun, effort: stopped.effort ?? opsRun.effort, resume: stopped.session, prompt: resumePrompt(item.key) }]);
+    if (stopped) return go([{ ...opsRun, effort: stopped.effort ?? opsRun.effort, resume: stopped.session, prompt: resumePrompt(item.key, opsRun.role) }]);
     return go([opsRun]);
   }
   if (!pr?.merged || !pr.mergeCommit) return stop(`PR #${pr?.number ?? '?'} of ${item.key} is not merged`, `/ao-status ${item.key}`);
@@ -1063,7 +1063,7 @@ function decideQa(facts, options) {
   });
   const lines = [`${env} runs ${eight(qa.running.sha)}, which holds the merge of PR #${pr.number}`];
   // The run goes on in its session, in a new worktree with the same URL and basic auth: carryOn would drop them.
-  if (stopped) return go([{ ...qaRun, effort: stopped.effort ?? qaRun.effort, resume: stopped.session, prompt: resumePrompt(item.key) }], lines);
+  if (stopped) return go([{ ...qaRun, effort: stopped.effort ?? qaRun.effort, resume: stopped.session, prompt: resumePrompt(item.key, qaRun.role) }], lines);
   const resumed = carryOn('qa', facts, options);
   if (resumed) return resumed;
   // A new expectation: ba adds the criterion on Jira first, and qa then fails it (human-loop spec 5.1). The SPEC follows

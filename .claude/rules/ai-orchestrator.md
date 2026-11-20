@@ -70,7 +70,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 | Báo cáo QA của item | `.ai-orchestrator/templates/qa-report.md` | `qa` | Jira: Comment trên item, kèm link artifact CI (video, trace) |
 | Báo cáo regression của bản release | `.ai-orchestrator/templates/regression-report.md` | `qa` | Git: `docs/releases/vX.Y.Z.md` (trên nhánh release) |
 | Release note | `.ai-orchestrator/templates/release-notes.md` | `devops`, `ba` | Git: `CHANGELOG.md`; Jira: Mô tả Fix Version; Google Drive: Bản gửi khách |
-| Ledger tiến độ | `.ai-orchestrator/templates/ledger.md` | the agent on the item | Local: `.ai/ledger/<KEY>.md` (không commit) |
+| Ledger tiến độ | `.ai-orchestrator/templates/ledger.md` | the agent on the item | Local: `.ai/ledger/<KEY>.md` (không commit; seo ghi .ai/ledger/<KEY>.seo.md) |
 
 - Templates are in `.ai-orchestrator/templates/`. Keep their headings in English and fill them in Vietnamese; code, commits and PRs are in English.
 - Delete a template's guidance comments and its Example section when you fill it.
@@ -83,7 +83,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 
 ## Ledger
 
-When you work on an item, write `.ai/ledger/<KEY>.md` from the ledger template after each step, so the next session picks up where you stopped. `.ai/` is never committed.
+When you work on an item, write `.ai/ledger/<KEY>.md` from the ledger template after each step, so the next session picks up where you stopped. `.ai/` is never committed. seo, which reads web pages, writes `.ai/ledger/<KEY>.seo.md` instead, and no other agent reads that one.
 
 ## Hooks
 
@@ -122,6 +122,10 @@ Your run ends with your answer, and nothing wakes it after that. A command still
   - `.ai-orchestrator/**`: no agent
   - `.mcp.json`: no agent
   - `.github/CODEOWNERS`: no agent
+  - `**/.claude/**`: no agent
+  - `**/.npmrc`: no agent
+  - `**/.yarnrc*`: no agent
+  - `**/bunfig.toml`: no agent
 
 - Never put a token or a key in a file, a commit, a log or a message.
 - Never copy or delete a folder tree that holds `node_modules`, or the whole `apps` folder. To try a check on a copy, take only the files it needs, as in `git archive HEAD <paths> | tar -x -C <temp folder>`.

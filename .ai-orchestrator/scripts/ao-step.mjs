@@ -19,7 +19,9 @@ import { mergeLocal, readRoster } from '../lib/agents/roster.mjs';
 import { readContract } from '../lib/contract.mjs';
 import { projectSettings, setting } from '../lib/project-settings.mjs';
 import { touchedPaths, unquotePath } from '../lib/quality/diff-paths.mjs';
-import { readGates } from '../lib/quality/gates.mjs';
+import { readProjectYaml } from '../lib/quality/approved-file.mjs';
+import { epicOfDocsBranch, readGates } from '../lib/quality/gates.mjs';
+import { withProjectPaths } from '../lib/quality/review-tiers.mjs';
 import { matchesGlob } from '../lib/quality/glob.mjs';
 import { DOCKER_INFO, dockerAnswered } from '../lib/quality/maven.mjs';
 import { markReadyForReview, READY_PERMISSIONS } from '../lib/quality/pr-ready.mjs';
@@ -204,7 +206,8 @@ async function main() {
 
   const contract = readContract(join(kitDir, 'contract'));
   const mapping = readMapping(join(kitDir, 'tracker'));
-  const gates = readGates(join(kitDir, 'quality'));
+  // The project's own paths of a review tier, from its project.yaml (review of shop PR #79).
+  const gates = withProjectPaths(readGates(join(kitDir, 'quality')), readProjectYaml(projectDir));
   const onBranch = () => git('branch', '--show-current').stdout?.trim() ?? '';
   const wrongCheckout = checkoutStop(command, onBranch(), gates.protected_branches);
   if (wrongCheckout) {
@@ -402,7 +405,7 @@ async function main() {
       // A defect you reported is checked like a QA run: its evidence goes to the item too (human-loop spec 5.1). seo has
       // no git: its change is committed here (C1 spec 6.6).
       after: (run, { tree }) => {
-        if (run.role === 'seo') return afterSeo(run);
+        if (run.role === 'seo') return afterSeo(run, gates);
         return ['qa', 'qa-defect', 'qa-ops'].includes(run.purpose) ? afterQa(run, tree, { deploys, mapping }) : [];
       },
       act: (step) => {
@@ -911,9 +914,9 @@ async function findingsTaskAction({ key, epic, task, pr, findings }, { mapping, 
 // C1 spec 6.6: seo has no git, so ao-step commits what it changed under docs/specs/, in the project folder where the
 // runs of an Epic and of /ao-request work, with your git; and pushes it when its branch is on GitHub already, as for an
 // open docs PR. A new docs branch goes up with the docs PR ba opens. Resolves the notes of the run, or { notes, stop }.
-function afterSeo(run) {
+function afterSeo(run, gates) {
   const branch = git('branch', '--show-current').stdout.trim();
-  const change = seoChange({ status: git('status', '--porcelain=v1', '-z', '--untracked-files=all').stdout, branch, key: run.key });
+  const change = seoChange({ status: git('status', '--porcelain=v1', '-z', '--untracked-files=all').stdout, branch, key: run.key, docsEpic: epicOfDocsBranch(gates, branch) });
   if (!change) return [];
   if (change.stop) return { notes: [], stop: change.stop };
   const last = (result) => `${result.stderr || result.stdout}`.trim().split('\n').at(-1);

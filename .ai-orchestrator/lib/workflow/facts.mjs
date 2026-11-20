@@ -15,7 +15,7 @@ import { adfText, changesRequestedOn, githubGuards, jiraGuards, qaEnvironment, r
 import { latestFlagComment } from '../tracker/flags.mjs';
 import { countRework } from '../tracker/rework.mjs';
 import { recordedLine } from './findings.mjs';
-import { labelLevel } from './levels.mjs';
+import { agentsAccount, labelLevel, trustedLabels } from './levels.mjs';
 import { openRequests } from './requests.mjs';
 import { ownChanges } from './security-scope.mjs';
 import { cutPoint } from '../release/cut.mjs';
@@ -84,6 +84,9 @@ export async function readWorkItem(jira, key, ctx) {
     summary: fields.summary,
     labels,
     ...workLabels(labels, mapping, roster),
+    // A level the agents' account changed after it created the item does not count: only you lower one (review of shop
+    // PR #79).
+    level: labelLevel(trustedLabels(labels, histories, { agentAccount: agentsAccount(mapping), prefix: mapping.work_labels.level_prefix }), mapping.work_labels.level_prefix),
     // An ops Task, and the basic auth you gave devops for it (kit followups, batch 4 item 14).
     ops: labels.includes(mapping.work_labels.ops),
     envAuth: labels.includes(mapping.work_labels.env_auth),
@@ -384,9 +387,6 @@ export async function readFindingsTask(jira, { epic, space, label, pr }) {
   const comments = await jira.getAll(`/rest/api/3/issue/${encodeURIComponent(task.key)}/comment`, {}, 'comments');
   return { key: task.key, recorded: comments.some(({ body }) => adfText(body).includes(recordedLine(pr))) };
 }
-
-// The account id of the agents' identity, whose unsigned comments are an agent's, not the human's (review of PR #21).
-const agentsAccount = (mapping) => mapping.identities.find(({ id }) => id === 'agents')?.account_id;
 
 const epicType = (contract) => contract.work_types.find(({ id }) => id === 'epic').jira_issue_type;
 

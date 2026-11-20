@@ -339,7 +339,7 @@ Giới hạn mặc định, chỉnh được ở retro:
 | Báo cáo QA của item | `templates/qa-report.md` | `qa` | Jira: Comment trên item, kèm link artifact CI (video, trace) |
 | Báo cáo regression của bản release | `templates/regression-report.md` | `qa` | Git: `docs/releases/vX.Y.Z.md`, trên nhánh release |
 | Release note | `templates/release-notes.md` | `devops`, `ba` | Git: `CHANGELOG.md`; Jira: Mô tả Fix Version; Google Drive: Bản gửi khách |
-| Ledger tiến độ | `templates/ledger.md` | Agent đang làm item | Local: `.ai/ledger/<KEY>.md`, không commit |
+| Ledger tiến độ | `templates/ledger.md` | Agent đang làm item | Local: `.ai/ledger/<KEY>.md`, không commit; seo ghi .ai/ledger/<KEY>.seo.md |
 
 - Mọi đường dẫn tính từ gốc repo của dự án.
 - Agent-skills mặc định để SPEC.md ở gốc repo và plan ở tasks/plan.md. Dự án có nhiều Epic nên mỗi Epic có một thư mục riêng, và danh sách task nằm trên Jira thay cho tasks/todo.md; các lệnh của dev-workflow sẽ truyền đường dẫn này cho skill.

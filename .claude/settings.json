@@ -40,7 +40,7 @@
         ]
       },
       {
-        "matcher": "Bash|Read|Edit|Write|NotebookEdit|Grep|Glob",
+        "matcher": "Bash|Read|Edit|Write|NotebookEdit|Grep|Glob|WebFetch",
         "hooks": [
           {
             "type": "command",
@@ -56,6 +56,15 @@
           {
             "type": "command",
             "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/jira-rework.mjs\""
+          }
+        ]
+      },
+      {
+        "matcher": "WebSearch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/web-search.mjs\""
           }
         ]
       }

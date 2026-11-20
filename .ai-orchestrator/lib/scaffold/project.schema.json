@@ -101,6 +101,15 @@
         }
       }
     },
+    "review": {
+      "description": "Paths the project adds to a review tier of quality/gates.yaml (review of shop PR #79): its own files that decide who calls, or what the browser runs. They only add to the kit's lists.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "critical_paths": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "sensitive_paths": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
     "roles": {
       "type": "object",
       "additionalProperties": false,

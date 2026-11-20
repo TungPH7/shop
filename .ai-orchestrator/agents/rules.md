@@ -49,7 +49,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 
 ## Ledger
 
-When you work on an item, write `.ai/ledger/<KEY>.md` from the ledger template after each step, so the next session picks up where you stopped. `.ai/` is never committed.
+When you work on an item, write `.ai/ledger/<KEY>.md` from the ledger template after each step, so the next session picks up where you stopped. `.ai/` is never committed. seo, which reads web pages, writes `.ai/ledger/<KEY>.seo.md` instead, and no other agent reads that one.
 
 ## Hooks
 

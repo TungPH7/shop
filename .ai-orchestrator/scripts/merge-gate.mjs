@@ -20,7 +20,9 @@ import { readContract } from '../lib/contract.mjs';
 import { auditBroughtBack } from '../lib/quality/audit.mjs';
 import { projectSettings, setting } from '../lib/project-settings.mjs';
 import { gatePassage } from '../lib/quality/docs-pr.mjs';
+import { readProjectYaml } from '../lib/quality/approved-file.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
+import { withProjectPaths } from '../lib/quality/review-tiers.mjs';
 import { appCredentials, installationToken } from '../lib/quality/github-app.mjs';
 import { runMergeGate } from '../lib/quality/merge-gate.mjs';
 import { createGitHubClient, originRepo, readGitHubToken } from '../lib/tracker/github-client.mjs';
@@ -52,7 +54,8 @@ try {
     const { token: appToken } = await installationToken({ appId, privateKey, repo });
     return createGitHubClient({ repo, token: appToken, write: true });
   };
-  const gates = readGates(join(kit, 'quality'));
+  // The project's own paths of a review tier, from its project.yaml (review of shop PR #79).
+  const gates = withProjectPaths(readGates(join(kit, 'quality')), readProjectYaml(projectDir));
   const mapping = readMapping(join(kit, 'tracker'));
   const jiraToken = process.env.JIRA_CI_TOKEN;
   // One Jira client for both: it writes only the flag of a PR you merge yourself, and not in a dry run.

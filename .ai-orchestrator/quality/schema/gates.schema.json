@@ -31,6 +31,20 @@
       "properties": {
         "audit_level": { "enum": ["low", "moderate", "high", "critical"] },
         "licenses": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 } },
+        "tools": {
+          "description": "What the kit runs with npx, which gh-guard lets an agent download; range: the versions allowed, all when left out.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ecosystem", "name"],
+            "additionalProperties": false,
+            "properties": {
+              "ecosystem": { "enum": ["npm"] },
+              "name": { "type": "string", "minLength": 1 },
+              "range": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
         "exceptions": {
           "type": "array",
           "items": {

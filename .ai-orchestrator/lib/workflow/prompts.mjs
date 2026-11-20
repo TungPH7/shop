@@ -147,8 +147,12 @@ export function promptFor(purpose, context) {
   return make(context);
 }
 
+// The ledger of `role` on item `key`. A role that reads web pages keeps its own, the one file of .ai/ it may write
+// (agents/roster.yaml): the ledger of the item is what the agents with Bash read and go on from (review of shop PR #79).
+export const ledgerPath = (key, role) => (WEB_ROLES.includes(role) ? `.ai/ledger/${key}.${role}.md` : `.ai/ledger/${key}.md`);
+
 // A run that stopped before its end (the process was stopped, or the usage limit), resumed in its session.
-export const resumePrompt = (key) => `Your run stopped before it ended. Read .ai/ledger/${key}.md and go on from where you stopped.`;
+export const resumePrompt = (key, role) => `Your run stopped before it ended. Read ${ledgerPath(key, role)} and go on from where you stopped.`;
 
 // Added to the prompt of that run when ao-step had put aside the work it left uncommitted (live-run-fixes spec 2.1).
 export const wipNote = 'When your run stopped, ao-step put aside what you had not committed yet, and has put it back in the checkout: run git status and read the diff before you go on.';

@@ -176,12 +176,14 @@ roles:
     max_turns: 60
     # WebSearch and WebFetch: seo is the one role with them (C1 spec 6.4), to see which pages rank on a keyword. In
     # return it has no Bash, so it runs nothing and no git, and gh-guard keeps its reads in the project, away from the
-    # .env files. ao-step commits its change in docs/specs/ after its run.
+    # .env files, and its WebFetch to the pages a search gave it. ao-step commits its change of a SPEC after its run.
     tools: [Edit, Write, WebFetch, WebSearch]
     # comment: seo answers a "Cần seo:" request with a comment, which closes it (C1 spec 6.6).
     jira: [read, comment]
     git: read
-    writes: ["docs/specs/**", ".ai/**"]
+    # The SPEC and a ledger of its own, nothing an agent with Bash loads as instructions or goes on from: not a CLAUDE.md
+    # next to the SPEC, not the ledger of the item (review of shop PR #79).
+    writes: ["docs/specs/*/spec.md", ".ai/ledger/*.seo.md"]
     # nextjs-seo: what the dev agents can build with the Metadata API; seo-content-brief: the SEO of each screen;
     # blog-schema and blog-taxonomy: the pages of a blog (C1 spec 6.5).
     skills: [nextjs-seo, seo-content-brief, blog-schema, blog-taxonomy]

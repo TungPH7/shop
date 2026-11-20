@@ -26,6 +26,12 @@ coverage:
 dependencies:
   audit_level: high
   exceptions: []
+  # What the kit's own prompts and skills run with npx, which gh-guard lets an agent download as an approved library;
+  # anything else npx or a dlx would download must be approved first (review of shop PR #79). range: the versions
+  # allowed, all when left out.
+  tools:
+    - { ecosystem: npm, name: "@playwright/cli", range: "0.1.22" }
+    - { ecosystem: npm, name: playwright }
   licenses: [MIT, MIT-0, ISC, Apache-2.0, BSD-2-Clause, BSD-3-Clause, 0BSD, Unlicense, CC0-1.0, BlueOak-1.0.0, MPL-2.0, EPL-2.0, Python-2.0]
 
 # Lines that switch a check off. A line that also carries the reason marker passes, so the reviewer can read why;
@@ -87,6 +93,14 @@ protected_paths:
   - { path: ".ai-orchestrator/**" }
   - { path: ".mcp.json" }
   - { path: ".github/CODEOWNERS" }
+  # A .claude folder in an app, which Claude Code loads as the root's once an agent reads a file there (review of shop
+  # PR #79). A CLAUDE.md or an AGENTS.md there stays editable, in a PR reviewed as critical (review-tiers.mjs).
+  - { path: "**/.claude/**" }
+  # Where a package manager reads its registry, at any depth: written by an agent, it would install an approved name
+  # from elsewhere, as --registry would (review of shop PR #79).
+  - { path: "**/.npmrc" }
+  - { path: "**/.yarnrc*" }
+  - { path: "**/bunfig.toml" }
 
 # Review by risk (C1 spec section 3): the tier of a PR is the highest its files touch, a renamed file by both names
 # (lib/quality/review-tiers.mjs). critical: the protected paths above and critical_paths: reviewer at xhigh, security
@@ -120,6 +134,8 @@ review:
     - "**/.mvn/**"
     - "**/mvnw*"
     - "**/deploy.yaml"
+    # What steers an agent session at any depth, such as CLAUDE.md, AGENTS.md or a .claude/ in an app, is critical in
+    # code, whatever this list says (lib/quality/review-tiers.mjs, review of shop PR #79).
   sensitive_paths:
     # dependencies, and how the app is configured and started
     - "**/package.json"
@@ -159,6 +175,22 @@ review:
     - "**/service/**"
     - "**/domain/**"
     - "**/dto/**"
+    # What keeps the browser and the API safe outside those (review of shop PR #79, where security found them normal):
+    # security headers and CSP, the env an app puts in its bundle, the proxy in front of it, the lint rules that ban
+    # unsafe code, the client that sends the API its token, the pages that log in, and how errors and authors are written
+    - "**/*security*.*"
+    - "**/env.*"
+    - "**/env/**"
+    - "**/Caddyfile*"
+    - "**/eslint.config.*"
+    - "**/.eslintrc*"
+    - "**/*api-client*.*"
+    - "**/*http-client*.*"
+    - "**/{login,logout,signin,signup,register}/**"
+    - "**/*ExceptionHandler*.*"
+    - "**/*Auditor*.*"
+  # A project adds paths of its own to critical_paths and sensitive_paths with review in its project.yaml, a protected
+  # file the kit copy leaves alone; it cannot take one away (lib/quality/review-tiers.mjs, withProjectPaths).
   docs_paths:
     - "docs/**"
     - "**/*.md"
