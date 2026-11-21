@@ -37,6 +37,11 @@ const ASKING = ['ba', 'ux', 'sa'];
 // on a library dep-check found suspicious (C1 spec section 5), and seo on the SEO part of an item (C1 spec 6.6). The dev
 // roles and qa have their own commands.
 export const ADVISERS = [...ASKING, 'security', 'seo'];
+// A request /ao-request runs: to an adviser, and not written by a role that reads web pages, whose request would run a
+// role with Bash on what a page wrote (review of shop PR #80). A hook refuses such a comment; one that reaches Jira
+// anyway waits for you.
+export const runnableRequest = ({ to, from }) => ADVISERS.includes(to) && !WEB_ROLES.includes(from);
+const webRequest = ({ to, from }) => ADVISERS.includes(to) && WEB_ROLES.includes(from);
 // The roles whose open questions you answer: seo's too, so its questions never go to ba or sa, which have Bash.
 const ANSWERING = [...ASKING, 'seo'];
 // A run that stopped before its end goes on in its session; one that failed counts towards the retry limit.
@@ -60,16 +65,26 @@ const SEO_KINDS = [
   { purposes: ['review', 'review-delta'], roles: ['reviewer'], kind: 'reviewer' },
   { purposes: ['qa', 'qa-defect'], roles: ['qa'], kind: 'qa' },
 ];
-function withSeo(decision, facts, { contract }) {
+function withSeo(decision, facts, options) {
+  const { contract } = options;
   const { item } = facts;
   if (!decision?.go || !item?.seo || !Array.isArray(decision.runs)) return decision;
   const epicType = contract.work_types.find(({ id }) => id === 'epic').jira_issue_type;
   const epic = facts.epic?.key ?? (item.parent?.type === epicType ? item.parent.key : null);
+  const kindOf = (run) => SEO_KINDS.find(({ purposes, roles }) => purposes.includes(run.purpose) && roles.includes(run.role))?.kind;
+  // Outside an Epic, every dev run builds the comment of seo you approved with seo-ok, not only the first build: one seo
+  // wrote or changed since waits for you again (review of shop PR #80).
+  const outside = !epic && seoOutsideEpic(item, options);
+  if (outside && decision.runs.some((run) => kindOf(run) === 'dev')) {
+    const held = seoApprovalStop(facts, options);
+    if (held) return { ...held, lines: decision.lines ?? [] };
+  }
+  const comment = outside ? item.seoMark?.id : undefined;
   const runs = decision.runs.map((run) => {
-    const kind = SEO_KINDS.find(({ purposes, roles }) => purposes.includes(run.purpose) && roles.includes(run.role))?.kind;
+    const kind = kindOf(run);
     return kind && run.prompt ? { ...run, prompt: `${run.prompt}
 
-${seoNote(kind, { key: item.key, epic })}` } : run;
+${seoNote(kind, { key: item.key, epic, comment })}` } : run;
   });
   return { ...decision, runs };
 }
@@ -174,7 +189,7 @@ function notAnEpic(item, command) {
 // from develop. `request` is the time of the comment: two requests to one role are two runs, not the same one again.
 function requestRun(facts, options) {
   const { item, docs } = facts;
-  const [asked] = (item.requests ?? []).filter(({ to }) => ADVISERS.includes(to));
+  const [asked] = (item.requests ?? []).filter(runnableRequest);
   if (!asked) return null;
   const shaping = item.workType === 'epic' && ['specifying', 'planning'].includes(item.state) && docs;
   const pr = shaping && docs.pr?.state === 'open' ? docs.pr.number : undefined;
@@ -191,7 +206,7 @@ function requestRun(facts, options) {
 // of a rebuild carry.
 function followUpRuns(facts, since, options, { branch, pr, extra }) {
   const { item, epic } = facts;
-  const open = (holder) => (holder?.requests ?? []).filter(({ to, at }) => ADVISERS.includes(to) && at > since).map((asked) => ({ ...asked, on: holder.key }));
+  const open = (holder) => (holder?.requests ?? []).filter((asked) => runnableRequest(asked) && asked.at > since).map((asked) => ({ ...asked, on: holder.key }));
   const asked = [...open(item), ...(epic && epic.key !== item.key ? open(epic) : [])].sort((a, b) => a.at - b.at);
   return asked.map(({ to, from, at, on }) => run(to, 'request', { key: on, role: to, from, at, branch, pr, item: item.key }, options, { ...extra, request: at, key: item.key }));
 }
@@ -206,6 +221,8 @@ function decideRequest(facts, options) {
   if (carried) return { ...carried, lines };
   const next = requestRun(facts, options);
   if (next) return go([next], lines);
+  const web = (item.requests ?? []).find(webRequest);
+  if (web) return { ...stop('you', `${item.key} has a request of ${web.from} to ${web.to}: ${web.from} reads web pages, so its request runs no role`, `Read it on Jira; when it is right, ask ${web.to} yourself on ${item.key} with your own comment "Cần ${web.to}: …"`), lines };
   const others = (item.requests ?? []).filter(({ to }) => !ADVISERS.includes(to));
   const rest = others.length === 0 ? '' : `; ${others.length} open request${others.length > 1 ? 's go to other roles' : ' goes to another role'} (${[...new Set(others.map(({ to }) => to))].join(', ')})`;
   return { ...stop('fix', `${item.key} has no open request to ba, ux, sa, security or seo${rest}`, `/ao-status ${item.key}`), lines };
@@ -283,7 +300,7 @@ function decideSpec(facts, options) {
     if (runs.length > 0) return go(runs, lines);
     // A check that needs no model names what has no place in the section ## SEO, before you read it.
     const issues = seoTextProblems(seoSection(docs.spec), { hosts: options.seoHosts ?? [] });
-    const warning = issues.length > 0 ? `. seo wrote the section ## SEO from web pages, and it holds ${issues.join('; ')}: read it with care before you approve` : '';
+    const warning = issues.length > 0 ? `. seo wrote the section ## SEO from web pages, and it holds ${issues.join('; ')} (lines counted from its heading): read it with care before you approve` : '';
     return { ...stop('you', `the docs PR #${pr} of ${key} is open: stage spec is done and waits for you at gate ① spec-approval${warning}`, `Read the diff of PR #${pr}, click Approve spec on ${key}, then /ao-plan ${key}`), lines };
   }
   // The rest of the stage, in the order of contract/stages.yaml (C1 spec section 6). ba says in the docs PR that seo
@@ -407,6 +424,10 @@ function afterPlanGate(facts) {
 
 // The command that runs an open request, after its text: /ao-request for ba, ux and sa (human-loop spec 3.3).
 const runsRequest = ({ to }, key) => (ADVISERS.includes(to) ? ` → /ao-request ${key}` : '');
+// One open request for /ao-status: none of the words of a request seo wrote, which reach the main session before you
+// read them (review of shop PR #80).
+const requestLine = (request, key) =>
+  webRequest(request) ? `${request.to} from ${request.from}: not run, since ${request.from} reads web pages; read it on Jira` : `${request.to}${request.from ? ` from ${request.from}` : ''}: ${request.text}${runsRequest(request, key)}`;
 
 // A preview that runs, for /ao-status (human-loop spec 4.3): the folder is on a PR branch until it stops.
 const previewLine = ({ key, branch, apps = [] }) => `the preview of ${key} runs on ${branch}${apps.length > 0 ? `: ${apps.map(({ name, url }) => `${name} ${url}`).join(', ')}` : ', its apps stopped'} → /ao-preview ${key} --stop`;
@@ -420,7 +441,7 @@ function decideStatus(facts, options) {
   const cost = (facts.run?.runs ?? []).reduce((total, r) => total + (r.costUsd ?? 0), 0);
   if (facts.run?.runs?.length) lines.push(`Runs: ${facts.run.runs.length}, ${usd(cost)} in all; the last: ${describeRun(facts.run.runs.at(-1))}`);
   if (facts.previewRunning) lines.unshift(previewLine(facts.previewRunning));
-  for (const request of facts.item.requests) lines.push(`Open request to ${request.to}${request.from ? ` from ${request.from}` : ''}: ${request.text}${runsRequest(request, facts.item.key)}`);
+  for (const request of facts.item.requests) lines.push(`Open request to ${requestLine(request, facts.item.key)}`);
   if (facts.item.workType === 'epic' && facts.itemRuns) lines.push(epicCostLine(facts));
   const quiet = facts.pr?.state === 'open' ? findingsLine(facts.pr) : null;
   if (quiet) lines.push(quiet);
@@ -441,7 +462,7 @@ function spaceStatus(facts) {
     lines.push(`${item.key} ${item.type} "${item.summary}": ${item.status}${pull?.draft ? `, draft PR #${pull.number}` : ''}${item.flagged ? ', flagged' : ''}${cost ? `, ${usd(cost)}` : ''} → ${next}`);
     // What waits for you comes from the step, not from its words (C2 spec section 4).
     if (step.waits === 'you') yours.push(`${item.key}: ${next}`);
-    for (const request of item.requests) lines.push(`  open request to ${request.to}${request.from ? ` from ${request.from}` : ''}: ${request.text}${runsRequest(request, item.key)}`);
+    for (const request of item.requests) lines.push(`  open request to ${requestLine(request, item.key)}`);
   }
   // release-workflow spec 2.2: what runs where, the open release branch, what is Done but not in a release yet, and the
   // Release click left on Jira for the release on Production. Read with your gh login; without it these lines are left out.
@@ -670,13 +691,32 @@ function decideBuild(facts, options) {
 // (options.seoOk), with what a check that needs no model finds in the comment.
 function seoOkStop(facts, options) {
   const { item } = facts;
-  const epicType = options.contract.work_types.find(({ id }) => id === 'epic').jira_issue_type;
-  if (!item.seo || item.parent?.type === epicType) return null;
+  if (!seoOutsideEpic(item, options)) return null;
   if ((item.requests ?? []).some(({ to }) => WEB_ROLES.includes(to))) return stop('next', `${item.key} has an open request to seo: its SEO part is not written yet`, `/ao-request ${item.key}`, { then: { command: 'request', arg: item.key } });
+  return seoApprovalStop(facts, options);
+}
+
+const seoOutsideEpic = (item, options) => {
+  const epicType = options.contract.work_types.find(({ id }) => id === 'epic').jira_issue_type;
+  return Boolean(item?.seo) && item.parent?.type !== epicType;
+};
+
+// Your seo-ok holds one comment of seo: the one that was newest when you gave it, by its id and a hash of its text
+// (review of shop PR #80). facts.seoApproved is that mark, item.seoMark the one of the newest comment now; an item whose
+// description points to a SPEC has no comment, and its mark has no id. Null when the dev runs may go, or the stop.
+function seoApprovalStop(facts, options) {
+  const { item } = facts;
   if (options.seoOk) return null;
+  const now = item.seoMark ?? { id: null, hash: null };
+  const approved = facts.seoApproved;
+  if (approved && approved.id === now.id && approved.hash === now.hash) return null;
   const issues = seoTextProblems(item.seoComment ?? '', { hosts: options.seoHosts ?? [] });
+  const holds = issues.length > 0 ? `. It holds ${issues.join('; ')} (lines of the comment)` : '';
+  if (approved) {
+    return stop('you', `the newest comment of SEO Specialist on ${item.key} is not the one you approved with seo-ok: seo wrote or changed one since${holds}`, `Read the newest comment of SEO Specialist on ${item.key} on Jira; when it is right, /ao-build ${item.key} seo-ok`);
+  }
   return stop('you',
-    `${item.key} has the label ao-seo and is in no Epic: its dev agent builds the comment of SEO Specialist word for word, and seo wrote it from web pages${issues.length > 0 ? `. It holds ${issues.join('; ')}` : ''}`,
+    `${item.key} has the label ao-seo and is in no Epic: its dev agent builds the comment of SEO Specialist word for word, and seo wrote it from web pages${holds}`,
     `Read the comment of SEO Specialist on ${item.key} (or the section ## SEO its description points to); when it is right, /ao-build ${item.key} seo-ok`,
   );
 }
@@ -825,6 +865,9 @@ function prStop(facts, command, { gates }) {
   if (pr.docsEpic) return stop('fix', `PR #${pr.number} is the docs PR of ${pr.docsEpic}: merge-gate merges it after gate ②, with no review`, `/ao-plan ${pr.docsEpic}`);
   if (facts.outside) return stop('fix', `PR #${pr.number} is on ${pr.headRef}, whose item ${facts.outside} is not in ${facts.space}: ao-step works in ${facts.space} only`, '/ao-status');
   if (!facts.item) return stop('fix', `PR #${pr.number} is on ${pr.headRef}, which is not the branch of a work item`, '/ao-status');
+  // The repository is public: a fork's branch may share the item's name, and its code is an outsider's (review of shop
+  // PR #80). The PR of the item is opened from this repository by ao-dev.
+  if (pr.fromFork) return stop('you', `PR #${pr.number} comes from another repository: ao-step reviews and fixes only a branch of this one`, `Close PR #${pr.number} on GitHub, or review it yourself; /ao-status ${facts.item.key}`);
   return baseStop(pr, gates) ?? flaggedStop(facts.item) ?? (command === 'review' && pr.ci.pending ? stop('ci', `CI is still running on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-review ${pr.number} once CI is done`) : null);
 }
 

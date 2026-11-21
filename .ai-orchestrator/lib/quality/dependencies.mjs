@@ -313,7 +313,64 @@ const MAVEN = ['mvn', 'mvnw', 'mvn.cmd', 'mvnw.cmd'];
 // project's registry, not one of the same name elsewhere.
 const REGISTRY_OPTION = /^--(?:@[\w.-]+:)?registry(?:=|$)|^-D(?:remoteRepositories|repoUrl)=/;
 const REGISTRY_VARIABLE = /^(?:npm_config_|yarn_|bun_config_)\S*registry\S*=/i;
-const MAVEN_SETTINGS = /^(?:-g?s|--(?:global-)?settings)(?:=|$)/;
+// Variables that point a package manager, Maven or the JVM that runs it elsewhere, before any program: a script of the
+// project may run the package manager (review of shop PR #80). MAVEN_ARGS adds words to every mvn and mvnw of Maven
+// 3.9; the JVM takes -D words, such as -Duser.home, from MAVEN_OPTS and the other two.
+export const SOURCE_VARIABLE = /^(?:(?:npm_config_|yarn_|bun_config_)\S*registry\S*|MAVEN_ARGS|MAVEN_OPTS|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)=/i;
+
+// The options of Maven 3.9 (CLIManager): short name, long name, and whether it takes a value.
+const MAVEN_OPTIONS = [
+  ['h', 'help'], ['q', 'quiet'], ['X', 'debug'], ['e', 'errors'], ['v', 'version'], ['V', 'show-version'], ['B', 'batch-mode'],
+  ['N', 'non-recursive'], ['o', 'offline'], ['U', 'update-snapshots'], ['C', 'strict-checksums'], ['c', 'lax-checksums'],
+  ['fae', 'fail-at-end'], ['ff', 'fail-fast'], ['fn', 'fail-never'], ['am', 'also-make'], ['amd', 'also-make-dependents'],
+  ['nsu', 'no-snapshot-updates'], ['ntp', 'no-transfer-progress'], ['npr', 'no-plugin-registry'], ['npu', 'no-plugin-updates'],
+  ['cpu', 'check-plugin-updates'], ['up', 'update-plugins'], ['llr', 'legacy-local-repository'], ['itr', 'ignore-transitive-repositories'],
+  ['emp', 'encrypt-master-password', true], ['ep', 'encrypt-password', true], ['D', 'define', true], ['f', 'file', true],
+  ['l', 'log-file', true], ['P', 'activate-profiles', true], ['pl', 'projects', true], ['rf', 'resume-from', true],
+  ['s', 'settings', true], ['gs', 'global-settings', true], ['t', 'toolchains', true], ['gt', 'global-toolchains', true],
+  ['T', 'threads', true], ['b', 'builder', true], [null, 'color', true],
+].map(([short, long, value = false]) => ({ short, long, value }));
+const SETTINGS = ['settings', 'global-settings'];
+// Maven reads settings.xml from .m2 of user.home.
+const SETTINGS_PROPERTY = /^(?:user\.home|[\w.-]*settings[\w.-]*)=/i;
+const optionNamed = (name) => MAVEN_OPTIONS.find(({ short, long }) => short === name || long === name);
+
+// Whether one word of a Maven command makes it read another settings file (second review of shop PR #79; review of shop
+// PR #80). Maven reads its words with commons-cli, which takes more than -s: the value joined to a short option (-sx.xml,
+// -gsx.xml), short options one after another (-qsx.xml), a long option by any prefix that names it, after one dash or
+// two (--sett, -settings), and -D before user.home. next: the word after it.
+export function readsMavenSettings(word, next) {
+  if (!word.startsWith('-') || word === '-' || word === '--') return false;
+  if (word.startsWith('--')) {
+    const name = word.slice(2).split('=')[0];
+    return name !== '' && MAVEN_OPTIONS.some(({ long }) => long.startsWith(name) && SETTINGS.includes(long));
+  }
+  const token = word.slice(1);
+  const name = token.split('=')[0];
+  if (token.startsWith('D')) return SETTINGS_PROPERTY.test(token.length > 1 ? token.slice(1) : (next ?? ''));
+  const exact = optionNamed(name);
+  if (exact) return SETTINGS.includes(exact.long);
+  if (!token.includes('=') && MAVEN_OPTIONS.some(({ long }) => long.startsWith(token))) return MAVEN_OPTIONS.some(({ long }) => long.startsWith(token) && SETTINGS.includes(long));
+  // The longest name the word starts with; one that takes a value has the rest as its value.
+  for (let end = token.length - 1; end > 0; end -= 1) {
+    const option = optionNamed(token.slice(0, end));
+    if (option) {
+      if (option.value) return SETTINGS.includes(option.long);
+      break;
+    }
+  }
+  // Letters of options one after another, up to one that takes a value.
+  for (const letter of token) {
+    const option = MAVEN_OPTIONS.find(({ short }) => short === letter);
+    if (!option) return false;
+    if (SETTINGS.includes(option.long)) return true;
+    if (option.value) return false;
+  }
+  return false;
+}
+
+// The first word of a Maven command that makes it read another settings file, or undefined.
+export const mavenSettingsWord = (args) => args.find((word, i) => readsMavenSettings(word, args[i + 1]));
 
 export function installTargets(program, args, { env = [] } = {}) {
   if (program === 'corepack') {
@@ -322,7 +379,7 @@ export function installTargets(program, args, { env = [] } = {}) {
   }
   // A settings file of Maven can hold a mirror, which serves every artifact from elsewhere, whatever the goal (second
   // review of shop PR #79).
-  const settings = MAVEN.includes(program) ? args.find((word) => MAVEN_SETTINGS.test(word)) : undefined;
+  const settings = MAVEN.includes(program) ? (env.find((word) => SOURCE_VARIABLE.test(word)) ?? mavenSettingsWord(args)) : undefined;
   if (settings) return [{ refused: settings, registry: true }];
   let targets;
   if (MAVEN.includes(program)) targets = mavenTargets(args);

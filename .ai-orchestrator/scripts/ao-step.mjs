@@ -327,6 +327,16 @@ async function main() {
   const options = { roster, contract, gates, mapping, appRoles, seoApps, seoHosts, ...(values['seo-ok'] && { seoOk: true }), ...(values.answers && { answers: read(values.answers) }), ...(values.note && { note: read(values.note) }), ...(values.change && { change: values.change }), ...(values.retest && { retest: true }), ...(values['light-report'] && { lightReport: read(values['light-report']) }), ...(values.full && { full: true }) };
 
   const facts = await gather();
+  // Your seo-ok holds the comment of seo that is newest now (review of shop PR #80): kept for the later dev runs of the
+  // item, which wait for you again once seo writes or changes one. A dry run keeps nothing.
+  if (values['seo-ok'] && facts.item?.seo) {
+    const mark = facts.item.seoMark ?? { id: null, hash: null };
+    if (values.go) {
+      mkdirSync(join(runsDir, facts.item.key), { recursive: true });
+      writeFileSync(join(runsDir, facts.item.key, 'seo-ok.json'), `${JSON.stringify({ ...mark, at: new Date().toISOString() }, null, 2)}\n`);
+    }
+    facts.seoApproved = mark;
+  }
   // A command that runs on the item of a preview in a lane stops it first, with --go: an agent may change its code. A
   // command of another item leaves it alone (C2 spec section 8).
   if (previewRecord?.lane && PREVIEW_STOPS.includes(command) && previewRecord.key === facts.item?.key) {

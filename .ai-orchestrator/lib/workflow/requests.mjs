@@ -2,6 +2,7 @@
 // after the author's Agent name, starts with "Cần <role>:". The request is done once that role comments on the same
 // item after it, which it does with its Agent name first (agents/rules.md). /ao-status lists the open ones. Pure.
 import { adfText, jiraTime } from '../tracker/facts.mjs';
+import { plainText } from '../tracker/stored-text.mjs';
 
 // The asker of a request written by the agents' Jira account without an Agent name: an agent, but not which one. Every
 // agent writes with that one account, and the name is only a rule of its prompt, so such a comment is never taken for
@@ -16,7 +17,8 @@ export function openRequests(comments, agentNames, { agentAccount } = {}) {
   const roleOf = new Map(Object.entries(agentNames).map(([role, name]) => [name, role]));
   const read = comments
     .map(({ created, body, author }) => {
-      const text = (typeof body === 'string' ? body : adfText(body)).trim();
+      // Any Unicode space or line break reads as one, as the hook of seo reads it (review of shop PR #80).
+      const text = plainText(typeof body === 'string' ? body : adfText(body)).trim();
       const name = [...roleOf.keys()].find((agentName) => text.startsWith(`${agentName}:`));
       const byAgents = Boolean(agentAccount) && author?.accountId === agentAccount;
       const from = name ? roleOf.get(name) : byAgents ? UNSIGNED_AGENT : null;

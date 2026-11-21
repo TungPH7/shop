@@ -2,6 +2,7 @@
 // a client (lib/tracker/jira-client.mjs or github-client.mjs, or a fake in tests) and does no other I/O.
 import { checkBranch, extractKeys, parseBranch } from './conventions.mjs';
 import { expectedOptions } from './expected.mjs';
+import { plainText } from './stored-text.mjs';
 
 const ITEM_FIELDS = ['issuetype', 'status', 'labels', 'description', 'parent', 'subtasks', 'issuelinks'];
 // dor-met as automation checks it (contract note on `refine`): a Story or Task under an Epic whose plan is approved,
@@ -144,7 +145,7 @@ export function jiraTime(created) {
 // any other comment, or a report whose Result is not filled in. NOT TESTED counts as a report, so it hides an older FAIL
 // (agent-roster spec 2.9).
 export function qaReportResult(body) {
-  const lines = (typeof body === 'string' ? body : adfText(body)).split('\n').map((line) => line.replace(/^#+\s*/, '').trim());
+  const lines = plainText(typeof body === 'string' ? body : adfText(body)).split('\n').map((line) => line.replace(/^#+\s*/, '').trim());
   if (!lines.some((line) => /^QA report\b/i.test(line))) return null;
   const at = lines.findIndex((line) => /^Result$/i.test(line));
   const result = lines.slice(at + 1).find((line) => line !== '');

@@ -5,6 +5,7 @@ import { NON_AGENT_ROLES, WEB_ROLES } from '../rules/references.mjs';
 import { checkTransition } from '../transitions.mjs';
 import { extractKeys } from './conventions.mjs';
 import { adfText, githubGuards, jiraGuards, jiraTime, qaReportResult, readItem } from './facts.mjs';
+import { markupText, plainText } from './stored-text.mjs';
 import { countRework, reworkStatus } from './rework.mjs';
 
 // input: the PreToolUse input of mcp__atlassian__transitionJiraIssue. Returns { allow: true } or { allow: false, reason }.
@@ -178,23 +179,34 @@ export function checkToolCall(input, { mapping, space }) {
   return key.startsWith(`${space}-`) ? allow : deny(`${key} is outside the project space ${space}`);
 }
 
-// Whether any text of a tool input, a string or an ADF document at any depth, reads as a QA report (qaReportResult).
-function holdsQaReport(value) {
-  if (typeof value === 'string') return qaReportResult(value) !== null;
-  if (!value || typeof value !== 'object') return false;
-  if (value.type === 'doc' && qaReportResult(value) !== null) return true;
-  return Object.values(value).some(holdsQaReport);
+// The texts of a tool input as Jira will keep them (review of shop PR #80): a string as markdown or HTML, or as a
+// document of Jira written as JSON; a document of Jira at any depth by its text.
+function storedTexts(value) {
+  if (typeof value === 'string') {
+    if (/^\s*\{/.test(value)) {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === 'object') return [markupText(value), ...storedTexts(parsed)];
+      } catch {
+        // Not JSON: markdown that starts with a brace.
+      }
+    }
+    return [markupText(value)];
+  }
+  if (!value || typeof value !== 'object') return [];
+  if (value.type === 'doc') return [plainText(adfText(value))];
+  return Object.values(value).flatMap(storedTexts);
 }
 
+// Whether any text of a tool input reads as a QA report (qaReportResult).
+const holdsQaReport = (value) => storedTexts(value).some((text) => qaReportResult(text) !== null);
+
 // Whether any text of a tool input holds a request to a role (lib/workflow/requests.mjs): a line that starts with
-// "Cần <role>:", after an Agent value or not.
-const REQUEST = /(?:^|\n)[ \t]*(?:[^\n:]{1,40}:[ \t]*)?Cần [\w-]+:/u;
-function holdsRequest(value) {
-  if (typeof value === 'string') return REQUEST.test(value);
-  if (!value || typeof value !== 'object') return false;
-  if (value.type === 'doc') return REQUEST.test(adfText(value));
-  return Object.values(value).some(holdsRequest);
-}
+// "Cần <role>:", after an Agent value or not; or, anywhere, "Cần <role>:" to a role other than seo itself, which an
+// answer to a request may quote.
+const REQUEST = /(?:^|\n)\s*(?:[^\n:]{1,40}:\s*)?Cần\s+[\w-]+\s*:/u;
+const ASKING = /Cần\s*(?!seo\b)[\w-]+\s*:/u;
+const holdsRequest = (value) => storedTexts(value).some((text) => REQUEST.test(text) || ASKING.test(text));
 
 // Whether the input of a tool puts a label on an item, in any field named labels at any depth: fields.labels,
 // additional_fields.labels, update.labels with add or set. Words in a description or a comment are not a label.

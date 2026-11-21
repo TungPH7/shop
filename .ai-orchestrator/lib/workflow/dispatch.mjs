@@ -10,7 +10,7 @@
 //   stopAsked()               --stop was asked
 //   now(), sleep(ms), log(line)
 import { admit } from './locks.mjs';
-import { ADVISERS, nextCommand } from './steps.mjs';
+import { nextCommand, runnableRequest } from './steps.mjs';
 
 // The work nearest its end first (spec 5.2, step 3).
 export const PRIORITY = ['qa', 'review', 'fix', 'build', 'request', 'plan', 'spec'];
@@ -45,7 +45,7 @@ export async function planRound({ items, pulls = [], scope, live = [], cap, deci
   inScope.forEach((item, rank) => {
     const step = nextCommand(item, prOf.get(item.key) ?? null);
     // An open request to an adviser goes first, by /ao-request; on an Epic in spec or plan, /ao-spec and /ao-plan take it.
-    const asked = !(item.workType === 'epic' && SHAPING.includes(item.state)) && (item.requests ?? []).some(({ to }) => ADVISERS.includes(to));
+    const asked = !(item.workType === 'epic' && SHAPING.includes(item.state)) && (item.requests ?? []).some(runnableRequest);
     if (asked) candidates.push({ key: item.key, command: 'request', arg: item.key, rank });
     else if (step.command) candidates.push({ key: item.key, command: step.command, arg: step.arg, rank });
     // An Epic In Progress waits for its items, which are in the scope too.

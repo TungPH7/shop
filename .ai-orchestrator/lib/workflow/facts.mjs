@@ -3,6 +3,7 @@
 // `jira` (lib/tracker/jira-client.mjs, the agent token), `github` (lib/tracker/github-client.mjs, the read-only token of
 // ao-review) and `local` ({ ledger(key), runState(key), runStates() }, the files in .ai/). Nothing here writes.
 // The contract guards come from lib/tracker/facts.mjs, not written again.
+import { createHash } from 'node:crypto';
 import { docsPullRequest, gatePassage } from '../quality/docs-pr.mjs';
 import { docsRule } from '../quality/gates.mjs';
 import { approved, botLogin, protectedPaths } from '../quality/merge-gate.mjs';
@@ -104,18 +105,34 @@ export async function readWorkItem(jira, key, ctx) {
     children: workType === 'epic' ? await readChildren(jira, found, ctx) : [],
     requests: openRequests(comments, names, { agentAccount: agentsAccount(mapping) }),
     // What /ao-build shows you before an item with ao-seo outside an Epic starts (second review of shop PR #79).
-    seoComment: newestSigned(comments, names.seo),
+    seoComment: newestSigned(comments, names.seo)?.text ?? null,
+    // Its mark, which your seo-ok holds (review of shop PR #80): the id, and a hash of the text, which an edit changes.
+    seoMark: seoMarkOf(newestSigned(comments, names.seo)),
   };
 }
 
-// The text of the newest comment that starts with an Agent value, as agents sign theirs (agents/rules.md), or null.
+// The newest comment that starts with an Agent value, as agents sign theirs (agents/rules.md): { id, text }, or null.
 function newestSigned(comments, agentName) {
   if (!agentName) return null;
   const signed = comments
-    .map(({ body, created }) => ({ text: (typeof body === 'string' ? body : adfText(body)).trim(), at: Date.parse(String(created).replace(/([+-]\d\d)(\d\d)$/, '$1:$2')) }))
+    .map(({ id, body, created }) => ({ id: id ?? null, text: (typeof body === 'string' ? body : adfText(body)).trim(), at: Date.parse(String(created).replace(/([+-]\d\d)(\d\d)$/, '$1:$2')) }))
     .filter(({ text }) => text.startsWith(`${agentName}:`))
     .sort((a, b) => b.at - a.at);
-  return signed[0]?.text ?? null;
+  return signed[0] ?? null;
+}
+
+const seoMarkOf = (comment) => (comment ? { id: comment.id, hash: createHash('sha256').update(comment.text).digest('hex').slice(0, 16) } : null);
+
+// The mark of the comment of seo your seo-ok holds, which ao-step keeps in .ai/runs/<KEY>/seo-ok.json, or null.
+function seoApprovedOf(local, key) {
+  const text = local.runFile?.(key, 'seo-ok.json');
+  if (!text) return null;
+  try {
+    const { id = null, hash = null } = JSON.parse(text);
+    return { id, hash };
+  } catch {
+    return null;
+  }
 }
 
 // The keys of the items that block this one: the inward side of its "is blocked by" links.
@@ -165,10 +182,14 @@ async function projectAt(github, sha) {
   return file?.content ? Buffer.from(file.content, 'base64').toString('utf8') : null;
 }
 
-// The PRs of a work item's branches, newest first.
+// A PR from a fork is never an item's, whatever its branch is called: the repository is public, and /ao-run would review
+// and fix an outsider's code (review of shop PR #80). GitHub gives head.repo null once the fork is deleted.
+export const sameRepo = (pr) => pr.head?.repo?.full_name === pr.base?.repo?.full_name;
+
+// The PRs of a work item's branches, newest first, from this repository only.
 export async function pullsOf(github, key) {
   const all = await github.getAll('/pulls', { state: 'all', sort: 'created', direction: 'desc' });
-  return all.filter(({ head }) => parseBranch(head.ref)?.key === key);
+  return all.filter((pr) => sameRepo(pr) && parseBranch(pr.head.ref)?.key === key);
 }
 
 // The CI of a commit. The read-only token of ao-review has no Commit statuses permission (spec 2.3), so GitHub refuses
@@ -389,6 +410,7 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
     // The Sub-tasks with a ledger: the agents of a split Story keep one per Sub-task.
     subtaskLedgers: (item.subtasks ?? []).filter(({ key: sub }) => local.ledger(sub)).map(({ key: sub }) => sub),
     run: local.runState(item.key),
+    seoApproved: seoApprovedOf(local, item.key),
     // /ao-status <Epic> adds the runs of its items, for the cost per acceptance criterion (C1 spec section 7).
     ...(command === 'status' && item.workType === 'epic' && { itemRuns: (item.children ?? []).flatMap((child) => [child, ...(child.subtasks ?? [])]).map(({ key: k }) => ({ key: k, runs: local.runState(k)?.runs ?? [] })) }),
   };
@@ -458,7 +480,7 @@ async function readSpace({ jira, github, deploys, local, contract, mapping, rost
   });
   // An Epic In Progress with its items: /ao-status says when it can be completed.
   for (const epic of items.filter(({ workType, state }) => workType === 'epic' && state === 'in-progress')) epic.children = await readChildren(jira, epic.key, { contract, mapping, roster, space });
-  const pulls = (await github.getAll('/pulls', { state: 'open', sort: 'created', direction: 'asc' })).map((pr) => ({ number: pr.number, title: pr.title, headRef: pr.head.ref, key: parseBranch(pr.head.ref)?.key ?? null, draft: Boolean(pr.draft) }));
+  const pulls = (await github.getAll('/pulls', { state: 'open', sort: 'created', direction: 'asc' })).filter(sameRepo).map((pr) => ({ number: pr.number, title: pr.title, headRef: pr.head.ref, key: parseBranch(pr.head.ref)?.key ?? null, draft: Boolean(pr.draft) }));
   // The release lines of /ao-status need deployments, which only your gh login reads (release-workflow T12, T16).
   const release = deploys ? await readStatusRelease({ jira, deploys, contract, mapping, space }) : undefined;
   return { items, pulls, runs: local.runStates(), ...(release && { release }) };

@@ -11,10 +11,13 @@ const SEO_DOES = {
   reviewer: 'Check that the code builds it word for word: the copy, the metadata, the structured data, the canonical and hreflang. A difference is a finding.',
   qa: 'Check it in the served HTML of its pages on the environment: the title, the meta description, the structured data, the canonical, hreflang and the copy. Give each its line in your QA report.',
 };
-export function seoNote(kind, { key, epic }) {
+// comment: the id of the comment of seo the human approved with seo-ok, outside an Epic (review of shop PR #80).
+export function seoNote(kind, { key, epic, comment }) {
   const where = epic
     ? `Its SEO part is the section ## SEO of docs/specs/${epic}/spec.md, for the screens ${key} touches.`
-    : `Its SEO part is the comment of SEO Specialist on ${key}, or, when its description points to the section ## SEO of a SPEC, that section.`;
+    : comment
+      ? `Its SEO part is the comment ${comment} of SEO Specialist on ${key}, which the human read and approved.`
+      : `Its SEO part is the comment of SEO Specialist on ${key}, or, when its description points to the section ## SEO of a SPEC, that section.`;
   return `${key} has the label ao-seo. ${where} ${SEO_DOES[kind]}`;
 }
 

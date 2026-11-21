@@ -10,6 +10,7 @@
 import { posix, win32 } from 'node:path';
 import { parseEnv } from 'node:util';
 import { parse } from 'yaml';
+import { mavenSettingsWord } from './dependencies.mjs';
 
 // The Maven run of each script. typecheck and build skip Spotless and Checkstyle, which lint runs, so each script fails
 // for one reason only.
@@ -36,6 +37,10 @@ const PLAIN = /^[A-Za-z0-9:._=-]+$/;
 // How to start the wrapper of the app in `cwd`: { file, args, cwd, windowsVerbatimArguments } for spawn.
 export function wrapperCommand(cwd, args, { platform = process.platform, env = process.env } = {}) {
   for (const arg of args) if (!PLAIN.test(arg)) throw new Error(`${JSON.stringify(arg)} is not a plain Maven argument`);
+  // run.mjs passes the words after the script as they are: another settings file can hold a mirror, which serves every
+  // artifact from elsewhere (review of shop PR #80).
+  const settings = mavenSettingsWord(args);
+  if (settings) throw new Error(`${JSON.stringify(settings)} makes Maven read another settings file: build with the settings of the project`);
   if (platform === 'win32') {
     // With /s, cmd.exe drops the outer quotes and runs the line between them as it is.
     return { file: env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', `".\\mvnw.cmd ${args.join(' ')}"`], cwd, windowsVerbatimArguments: true };

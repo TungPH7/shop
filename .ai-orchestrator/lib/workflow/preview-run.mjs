@@ -188,7 +188,10 @@ export function previewRunner({ projectDir, git, gitAt = () => git, checkout, ru
     if (!config) throw new Error(problem ?? `the project has no ${PROJECT_FILE}`);
     steeringCheck({ key, number, branch, checked, globs });
     const inLane = gitAt(lane);
-    const untracked = untrackedSteering(globs, inLane);
+    // The apps run from the lane as you, and may write in the project folder too, where the main session and the agents
+    // of spec, plan, review and qa load the files that steer a session: both are listed (review of shop PR #80).
+    const untracked = untrackedSteering(globs);
+    const laneUntracked = untrackedSteering(globs, inLane);
     const headOf = () => inLane('rev-parse', 'HEAD').stdout.trim();
     // The lane is brought to the head that was checked, never past it.
     if (checked && headOf() !== checked) {
@@ -199,7 +202,7 @@ export function previewRunner({ projectDir, git, gitAt = () => git, checkout, ru
     const head = headOf();
     const apps = [];
     fs.mkdirSync(paths.dir, { recursive: true });
-    const record = () => fs.writeFileSync(paths.active, `${JSON.stringify({ key, pr: number, branch, head, apps, untracked, protected: globs, lane, startedAt: at() }, null, 2)}\n`);
+    const record = () => fs.writeFileSync(paths.active, `${JSON.stringify({ key, pr: number, branch, head, apps, untracked, laneUntracked, protected: globs, lane, startedAt: at() }, null, 2)}\n`);
     record();
     try {
       await runApps(config, lane, apps, record, previewEnv(env, cleared), (app) => apps.length === 1 && hold({ pid: app.pid, key }));
@@ -260,10 +263,12 @@ export function previewRunner({ projectDir, git, gitAt = () => git, checkout, ru
     const still = await stopApps(active.apps ?? []);
     const notes = [`Stopped the preview of ${active.key}: ${(active.apps ?? []).map(({ name }) => name).join(', ') || 'no app ran'}.${still.length > 0 ? ` Still answering: ${still.join(', ')}; stop it yourself.` : ''}`];
     // Named, never deleted: you may have made one yourself during the preview. A record from before this check has no list.
-    if (Array.isArray(active.untracked)) {
-      const appeared = untrackedSteering(active.protected ?? [], active.lane ? gitAt(active.lane) : git).filter((path) => !active.untracked.includes(path));
-      if (appeared.length > 0) notes.push(`Files that steer a session appeared in the project folder during the preview, and git does not track them: ${appeared.join(', ')}. The apps of the PR may have written them, and /ao-preview --stop does not delete them: read each one, and delete those you did not make.`);
-    }
+    const appearedIn = (where, before, inFolder) => {
+      const appeared = untrackedSteering(active.protected ?? [], inFolder).filter((path) => !before.includes(path));
+      if (appeared.length > 0) notes.push(`Files that steer a session appeared in ${where} during the preview, and git does not track them: ${appeared.join(', ')}. The apps of the PR may have written them, and /ao-preview --stop does not delete them: read each one, and delete those you did not make.`);
+    };
+    if (Array.isArray(active.untracked)) appearedIn('the project folder', active.untracked, git);
+    if (active.lane && Array.isArray(active.laneUntracked)) appearedIn(`the lane of ${active.key} (${active.lane})`, active.laneUntracked, gitAt(active.lane));
     // A preview in a lane leaves the lane on its branch, and the item to its agents again.
     if (active.lane) {
       fs.rmSync(paths.active, { force: true });

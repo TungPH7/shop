@@ -11,7 +11,7 @@ import { gitRefusal, writeRefusal } from '../agents/scope.mjs';
 import { NON_AGENT_ROLES, WEB_ROLES } from '../rules/references.mjs';
 import { configReads, gitSubcommand } from './git-options.mjs';
 import { matchesGlob } from './glob.mjs';
-import { dependencyProblems, installRefusal, installTargets, workspaceCatalogs } from './dependencies.mjs';
+import { dependencyProblems, installRefusal, installTargets, SOURCE_VARIABLE, workspaceCatalogs } from './dependencies.mjs';
 
 const allow = { allow: true };
 const deny = (reason) => ({ allow: false, reason: `gh-guard: ${reason}` });
@@ -243,6 +243,10 @@ const sessionVariable = (word) => SESSION_VARIABLE.test(word.split('=')[0]);
 // a variable the session already exports, so it counts too.
 function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
   if (env.some(sessionVariable)) return deny(IDENTITY);
+  // A variable that points a package manager, Maven or its JVM elsewhere, before any program, since a script of the
+  // project may run them; or set for the commands after it (review of shop PR #80).
+  const source = gates.approvedLibraries ? (env.find((word) => SOURCE_VARIABLE.test(word)) ?? (DECLARERS.has(programOf(words[0])) ? words.slice(1).find((word) => SOURCE_VARIABLE.test(word)) : undefined)) : undefined;
+  if (source) return deny(installRefusal([{ refused: source, registry: true }], []));
   if (words.length === 0) return allow;
   const program = programOf(words[0]);
   // A library installed by name, or downloaded and run by npx, must be on the approved list of project.yaml first, from
