@@ -17,9 +17,10 @@
 | S7 | Liên kết danh mục ở danh sách sản phẩm (khách) | `/[locale]/products` | US3 Khách xem trang danh mục | ASCII | user |
 | S8 | Breadcrumb ở chi tiết sản phẩm (khách) | `/[locale]/products/[slug]` | US4 Khách thấy danh mục trên trang chi tiết sản phẩm | ASCII | user |
 
-Đề xuất của `ux` ngày 2026-11-21, để bạn duyệt ở gate ①:
+Quyết định ngày 2026-11-21, khi bạn đồng ý cả 10 đề xuất của `ux`:
 
-- **Không có ảnh, nên cả tám màn hình là ASCII.** Thư mục `.ai/design-inbox/SHOP-81/` không có. Các màn hình dựng trên design system mà SHOP-7 để lại ở `docs/design-system/admin.md` và `docs/design-system/user.md`: cùng thẻ kính, nút, ô nhập, bảng, hộp thoại, giao diện sáng và tối. Nếu bạn muốn ảnh Figma hay mockup cho màn hình nào, bỏ ảnh vào `.ai/design-inbox/SHOP-81/` và `ux` đổi màn hình đó thành Figma hay Image.
+- **Không có ảnh, nên cả tám màn hình là ASCII.** Thư mục `.ai/design-inbox/SHOP-81/` không có, và không màu hay kích thước nào đọc từ ảnh. Các màn hình dựng trên design system mà SHOP-7 để lại ở `docs/design-system/admin.md` và `docs/design-system/user.md`: cùng thẻ kính, nút, ô nhập, bảng, hộp thoại, giao diện sáng và tối. Ảnh Figma hay mockup chỉ cần khi bạn muốn một bố cục khác với trang của SHOP-7; khi đó bỏ ảnh vào `.ai/design-inbox/SHOP-81/` và `ux` đổi màn hình đó thành Figma hay Image.
+- **Danh sách của `admin` giữ gọn.** Bảng danh mục (S1.4) không có phân trang, ô tìm hay bộ lọc, và bảng sản phẩm của SHOP-7 (S1.6) không có thêm cột Danh mục: SPEC không đòi, và AC11 đã bỏ. Nếu danh mục nhiều lên thì thêm ở Epic sau.
 - **S4, S7 và S8 thêm vào màn hình có sẵn của SHOP-7** (form sản phẩm S2, danh sách sản phẩm S4, chi tiết sản phẩm S5 của `docs/specs/SHOP-7/design.md`). Chúng chỉ vẽ phần đổi; phần còn lại ghi "không đổi" kèm mã khối của SHOP-7, như SHOP-7 S2.8. Khi viết "SHOP-7 S4.1", đó là khối của design SHOP-7, không phải S4 của file này.
 - **S1 đến S3 và S4 là của `admin`**, thiết kế cho máy tính từ 1024 px như SHOP-7; **S5 đến S8 là của `user`**, từ 320 px, giao diện sáng và tối.
 - **Không hiện ra màn hình, nên không có khối nào gắn với chúng:** nửa sau của AC3 và AC10 (gọi thẳng API), AC19 (sitemap), và phần thẻ `<title>`, meta, canonical, hreflang, JSON-LD của AC18, AC20 và AC21, do mục SEO của SPEC viết. AC11 đã bỏ. Chữ "trong vòng 60 giây" của AC5 đến AC9 là độ trễ giữa hai app (mũi tên đứt của Flow), không phải một khối.
@@ -115,7 +116,7 @@ blocks:
   4:
     name: Bảng danh mục
     type: table
-    content: "Trong một thẻ kính, như SHOP-7 S1.6. Cột: Tên (14/600), Đường dẫn (slug, chữ muted), Trạng thái, Số sản phẩm (căn phải), Thao tác (căn phải). Dòng cao 64 như bảng sản phẩm, nhưng không có ô giữ chỗ 40 px vì danh mục không có ảnh. Thứ tự theo tên A→Z theo cách xếp chữ tiếng Việt, không phân biệt chữ hoa, chữ thường: `api` trả sẵn đúng thứ tự, `admin` không xếp lại. Bảng không có ô tìm, bộ lọc, nút sắp xếp hay phân trang. Dưới 1024 px bảng cuộn ngang trong thẻ của nó"
+    content: "Trong một thẻ kính, như SHOP-7 S1.6. Cột: Tên (14/600), Đường dẫn (slug, chữ muted), Trạng thái, Số sản phẩm (căn phải), Thao tác (căn phải). Dòng cao 64 như bảng sản phẩm, nhưng không có ô giữ chỗ 40 px vì danh mục không có ảnh. Thứ tự theo tên A→Z theo cách xếp chữ tiếng Việt, không phân biệt chữ hoa, chữ thường: `api` trả sẵn đúng thứ tự, `admin` không xếp lại. Bảng không có ô tìm, bộ lọc, nút sắp xếp hay phân trang: danh mục một cấp và `api` trả cả danh sách. Dưới 1024 px bảng cuộn ngang trong thẻ của nó"
     states:
       loading: 6 dòng khung xương, vùng aria-busy=true
       error: "Dòng thông báo “Không tải được danh sách danh mục.” (en “Couldn't load the categories.”) kèm nút phụ “Thử lại” (en “Try again”), role=alert"
@@ -348,7 +349,7 @@ blocks:
     content:
       vi: "“{n} sản phẩm của danh mục này sẽ thành Không có danh mục.”, như “2 sản phẩm của danh mục này sẽ thành Không có danh mục.” và, khi n là 1, “1 sản phẩm …”"
       en: "“{n} products in this category will become No category.”, such as “2 products in this category will become No category.”; for 1, “1 product in this category will become No category.”"
-    behavior: "Chỉ hiện khi danh mục còn ít nhất một sản phẩm. n là số sản phẩm của danh mục ở S1.6, gồm cả sản phẩm Ẩn. Nền banner warn kèm biểu tượng, để câu nổi lên giữa các dòng chữ thường. Khi danh mục không có sản phẩm, [4] không có trong hộp thoại và [3] đứng ngay trên [5]"
+    behavior: "Chỉ hiện khi danh mục còn ít nhất một sản phẩm. n là số sản phẩm của danh mục ở S1.6, gồm cả sản phẩm Ẩn, đọc từ danh sách lúc tải trang và không đọc lại khi mở hộp thoại: nếu một quản trị viên khác vừa gán thêm sản phẩm, số có thể cũ, và việc xóa vẫn đúng vì không xóa sản phẩm nào. Toast sau khi xóa chỉ nói “Đã xóa danh mục”, không nêu số. Nền banner warn kèm biểu tượng, để câu nổi lên giữa các dòng chữ thường. Khi danh mục không có sản phẩm, [4] không có trong hộp thoại và [3] đứng ngay trên [5]"
     a11y: "Không có role riêng: hộp thoại đã đọc nó qua aria-describedby; không dựa vào màu của banner"
     ac: [AC8]
   5:
@@ -511,7 +512,7 @@ blocks:
     name: Tiêu đề trang
     type: heading
     content: "Tên danh mục, như “Áo”, nguyên như người nhập, ở cả vi và en"
-    behavior: "Cỡ h1 của design system của `user` (38/39,5; 28 dưới 768 px). Tên dài tới 60 ký tự xuống dòng, không tràn (overflow-wrap: anywhere). Chữ cuối cùng của H1 ở mỗi ngôn ngữ do mục SEO của SPEC chốt; design vẽ tên danh mục"
+    behavior: "Cỡ h1 của design system của `user` (38/39,5; 28 dưới 768 px). Tên dài tới 60 ký tự xuống dòng, không tràn (overflow-wrap: anywhere). H1 là tên danh mục, không thêm tiền tố hay hậu tố. Nếu mục SEO của SPEC ghi chữ khác cho một ngôn ngữ, S5.3 sửa theo mục SEO"
     a11y: Là h1 duy nhất của trang
     ac: [AC12, AC15, AC18]
   4:
@@ -695,7 +696,7 @@ blocks:
     name: Liên kết danh mục
     type: link
     content: "Tên danh mục, như “Áo khoác”, “Bao tay”. Chỉ danh mục Hiện và có ít nhất một sản phẩm Đang bán: danh mục Ẩn, danh mục chỉ có sản phẩm Ẩn và danh mục đã xóa không có ở đây. Không kèm số sản phẩm, vì số đó chỉ `admin` thấy"
-    behavior: "Mỗi danh mục một nút phụ nhỏ (`.btn--secondary.btn--sm`, cao 34, bo 999), xếp theo tên A→Z theo cách xếp chữ tiếng Việt, do `api` trả sẵn đúng thứ tự. Các nút cách nhau 8 px và xuống dòng khi hẹp; tên dài xuống dòng trong nút, không tràn (overflow-wrap: anywhere); ở 320 px không có thanh cuộn ngang. Bấm mở S5 của danh mục, ở cùng ngôn ngữ (`/vi/categories/<slug>` hay `/en/categories/<slug>`), không tham số. Không giới hạn số liên kết"
+    behavior: "Mỗi danh mục một nút phụ nhỏ (`.btn--secondary.btn--sm`, cao 34, bo 999), xếp theo tên A→Z theo cách xếp chữ tiếng Việt, do `api` trả sẵn đúng thứ tự. Các nút cách nhau 8 px và xuống dòng khi hẹp; tên dài xuống dòng trong nút, không tràn (overflow-wrap: anywhere); ở 320 px không có thanh cuộn ngang. Bấm mở S5 của danh mục, ở cùng ngôn ngữ (`/vi/categories/<slug>` hay `/en/categories/<slug>`), không tham số. Hiện đủ mọi danh mục đủ điều kiện, xuống dòng khi hẹp: không giới hạn số liên kết và không có nút “Xem thêm” cho hàng này"
     a11y: "Mỗi liên kết có tên là tên danh mục; focus-visible vòng `--ring` như các nút khác"
     ac: [AC17]
   5:
@@ -763,7 +764,7 @@ blocks:
     content:
       vi: "← Sản phẩm"
       en: "← Products"
-    behavior: "Không đổi so với SHOP-7 S5.2: về `/[locale]/products` không tham số (S7)"
+    behavior: "Không đổi so với SHOP-7 S5.2: về `/[locale]/products` không tham số (S7). Liên kết được giữ và đặt ngay dưới breadcrumb [2]: SPEC chỉ thêm breadcrumb, breadcrumb không có mục “Sản phẩm”, và một E2E của SHOP-7 (“the back link opens the products page S4”) còn bấm vào liên kết này"
   4:
     name: Thẻ chi tiết sản phẩm
     type: card
@@ -786,19 +787,19 @@ Cả tám màn hình là ASCII, nên không có ảnh để đọc token. Epic n
 - **Hai khối mới của `user`, dựng từ token có sẵn:** Breadcrumb (S5.2, S8.2: chữ `--fs-md` 600, `--primary-text`, `--muted-foreground`, `--hint`, khoảng cách `--space-2`) và Hàng liên kết danh mục (S7.3, S7.4: nhãn 13,5/600 và các nút `.btn--secondary.btn--sm`). Chúng không cần giá trị mới nào trong bảng token.
 - **`admin` có thêm một mục điều hướng** (Danh mục, S1.1) và một cột "Số sản phẩm" căn phải trong bảng, đều dùng class của `.pill__link` và `.table__num` có sẵn.
 
-Vì không có mục "mới" của bảng token, `ux` đề xuất không đặt Task "Design system" riêng ở đầu plan (xem Open Questions), để giữ plan trong 3 item của SPEC.
+Quyết định ngày 2026-11-21, khi bạn đồng ý đề xuất của `ux`: vì không có mục "mới" của bảng token, plan không đặt Task "Design system của <app>" riêng ở đầu, để giữ trong 3 item của SPEC. Story của `user` thêm Breadcrumb và Hàng liên kết danh mục vào `docs/design-system/user.md` trong cùng PR; `sa` ghi điều này vào plan.
 
 ## Open Questions
 
-Mỗi câu có đề xuất của `ux`. Không câu nào chặn việc duyệt; bạn đồng ý cả đề xuất, hay sửa câu nào, cũng được.
+Không có. Ngày 2026-11-21 bạn đồng ý cả 10 đề xuất của `ux`, và mỗi câu trả lời đã thành quyết định ở mục của nó:
 
-- **H1 của trang danh mục (S5.3).** SPEC giao chữ H1 của hai ngôn ngữ cho mục SEO, còn AC12 chỉ đòi H1 "có tên danh mục". Design vẽ H1 là tên danh mục. Đề xuất: giữ H1 là tên danh mục, không thêm tiền tố hay hậu tố; nếu `seo` chọn khác ở mục SEO, S5.3 theo mục đó.
-- **Liên kết "← Sản phẩm" ở trang chi tiết (S8.3).** SPEC chỉ thêm breadcrumb, không nói bỏ liên kết của SHOP-7 S5.2, và một E2E của SHOP-7 ("the back link opens the products page S4") còn bấm vào nó. Breadcrumb cũng không có mục "Sản phẩm". Đề xuất: giữ liên kết, đặt ngay dưới breadcrumb. Nếu bạn muốn bỏ, đổi S8.3 và test của SHOP-7 cùng lúc.
-- **Task design system của `user` và `admin`.** Mẫu của design.md bảo `sa` đặt một Task "Design system của <app>" lên đầu plan khi một mục là "mới". Epic này không có token mới; chỉ Breadcrumb và Hàng liên kết danh mục là khối mới, dựng từ token có sẵn. Đề xuất: không đặt Task riêng (SPEC giữ plan trong 3 item); Story của `user` thêm hai khối đó vào `docs/design-system/user.md` trong cùng PR. Quyết định cuối là của `sa` ở plan.
-- **Số sản phẩm trong hộp thoại xóa (S3.4).** Số n đọc từ dòng của danh sách lúc tải trang, nên có thể cũ nếu một quản trị viên khác vừa gán thêm sản phẩm. Việc xóa vẫn đúng (không xóa sản phẩm nào, TW1) nên không chặn. Đề xuất: dùng số của danh sách, không đọc lại khi mở hộp thoại; nếu sau khi xóa số đó đã đổi, toast vẫn chỉ nói “Đã xóa danh mục”.
-- **Danh mục đã bị xóa ở tab khác.** AC10 chỉ nêu lỗi ở ô Danh mục của form sản phẩm. Đề xuất cho các chỗ còn lại: bấm Xóa ở S3 một danh mục đã xóa thì coi như thành công (đóng hộp thoại, tải lại danh sách, “Đã xóa danh mục”); lưu S2 ở chế độ sửa cho một danh mục đã xóa thì thay form bằng câu “Không tìm thấy danh mục này. Có thể nó đã bị xóa.” (S2.3, S2.4).
-- **Ô Danh mục sau lỗi AC10, và khi không tải được (S4.2).** AC10 không nói ô hiện gì sau lỗi, hay làm gì khi `api` danh mục lỗi. Đề xuất: sau lỗi, đọc lại danh sách, ô về “Không có danh mục” và giữ lỗi tới khi quản trị viên chọn lại, để một cú bấm Lưu thứ hai không lặng lẽ bỏ danh mục; khi không tải được danh sách, khóa nút Lưu của form tới khi tải được, vì form không gửi được danh mục mà nó chưa biết.
-- **Danh sách của `admin`.** Bảng danh mục (S1.4) không phân trang, không có ô tìm hay lọc: danh mục một cấp, SPEC không đòi, và `api` trả cả danh sách. Bảng sản phẩm của `admin` cũng không có cột Danh mục (SPEC không đòi; AC11 đã bỏ). Đề xuất: không thêm; nếu danh mục nhiều lên thì thêm ở Epic sau.
-- **Hàng liên kết danh mục của khách (S7.3).** AC17 không giới hạn số liên kết, và SPEC bắt không có thanh cuộn ngang ở 320 px. Đề xuất: hiện đủ, xuống dòng, không có nút "Xem thêm" cho hàng này; hiện cả khi khách đang tìm.
-- **Chữ ngoài SPEC.** `ux` viết các chữ sau ở YAML, cả `vi` và `en`: nhãn Hiện và Ẩn, “Đã lưu danh mục”, mọi trạng thái trống, lỗi và đang tải của S1, S2, S4, S5, “Danh mục này không tồn tại hoặc không còn được hiển thị.” (S6.3), gợi ý của S2.6, S2.7, S4.2, nhãn “Danh mục” của S7.3, và nhãn “Đường dẫn trang” của breadcrumb. Đề xuất: dùng các chữ đó; đổi chữ chỉ sửa file i18n.
-- **Màn hình chưa có ảnh.** Không có ảnh nào trong `.ai/design-inbox/SHOP-81/`, nên `ux` không đọc được màu hay kích thước nào từ ảnh; mọi giá trị lấy từ design system của SHOP-7. Đề xuất: giữ ASCII; ảnh Figma hay mockup chỉ cần nếu bạn muốn một bố cục khác với trang của SHOP-7.
+- H1 của trang danh mục: S5.3.
+- Liên kết "← Sản phẩm" ở trang chi tiết: S8.3.
+- Task design system: mục Design System.
+- Số sản phẩm trong hộp thoại xóa: S3.4.
+- Danh mục đã bị xóa ở tab khác: S2.3, S2.4 và S3.7.
+- Ô Danh mục sau lỗi AC10 và khi không tải được: S4.2.
+- Danh sách của `admin` giữ gọn: S1.4 và ghi chú dưới bảng Screens.
+- Hàng liên kết danh mục của khách: S7.3 và S7.4.
+- Chữ ngoài SPEC: ghi chú dưới bảng Screens, và YAML của từng khối.
+- Màn hình chưa có ảnh: ghi chú dưới bảng Screens.
