@@ -28,6 +28,17 @@ public class CategoryQueryRepository {
   private static final String PRODUCT_COUNT =
       "(SELECT count(*) FROM app.products p WHERE p.category_id = c.id)";
 
+  /**
+   * What a shopper sees of the categories: only {@code VISIBLE} ones, a constant of the SQL, so no
+   * request can list a hidden one (NFR8).
+   */
+  private static final String VISIBLE_ONLY = " WHERE c.status = 'VISIBLE'";
+
+  /** A category has at least one {@code ACTIVE} product (AC17, AC19). */
+  private static final String HAS_A_PRODUCT_ON_SALE =
+      " AND EXISTS (SELECT 1 FROM app.products p"
+          + " WHERE p.category_id = c.id AND p.status = 'ACTIVE')";
+
   private final JdbcClient jdbc;
 
   public CategoryQueryRepository(JdbcClient jdbc) {
@@ -51,6 +62,68 @@ public class CategoryQueryRepository {
    * @param productCount every product of the category, on sale or hidden
    */
   public record DeleteRow(String slug, long productCount) {}
+
+  /** One category as a shopper sees it: its name and its slug as stored. */
+  public record StoreRow(String name, String slug) {}
+
+  /**
+   * One category of the sitemap of the store.
+   *
+   * @param updatedAt the later of the last update of the category and of its {@code ACTIVE}
+   *     products (AC19)
+   */
+  public record SitemapRow(String slug, Instant updatedAt) {}
+
+  /**
+   * The {@code VISIBLE} categories that have at least one {@code ACTIVE} product, in the order of
+   * names (AC17): the links of the product list of the store, in one statement (NFR2).
+   */
+  @Transactional(readOnly = true)
+  public List<StoreRow> findStoreList() {
+    return jdbc.sql(
+            "SELECT c.name, c.slug::text AS slug FROM app.categories c"
+                + VISIBLE_ONLY
+                + HAS_A_PRODUCT_ON_SALE
+                + " ORDER BY c.name, c.id")
+        .query((rs, rowNum) -> new StoreRow(rs.getString("name"), rs.getString("slug")))
+        .list();
+  }
+
+  /**
+   * The {@code VISIBLE} category with this slug, compared ignoring case ({@code citext}), with or
+   * without products on sale (AC15); empty for a hidden, deleted or unknown slug alike (NFR8).
+   */
+  @Transactional(readOnly = true)
+  public Optional<StoreRow> findVisibleBySlug(String slug) {
+    return jdbc.sql(
+            "SELECT c.name, c.slug::text AS slug FROM app.categories c"
+                + VISIBLE_ONLY
+                + " AND c.slug OPERATOR(public.=) CAST(:slug AS public.citext)")
+        .param("slug", slug)
+        .query((rs, rowNum) -> new StoreRow(rs.getString("name"), rs.getString("slug")))
+        .optional();
+  }
+
+  /**
+   * The {@code VISIBLE} categories that have at least one {@code ACTIVE} product, in the order of
+   * their ids, with their last update (AC19): one statement (NFR2). A hidden product does not move
+   * the last update, since it is not on the page of the category.
+   */
+  @Transactional(readOnly = true)
+  public List<SitemapRow> findSitemap() {
+    return jdbc.sql(
+            "SELECT c.slug::text AS slug, greatest(c.updated_at,"
+                + " (SELECT max(p.updated_at) FROM app.products p"
+                + " WHERE p.category_id = c.id AND p.status = 'ACTIVE')) AS updated_at"
+                + " FROM app.categories c"
+                + VISIBLE_ONLY
+                + HAS_A_PRODUCT_ON_SALE
+                + " ORDER BY c.id")
+        .query(
+            (rs, rowNum) ->
+                new SitemapRow(rs.getString("slug"), rs.getTimestamp("updated_at").toInstant()))
+        .list();
+  }
 
   /**
    * Every category, visible or hidden, in the order of names, with the number of its products on
