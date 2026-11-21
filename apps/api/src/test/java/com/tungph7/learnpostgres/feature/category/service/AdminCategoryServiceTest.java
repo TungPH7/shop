@@ -15,6 +15,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import jakarta.persistence.EntityManager;
+
 import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,7 +49,11 @@ class AdminCategoryServiceTest {
     CorrelationContext correlation = mock(CorrelationContext.class);
     when(correlation.currentId()).thenReturn(Optional.empty());
     service =
-        new AdminCategoryService(repository, mock(CategoryQueryRepository.class), correlation);
+        new AdminCategoryService(
+            repository,
+            mock(CategoryQueryRepository.class),
+            correlation,
+            mock(EntityManager.class));
   }
 
   @Test
