@@ -174,8 +174,6 @@ const FAILED = ['failure', 'timed_out'];
 // Review states that decide; COMMENTED does not.
 const DECISIVE = ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'];
 
-// The ids among `needed` of the GitHub guards that hold for the item (as readItem returns it), in the order asked.
-// After qa-fail an item has several PRs; the newest one counts. `approvers` are your GitHub logins, for merge-approved.
 // Whether the head of a PR is in its own repository: one test for the guards, ao-step and merge-gate (reviews of shop
 // PR #80 and #81). GitHub gives head.repo null once a fork is deleted; a record with no repository on either side, as
 // in the recordings of the tests, counts as one.
@@ -185,6 +183,8 @@ export const sameRepo = (pr) => {
   return base ? head === base : !head;
 };
 
+// The ids among `needed` of the GitHub guards that hold for the item (as readItem returns it), in the order asked.
+// After qa-fail an item has several PRs; the newest one counts. `approvers` are your GitHub logins, for merge-approved.
 export async function githubGuards(github, { item, needed, contract, mapping, approvers = [] }) {
   const workType = contract.work_types.find(({ jira_issue_type: type }) => type === item.type)?.id;
   const cache = new Map();

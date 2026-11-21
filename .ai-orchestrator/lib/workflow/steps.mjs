@@ -80,15 +80,23 @@ function withSeo(decision, facts, options) {
     const held = seoApprovalStop(facts, options);
     if (held) return { ...held, lines: decision.lines ?? [] };
   }
-  const comment = outside ? (item.seoMark?.id ?? undefined) : undefined;
+  // The prompt carries the words of the comment you approved, as ao-step read them when it compared the marks: an agent
+  // that read the comment on Jira during its run could read one seo changed since (second review of shop PR #81).
+  const comment = outside && item.seoMark?.id ? { id: item.seoMark.id, hash: item.seoMark.hash, text: item.seoComment ?? '' } : null;
+  if (comment && comment.text.length > SEO_TEXT_LIMIT) {
+    return { ...stop('you', `the comment ${comment.id} of SEO Specialist on ${item.key} is longer than the ${SEO_TEXT_LIMIT} characters a prompt carries`, `Ask seo for a shorter one with a comment "Cần seo:" on ${item.key}, then /ao-request ${item.key}`), lines: decision.lines ?? [] };
+  }
   const runs = decision.runs.map((run) => {
     const kind = kindOf(run);
     return kind && run.prompt ? { ...run, prompt: `${run.prompt}
 
-${seoNote(kind, { key: item.key, epic, comment })}` } : run;
+${seoNote(kind, { key: item.key, epic, outside, comment })}` } : run;
   });
   return { ...decision, runs };
 }
+// The longest comment of seo a prompt carries: the prompt goes on the command line of claude, which Windows caps at
+// 32767 characters.
+const SEO_TEXT_LIMIT = 12000;
 
 // What a STOP waits for (C2 spec section 4), so the dispatcher /ao-run reads it and never the words of next:
 //   you     you: a gate, a click, Accept, seo-ok, a flag, questions, a preview, or a choice only you make

@@ -318,8 +318,10 @@ const REGISTRY_VARIABLE = /^(?:npm_config_|yarn_|bun_config_)\S*registry\S*=/i;
 // 3.9; the JVM takes -D words, such as -Duser.home, from MAVEN_OPTS and the other two.
 // npm_config_userconfig and globalconfig point npm at another .npmrc, YARN_RC_FILENAME yarn at another .yarnrc.yml; a
 // value appended with += counts too, and the bare name, which export or declare sets after printf -v or read (review of
-// shop PR #81).
-const SOURCE_NAMES = '(?:(?:npm_config_|yarn_|bun_config_)\\S*registry\\S*|npm_config_(?:user|global)config|YARN_RC_FILENAME|MAVEN_ARGS|MAVEN_OPTS|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)';
+// shop PR #81). The home and config folders of the user hold .npmrc and the rc files of pnpm and yarn, and
+// npm_config_prefix the global .npmrc: USERPROFILE=<folder> pnpm add read another registry (second review of shop PR
+// #81).
+const SOURCE_NAMES = '(?:(?:npm_config_|yarn_|bun_config_)\\S*registry\\S*|npm_config_(?:user|global)config|npm_config_prefix|YARN_RC_FILENAME|MAVEN_ARGS|MAVEN_OPTS|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS|USERPROFILE|HOME|HOMEDRIVE|HOMEPATH|XDG_CONFIG_HOME|LOCALAPPDATA|APPDATA)';
 export const SOURCE_VARIABLE = new RegExp(`^${SOURCE_NAMES}\\+?=`, 'i');
 export const SOURCE_NAME = new RegExp(`^${SOURCE_NAMES}$`, 'i');
 

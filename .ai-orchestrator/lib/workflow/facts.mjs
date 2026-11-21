@@ -106,7 +106,7 @@ export async function readWorkItem(jira, key, ctx) {
     requests: openRequests(comments, names, { agentAccount: agentsAccount(mapping) }),
     // What /ao-build shows you before an item with ao-seo outside an Epic starts (second review of shop PR #79).
     seoComment: newestSigned(comments, names.seo)?.text ?? null,
-    // Its mark, which your seo-ok holds (review of shop PR #80): the id, and a hash of the text, which an edit changes.
+    // Its mark, which your seo-ok holds (review of shop PR #80): the id, and a hash of its whole body, which an edit changes.
     seoMark: seoMarkOf(newestSigned(comments, names.seo)),
   };
 }
@@ -183,10 +183,9 @@ async function projectAt(github, sha) {
   return file?.content ? Buffer.from(file.content, 'base64').toString('utf8') : null;
 }
 
-// A PR from a fork is never an item's, whatever its branch is called: the repository is public, and /ao-run would review
-// and fix an outsider's code (review of shop PR #80). GitHub gives head.repo null once the fork is deleted.
-
-// The PRs of a work item's branches, newest first, from this repository only.
+// The PRs of a work item's branches, newest first, from this repository only: a PR from a fork is never an item's,
+// whatever its branch is called, since the repository is public and /ao-run would review and fix an outsider's code
+// (review of shop PR #80).
 export async function pullsOf(github, key) {
   const all = await github.getAll('/pulls', { state: 'all', sort: 'created', direction: 'desc' });
   return all.filter((pr) => sameRepo(pr) && parseBranch(pr.head.ref)?.key === key);

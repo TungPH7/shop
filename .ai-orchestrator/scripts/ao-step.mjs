@@ -332,6 +332,8 @@ async function main() {
   // Your seo-ok holds the comment of seo that is newest now (review of shop PR #80): kept for the later dev runs of the
   // item, which wait for you again once seo writes or changes one. A dry run keeps nothing.
   // It names the mark the check printed, and keeps nothing when the comment changed since (review of shop PR #81).
+  // It is kept whatever the build then does, so a review held for it goes on after /ao-build stops at the open PR
+  // (second review of shop PR #81).
   if (values['seo-ok'] !== undefined && facts.item?.seo && values['seo-ok'] === seoMarkText(facts.item.seoMark)) {
     const mark = facts.item.seoMark ?? { id: null, hash: null };
     if (values.go) {
@@ -339,6 +341,9 @@ async function main() {
       writeFileSync(join(runsDir, facts.item.key, 'seo-ok.json'), `${JSON.stringify({ ...mark, at: new Date().toISOString() }, null, 2)}\n`);
     }
     facts.seoApproved = mark;
+    if (!values.json) console.log(`seo-ok ${values['seo-ok']}: ${mark.id ? `the comment ${mark.id} of SEO Specialist on ${facts.item.key}` : `no comment of SEO Specialist on ${facts.item.key}`} is the approved one${values.go ? ', kept for its later runs' : '; --go keeps it'}`);
+  } else if (values['seo-ok'] !== undefined && facts.item?.seo && !values.json) {
+    console.log(`seo-ok ${values['seo-ok']}: not the mark of the newest comment of SEO Specialist on ${facts.item.key}: seo wrote or changed one since you read it, so nothing is kept. Read it again on Jira before you approve it`);
   }
   // A command that runs on the item of a preview in a lane stops it first, with --go: an agent may change its code. A
   // command of another item leaves it alone (C2 spec section 8).

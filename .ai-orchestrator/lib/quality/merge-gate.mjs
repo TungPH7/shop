@@ -266,8 +266,6 @@ function describe(number, { action, reason, missing, paths, docs, note, base }, 
 // The PR of a release branch into main.
 export const isReleasePr = (pr) => parseBranch(pr.head.ref)?.kind === 'release' && pr.base.ref === 'main';
 
-// The head and the base of a PR are branches of this very repository, not of a fork.
-
 // A PR that merges main back: its head is main of this very repository, not a branch of that name in a fork.
 export const isBackMerge = (pr) => pr.head.ref === 'main' && sameRepo(pr);
 

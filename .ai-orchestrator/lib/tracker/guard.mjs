@@ -4,8 +4,8 @@
 import { NON_AGENT_ROLES, WEB_ROLES } from '../rules/references.mjs';
 import { checkTransition } from '../transitions.mjs';
 import { extractKeys } from './conventions.mjs';
-import { adfText, githubGuards, jiraGuards, jiraTime, qaReportResult, readItem } from './facts.mjs';
-import { markupText, plainText, undecodedReference, withReferencesAs } from './stored-text.mjs';
+import { githubGuards, jiraGuards, jiraTime, qaReportResult, readItem } from './facts.mjs';
+import { literalComment } from './stored-text.mjs';
 import { countRework, reworkStatus } from './rework.mjs';
 
 // input: the PreToolUse input of mcp__atlassian__transitionJiraIssue. Returns { allow: true } or { allow: false, reason }.
@@ -129,6 +129,8 @@ function isProjectSite(cloudId, mapping) {
 // The block-atlassian hook (spec section 2.6, plan task T14): no Atlassian call from Bash, no Atlassian tool of another
 // server, no generic write tool, and writes only on the project space (Jira Free has no permission scheme, so the
 // agent token could write to every space of the site). space is AO_JIRA_SPACE, set per project.
+// Returns { allow: true }, { allow: true, input } when the hook sends the call with that input instead, or
+// { allow: false, reason }.
 export function checkToolCall(input, { mapping, space }) {
   const deny = (reason) => ({ allow: false, reason: `jira: ${reason}` });
   const allow = { allow: true };
@@ -162,57 +164,59 @@ export function checkToolCall(input, { mapping, space }) {
       return deny(`only you change the level label (${level}*) of an item: it sets how much review and QA the item gets`);
     }
   }
-  // A QA report is qa's alone (second review of shop PR #79): QA again checks only the criteria the newest one failed,
-  // and the guards of QA fail and Accept read it, while every agent writes with the same Jira account. A comment shaped
-  // as one, in a comment tool or in the update of a transition or an edit, from any other agent is refused.
-  if (input.agent_type && input.agent_type !== 'qa' && holdsQaReport(args)) {
-    return deny('only qa writes a QA report: QA reads the newest one to decide what it checks again, and Accept needs a PASS');
-  }
-  // A role that reads web pages makes no request (second review of shop PR #79): "Cần <role>:" runs that role, ba or sa
-  // with Bash among them, on what a page may have written.
-  // A reference of HTML the hook cannot decode could hide such a request from it, and Jira may decode it (review of shop
-  // PR #81): seo writes the character itself.
-  const left = WEB_ROLES.includes(input.agent_type) ? storedTexts(args).map(undecodedReference).find(Boolean) : null;
-  if (left) return deny(`seo writes no HTML reference that this hook cannot read (${left}): write the character itself`);
-  if (WEB_ROLES.includes(input.agent_type) && holdsRequest(args)) {
-    return deny('seo reads web pages, so it asks no other role: a request of "Cần <role>:" would run that role on what a page wrote. Say what you need in your answer, for the human');
+  // The comment of an agent other than qa goes as literalComment builds it, as HTML with every sign escaped (second
+  // review of shop PR #81): Jira keeps it word for word, so the hook reads what ao-step will read, where it used to guess
+  // what Jira makes of markdown and HTML, and guessed wrong. These agents write a comment with the comment tool alone,
+  // not in the update of a transition or an edit, whose format the hook cannot set. qa writes its QA report from its
+  // template, tables and all, and may make requests: its comment goes as it wrote it.
+  let sent = null;
+  if (input.agent_type && input.agent_type !== 'qa') {
+    if (name !== 'addOrEditJiraIssueComment' && holdsComment(args)) {
+      return deny('write a comment with addOrEditJiraIssueComment alone, not in the update of a transition or an edit: the hook sends it as plain text, as Jira then keeps it');
+    }
+    if (name === 'addOrEditJiraIssueComment') {
+      const extra = Object.keys(args).filter((key) => !COMMENT_ARGS.includes(key));
+      if (extra.length > 0) return deny(`addOrEditJiraIssueComment takes only ${COMMENT_ARGS.join(', ')} from an agent, not ${extra.join(', ')}`);
+      // Every agent writes with one Jira account, so an edit could change the comment of another role: a FAIL report of
+      // qa turned into words would leave an older PASS the newest report (threat model of the second review of shop PR
+      // #81).
+      if (args.commentId !== undefined) return deny('write a new comment: an agent other than qa edits none, since every agent writes with one Jira account and an edit could change the comment of another role');
+      if (typeof args.commentBody !== 'string') return deny('commentBody is the text of the comment, as plain text');
+      const { html, text } = literalComment(args.commentBody);
+      // A QA report is qa's alone (second review of shop PR #79): QA again checks only the criteria the newest one
+      // failed, and the guards of QA fail and Accept read it, while every agent writes with the same Jira account.
+      if (qaReportResult(text) !== null) return deny('only qa writes a QA report: QA reads the newest one to decide what it checks again, and Accept needs a PASS');
+      // A role that reads web pages makes no request (second review of shop PR #79): "Cần <role>:" runs that role, ba or
+      // sa with Bash among them, on what a page may have written.
+      if (WEB_ROLES.includes(input.agent_type) && holdsRequest(text)) {
+        return deny('seo reads web pages, so it asks no other role: a request of "Cần <role>:" would run that role on what a page wrote. Say what you need in your answer, for the human');
+      }
+      sent = { ...args, commentBody: html, contentFormat: 'html' };
+    }
   }
   if (name === 'createJiraIssue') return args.projectKey === space ? allow : deny(`${args.projectKey} is outside the project space ${space}`);
   const [key] = extractKeys(String(args.issueIdOrKey ?? ''));
   if (!key) return deny(`use the work item key, not ${args.issueIdOrKey}, so the project space can be checked`);
-  return key.startsWith(`${space}-`) ? allow : deny(`${key} is outside the project space ${space}`);
+  if (!key.startsWith(`${space}-`)) return deny(`${key} is outside the project space ${space}`);
+  return sent ? { allow: true, input: sent } : allow;
 }
 
-// The texts of a tool input as Jira will keep them (review of shop PR #80): a string as markdown or HTML, or as a
-// document of Jira written as JSON; a document of Jira at any depth by its text.
-function storedTexts(value) {
-  if (typeof value === 'string') {
-    if (/^\s*\{/.test(value)) {
-      try {
-        const parsed = JSON.parse(value);
-        if (parsed && typeof parsed === 'object') return [markupText(value), ...storedTexts(parsed)];
-      } catch {
-        // Not JSON: markdown that starts with a brace.
-      }
-    }
-    return [markupText(value)];
-  }
-  if (!value || typeof value !== 'object') return [];
-  if (value.type === 'doc') return [plainText(adfText(value))];
-  return Object.values(value).flatMap(storedTexts);
+// What an agent passes to the comment tool; the hook sets contentFormat itself.
+const COMMENT_ARGS = ['cloudId', 'issueIdOrKey', 'commentId', 'commentBody', 'contentFormat'];
+
+// Whether a tool input writes a comment: a field named comment or comments at any depth, as update.comment of a
+// transition or an edit.
+function holdsComment(value) {
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value).some(([key, inner]) => /^comments?$/i.test(key) || holdsComment(inner));
 }
 
-// Whether any text of a tool input reads as a QA report (qaReportResult).
-// A reference the hook cannot decode is read both as a space and as nothing, as Jira might decode it (review of shop
-// PR #81).
-const holdsQaReport = (value) => storedTexts(value).some((text) => [text, withReferencesAs(text, ' '), withReferencesAs(text, '')].some((read) => qaReportResult(read) !== null));
-
-// Whether any text of a tool input holds a request to a role (lib/workflow/requests.mjs): a line that starts with
+// Whether the text of a comment holds a request to a role (lib/workflow/requests.mjs): a line that starts with
 // "Cần <role>:", after an Agent value or not; or, anywhere, "Cần <role>:" to a role other than seo itself, which an
 // answer to a request may quote.
 const REQUEST = /(?:^|\n)\s*(?:[^\n:]{1,40}:\s*)?Cần\s+[\w-]+\s*:/u;
 const ASKING = /Cần\s*(?!seo\b)[\w-]+\s*:/u;
-const holdsRequest = (value) => storedTexts(value).some((text) => REQUEST.test(text) || ASKING.test(text));
+const holdsRequest = (text) => REQUEST.test(text) || ASKING.test(text);
 
 // Whether the input of a tool puts a label on an item, in any field named labels at any depth: fields.labels,
 // additional_fields.labels, update.labels with add or set. Words in a description or a comment are not a label.
