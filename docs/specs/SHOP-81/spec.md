@@ -13,7 +13,7 @@ Epic này thêm danh mục một cấp. Quản trị viên tạo danh mục tron
 - trang danh mục có title, meta và breadcrumb riêng, và có trong sitemap;
 - bản release chứa các việc này lên Production. Bản kế tiếp theo SemVer là `v0.4.0`.
 
-Màn hình của Epic do `ux` viết ở `docs/specs/SHOP-81/design.md`. Màn hình của `admin` gồm danh sách danh mục, form danh mục, hộp thoại xóa, cùng ô Danh mục thêm vào form sản phẩm và bộ lọc Danh mục thêm vào danh sách sản phẩm của SHOP-7. Màn hình của `user` gồm trang danh mục, trang "Không tìm thấy danh mục", các liên kết danh mục trên danh sách sản phẩm, và breadcrumb trên trang chi tiết sản phẩm. `user` có `seo: true`, nên `seo` viết mục `## SEO` của SPEC này cho các màn hình của `user`, gồm chữ vi và en của title, meta description và H1. `sa` viết mục Non-functional requirements. Chữ trong các AC dưới đây là bản tiếng Việt; bản tiếng Anh nằm trong `design.md` và mục SEO.
+Màn hình của Epic do `ux` viết ở `docs/specs/SHOP-81/design.md`. Màn hình của `admin` gồm danh sách danh mục, form danh mục, hộp thoại xóa, cùng ô Danh mục thêm vào form sản phẩm của SHOP-7. Màn hình của `user` gồm trang danh mục, trang "Không tìm thấy danh mục", các liên kết danh mục trên danh sách sản phẩm, và breadcrumb trên trang chi tiết sản phẩm. `user` có `seo: true`, nên `seo` viết mục `## SEO` của SPEC này cho các màn hình của `user`, gồm chữ vi và en của title, meta description và H1. `sa` viết mục Non-functional requirements. Chữ trong các AC dưới đây là bản tiếng Việt; bản tiếng Anh nằm trong `design.md` và mục SEO.
 
 ### Users
 
@@ -24,13 +24,14 @@ Màn hình của Epic do `ux` viết ở `docs/specs/SHOP-81/design.md`. Màn h�
 
 - **In:**
   - danh mục một cấp. Mỗi sản phẩm thuộc tối đa một danh mục, và có thể chưa thuộc danh mục nào;
-  - `admin`: danh sách danh mục; tạo, sửa, ẩn và xóa danh mục; chọn danh mục trong form sản phẩm; lọc danh sách sản phẩm theo danh mục (AC11);
+  - `admin`: danh sách danh mục; tạo, sửa, ẩn và xóa danh mục, kể cả danh mục còn sản phẩm (AC8); chọn danh mục trong form sản phẩm;
   - `user`: trang `/[locale]/categories/<slug>` liệt kê sản phẩm của danh mục, với sắp xếp và "Xem thêm" như danh sách sản phẩm hiện có; liên kết tới các danh mục trên trang danh sách sản phẩm; breadcrumb trên trang chi tiết sản phẩm;
   - SEO của trang danh mục: title, meta description, canonical, hreflang, BreadcrumbList, và có trong sitemap; BreadcrumbList của trang chi tiết sản phẩm.
 - **Out:**
   - danh mục nhiều cấp; một sản phẩm thuộc nhiều danh mục;
   - tên danh mục theo từng ngôn ngữ: danh mục nhập một lần và hiện như nhau ở hai ngôn ngữ, như sản phẩm của SHOP-7;
   - mô tả và ảnh của danh mục; kéo thả để đổi thứ tự danh mục;
+  - lọc danh sách sản phẩm của `admin` theo danh mục (AC11, bỏ ngày 2026-11-21);
   - ô tìm trên trang danh mục, và lọc theo danh mục trên trang danh sách sản phẩm của khách: khách đi tới danh mục bằng liên kết (AC17);
   - chuyển hướng slug cũ của danh mục: đổi slug thì đường dẫn cũ trả 404;
   - đăng nhập và phân quyền;
@@ -64,7 +65,7 @@ Các trường của một danh mục. Form của `admin` và `api` kiểm cùng
 
 **Sản phẩm trên trang danh mục:** chỉ sản phẩm Đang bán của danh mục. Sắp xếp và "Xem thêm" như danh sách sản phẩm của SHOP-7: Mới nhất (mặc định), Giá thấp đến cao, Giá cao đến thấp; hai sản phẩm bằng giá thì sản phẩm mới hơn đứng trước; mỗi lần 24 sản phẩm; đường dẫn giữ kiểu sắp xếp và số sản phẩm đã xem, và một giá trị sai trên đường dẫn trở về giá trị mặc định. Trang danh mục không có ô tìm, nên không có Liên quan nhất.
 
-**Xóa danh mục:** chỉ xóa được danh mục không còn sản phẩm nào, kể cả sản phẩm Ẩn. Muốn xóa danh mục còn sản phẩm, quản trị viên bỏ danh mục khỏi các sản phẩm đó trước, nhờ bộ lọc Danh mục của danh sách sản phẩm (AC11). Xóa danh mục không bao giờ xóa hay sửa sản phẩm nào.
+**Xóa danh mục:** xóa được mọi danh mục, kể cả danh mục còn sản phẩm, sau một bước xác nhận. Khi danh mục còn sản phẩm, hộp thoại xác nhận nêu số sản phẩm của nó, gồm cả sản phẩm Ẩn, và nói rằng các sản phẩm đó sẽ thành "Không có danh mục" (AC8). Xóa danh mục không bao giờ xóa sản phẩm nào, và không đổi trường nào khác của chúng: tên, slug, giá, trạng thái và tình trạng còn nguyên. Sản phẩm Đang bán của danh mục đã xóa vẫn ở danh sách sản phẩm chung, và breadcrumb của nó thành "Trang chủ › ‹tên sản phẩm›" (AC21).
 
 **Độ trễ:** một thay đổi lưu ở `admin` hiện ở trang của khách, gồm trang danh mục, các liên kết danh mục, breadcrumb và sitemap, trong vòng 60 giây, như sản phẩm của SHOP-7 (NFR7 của SHOP-7).
 
@@ -81,15 +82,15 @@ Là quản trị viên, tôi muốn tạo, sửa, ẩn và xóa danh mục trong
 - **AC5:** Given danh mục "Áo" slug `ao`, Hiện và có sản phẩm Đang bán, When đổi tên thành "Áo nam" rồi lưu, Then slug vẫn là `ao`, và trong vòng 60 giây H1 của trang `/vi/categories/ao` có "Áo nam"; When sửa ô slug thành `ao-nam`, Then form cảnh báo ngay rằng đường dẫn cũ sẽ không mở được nữa; When lưu, Then trong vòng 60 giây `/vi/categories/ao-nam` mở được, và `/vi/categories/ao` trả 404.
 - **AC6:** Given danh mục "Áo" Hiện có sản phẩm Đang bán "Áo thun cổ tròn", When đổi trạng thái sang Ẩn rồi lưu, Then `admin` vẫn hiện danh mục với nhãn Ẩn; và trong vòng 60 giây trang `/vi/categories/ao` trả 404, "Áo" không còn trong các liên kết danh mục ở trang Sản phẩm và trong sitemap, "Áo thun cổ tròn" vẫn có trong danh sách sản phẩm chung, và breadcrumb của nó là "Trang chủ › Áo thun cổ tròn"; When đổi lại Hiện, Then trong vòng 60 giây danh mục hiện lại ở cùng đường dẫn.
 - **AC7:** Given danh mục "Phụ kiện" không còn sản phẩm nào, When bấm Xóa, Then hộp thoại xác nhận nêu tên danh mục, nói việc xóa không hoàn tác được, và gợi ý chọn Ẩn nếu chỉ muốn tạm ẩn; When bấm Hủy, Then danh mục còn nguyên; When bấm Xóa lần nữa rồi bấm Xóa trong hộp thoại, Then thấy "Đã xóa danh mục", danh mục không còn trong `admin`, trong vòng 60 giây trang của nó ở trang khách trả 404, và slug của nó dùng lại được cho danh mục mới.
-- **AC8:** Given danh mục "Áo" có 2 sản phẩm, một Đang bán và một Ẩn, When bấm Xóa rồi bấm Xóa trong hộp thoại, Then danh mục không bị xóa, hộp thoại báo "Không xóa được: danh mục còn 2 sản phẩm. Hãy bỏ danh mục khỏi các sản phẩm đó trước.", và hai sản phẩm còn nguyên; When gửi thẳng lệnh xóa "Áo" tới API, Then API trả 409 dạng Problem Details, và không xóa gì.
+- **AC8:** Given danh mục "Áo" có 2 sản phẩm, "Áo thun cổ tròn" Đang bán và "Áo len" Ẩn, When bấm Xóa, Then hộp thoại xác nhận nêu tên danh mục, nói việc xóa không hoàn tác được, và báo "2 sản phẩm của danh mục này sẽ thành Không có danh mục."; When bấm Xóa trong hộp thoại, Then thấy "Đã xóa danh mục", danh mục không còn trong `admin`, và hai sản phẩm vẫn còn trong `admin` với danh mục "Không có danh mục", cùng tên, slug, giá, trạng thái và tình trạng như trước; và trong vòng 60 giây `/vi/categories/ao` trả 404, "Áo thun cổ tròn" vẫn có trong danh sách sản phẩm chung, và breadcrumb của nó là "Trang chủ › Áo thun cổ tròn".
 
 #### US2 · Quản trị viên chọn danh mục cho sản phẩm
 
-Là quản trị viên, tôi muốn chọn danh mục cho một sản phẩm ngay trong form sản phẩm, và thấy các sản phẩm của một danh mục, để sắp sản phẩm theo loại.
+Là quản trị viên, tôi muốn chọn danh mục cho một sản phẩm ngay trong form sản phẩm, để sắp sản phẩm theo loại.
 
 - **AC9:** Given có danh mục "Áo" Hiện và "Phụ kiện" Ẩn, When mở form Thêm sản phẩm, Then ô Danh mục đang chọn "Không có danh mục", và có "Áo" và "Phụ kiện (Ẩn)" theo tên A→Z; When thêm sản phẩm Đang bán "Áo thun cổ tròn" với danh mục "Áo", Then số sản phẩm của "Áo" ở trang Danh mục tăng 1, và trong vòng 60 giây sản phẩm hiện trên trang `/vi/categories/ao`; When sửa sản phẩm đó, chọn "Không có danh mục" rồi lưu, Then form sửa vẫn hiện "Không có danh mục" khi mở lại, và trong vòng 60 giây sản phẩm không còn trên trang `/vi/categories/ao`.
 - **AC10:** Given form sửa một sản phẩm đang mở với danh mục "Phụ kiện" vừa chọn, When "Phụ kiện" bị xóa ở tab khác rồi bấm Lưu, Then sản phẩm không được lưu, thấy lỗi "Danh mục này không còn. Hãy chọn danh mục khác." dưới ô Danh mục, và những gì đã nhập còn nguyên; When gửi thẳng tới API thêm hay sửa sản phẩm một danh mục không tồn tại, Then API trả 400 dạng Problem Details nêu trường danh mục, và không lưu gì.
-- **AC11:** Given danh mục "Áo" có "Áo thun cổ tròn" Đang bán và "Áo len" Ẩn, và "Quần jean nam" không có danh mục, When bấm số sản phẩm "2" của "Áo" ở trang Danh mục, Then mở danh sách sản phẩm chỉ có "Áo thun cổ tròn" và "Áo len", với bộ lọc Danh mục đang chọn "Áo"; When chọn bộ lọc "Không có danh mục", Then thấy "Quần jean nam" và không thấy hai sản phẩm kia; When tải lại trang, Then vẫn thấy cùng bộ lọc.
+- **AC11 (bỏ):** lọc danh sách sản phẩm của `admin` theo danh mục. Bạn bỏ tiêu chí này ngày 2026-11-21: xóa được danh mục còn sản phẩm (AC8), nên quản trị viên không còn phải tìm các sản phẩm của một danh mục trước khi xóa nó.
 
 #### US3 · Khách xem trang danh mục
 
@@ -115,8 +116,8 @@ Là khách, tôi muốn thấy danh mục của sản phẩm trên trang chi ti�
 
 Việc kỹ thuật đi cùng Epic. Plan đưa chúng vào Task nền và hai Story, và chúng không có AC riêng.
 
-- **TW1 · Schema của danh mục:** migration Flyway V7, sau V6, không sửa V1–V6. Bảng `app.categories` có tên, slug `citext` UNIQUE như slug của sản phẩm, trạng thái, `version` và các cột của `BaseEntity`. `app.products` thêm cột `category_id` cho phép trống, có khóa ngoại tới `app.categories` với `ON DELETE RESTRICT`, để database là chốt cuối của AC8 khi hai quản trị viên cùng gán sản phẩm và xóa danh mục. Đây chỉ là bước expand: `v0.3.0` đang chạy trên Production phải chạy được trên schema mới, trong lúc deploy và sau một lần rollback, kể cả sửa và xóa sản phẩm. Các sản phẩm có sẵn đều có `category_id` trống.
-- **TW2 · Hợp đồng API của danh mục**, dùng chung cho `api`, `admin` và `user`, theo cách chia của ADR-0003: phần quản trị dưới `/api/admin/…`, và phần của khách chỉ có GET và HEAD, chỉ trả danh mục Hiện. Phần quản trị: danh sách danh mục có số sản phẩm; chi tiết, thêm, sửa theo `version` như sản phẩm, và xóa; thêm và sửa sản phẩm nhận danh mục; danh sách sản phẩm của quản trị lọc được theo danh mục và theo "Không có danh mục" (AC11). Phần của khách: các danh mục cho liên kết của AC17; một danh mục theo slug, kèm HEAD cho Proxy của `user` trả 404 thật trước khi render (AC16, như trang chi tiết sản phẩm của SHOP-24); sản phẩm Đang bán của một danh mục, có sắp xếp và phân trang; danh mục Hiện của một sản phẩm trong chi tiết sản phẩm, cho breadcrumb (AC20, AC21); các danh mục của sitemap (AC19). Lỗi theo Problem Details như `api` đang làm. `sa` ghi hợp đồng trong plan.
+- **TW1 · Schema của danh mục:** migration Flyway V7, sau V6, không sửa V1–V6. Bảng `app.categories` có tên, slug `citext` UNIQUE như slug của sản phẩm, trạng thái, `version` và các cột của `BaseEntity`. `app.products` thêm cột `category_id` cho phép trống, có khóa ngoại tới `app.categories`, để không sản phẩm nào trỏ tới một danh mục đã xóa. Xóa một danh mục làm các sản phẩm của nó thành không có danh mục trong cùng transaction với lệnh xóa (AC8), kể cả khi một quản trị viên khác đang gán sản phẩm vào danh mục đó (AC10). `sa` chọn cách làm, như `ON DELETE SET NULL`, và ghi trong plan `updated_at` và `version` của các sản phẩm đó có đổi không. Đây chỉ là bước expand: `v0.3.0` đang chạy trên Production phải chạy được trên schema mới, trong lúc deploy và sau một lần rollback, kể cả sửa và xóa sản phẩm. Các sản phẩm có sẵn đều có `category_id` trống.
+- **TW2 · Hợp đồng API của danh mục**, dùng chung cho `api`, `admin` và `user`, theo cách chia của ADR-0003: phần quản trị dưới `/api/admin/…`, và phần của khách chỉ có GET và HEAD, chỉ trả danh mục Hiện. Phần quản trị: danh sách danh mục có số sản phẩm; chi tiết, thêm, sửa theo `version` như sản phẩm, và xóa, kể cả danh mục còn sản phẩm (AC8); thêm và sửa sản phẩm nhận danh mục, và chi tiết sản phẩm của quản trị trả danh mục của nó. Phần của khách: các danh mục cho liên kết của AC17; một danh mục theo slug, kèm HEAD cho Proxy của `user` trả 404 thật trước khi render (AC16, như trang chi tiết sản phẩm của SHOP-24); sản phẩm Đang bán của một danh mục, có sắp xếp và phân trang; danh mục Hiện của một sản phẩm trong chi tiết sản phẩm, cho breadcrumb (AC20, AC21); các danh mục của sitemap (AC19). Lỗi theo Problem Details như `api` đang làm. `sa` ghi hợp đồng trong plan.
 - **TW3 · Dữ liệu của E2E:** helper của `apps/admin/e2e/support/` và `apps/user/e2e/support/` tạo và xóa danh mục qua `/api` của host `admin`, như helper sản phẩm của SHOP-7. Tên danh mục của E2E kết thúc bằng `E2E <runId>` như tên sản phẩm, và vừa 60 ký tự. Trước mỗi lần chạy, E2E xóa các danh mục có tên E2E tạo cách đây hơn 1 giờ, sau khi đã xóa các sản phẩm E2E cũ (NFR23 của SHOP-7). E2E không ghi gì trên Production.
 
 ## Tech Stack
@@ -124,7 +125,7 @@ Việc kỹ thuật đi cùng Epic. Plan đưa chúng vào Task nền và hai St
 Không thêm framework hay dependency: stack như README gốc và README của từng app, như SPEC của SHOP-7 đã ghi. Những điểm Epic này đụng tới:
 
 - **`api`:** Java 21, Spring Boot 4.0.6, PostgreSQL 17. Thêm migration V7. Slug của danh mục sinh bằng cùng code với slug của sản phẩm (`ProductSlugs`), không chép một bản thứ hai; `sa` chọn chỗ đặt phần dùng chung đó. Thứ tự tên theo tiếng Việt (Category Rules) cũng do `sa` chọn cách làm, như collation hay hàm `app.search_fold` đã có.
-- **`admin`:** route và chữ mới trong i18n của `admin`; tham số trên URL dùng `nuqs` có sẵn, như bộ lọc Trạng thái của SHOP-7.
+- **`admin`:** route và chữ mới trong i18n của `admin`.
 - **`user`:** route `/[locale]/categories/[slug]`; Proxy của `user` (`src/proxy.ts`) thêm bước HEAD cho trang danh mục, như với trang chi tiết sản phẩm; JSON-LD dựng bằng `breadcrumbLd` và `JsonLd` đang có.
 
 ## Commands
@@ -146,11 +147,11 @@ Trên Development hay Staging, `/ao-qa` đặt `E2E_USER_URL`, `E2E_ADMIN_URL`, 
 
 ```
 apps/api/src/main/java/com/tungph7/learnpostgres/feature/category/  → controller, service, repository, dto, domain của danh mục
-apps/api/src/main/java/com/tungph7/learnpostgres/feature/product/   → danh mục trong sản phẩm, lọc theo danh mục
+apps/api/src/main/java/com/tungph7/learnpostgres/feature/product/   → danh mục trong sản phẩm, sản phẩm của một danh mục
 apps/api/src/main/resources/db/migration/                           → V7
 apps/api/src/test/java/com/tungph7/learnpostgres/feature/category/  → unit, WebMvc, DataJpa và integration test (Testcontainers)
 apps/admin/src/features/category/                                    → api, components, hooks, model của danh mục
-apps/admin/src/features/product/                                     → ô Danh mục của form, bộ lọc Danh mục của danh sách
+apps/admin/src/features/product/                                     → ô Danh mục của form sản phẩm
 apps/admin/src/app/routes/categories/                                → danh sách, thêm, sửa; mục Danh mục trên thanh điều hướng
 apps/admin/src/lib/i18n/locales/{vi,en}/                             → chữ của danh mục
 apps/admin/e2e/                                                      → E2E của US1–US2; support/ có helper danh mục
@@ -188,8 +189,8 @@ const crumbs = [
 
 ## Testing Strategy
 
-- **`api`:** unit test viết theo TDD cho quy tắc kiểm dữ liệu của danh mục và sinh slug. WebMvc test cho Problem Details: 400 kèm trường sai (AC3, AC10), 404, 409 cho tên trùng, slug trùng, sửa chồng và xóa danh mục còn sản phẩm (AC4, AC8); và cho thấy 404 của danh mục chưa từng có, Ẩn và đã xóa giống nhau (AC16). Integration test với Testcontainers PostgreSQL 17 cho: số sản phẩm, lọc theo danh mục, thứ tự tên tiếng Việt, khóa ngoại `RESTRICT` khi xóa, danh mục Ẩn không lộ ra ở API của khách, các danh mục của sitemap; và migration V7 chạy trên schema V6 có dữ liệu giống Production, rồi các lệnh đọc, sửa, xóa sản phẩm của `v0.3.0` vẫn chạy trên schema mới (TW1).
-- **`admin`:** Vitest, Testing Library và MSW cho form danh mục (từng lỗi của AC3 và AC4), slug tự điền và cảnh báo đổi slug, hộp thoại xóa và lỗi 409 của nó, ô Danh mục của form sản phẩm và lỗi của AC10, bộ lọc Danh mục trên URL.
+- **`api`:** unit test viết theo TDD cho quy tắc kiểm dữ liệu của danh mục và sinh slug. WebMvc test cho Problem Details: 400 kèm trường sai (AC3, AC10), 404, 409 cho tên trùng, slug trùng và sửa chồng (AC4); và cho thấy 404 của danh mục chưa từng có, Ẩn và đã xóa giống nhau (AC16). Integration test với Testcontainers PostgreSQL 17 cho: số sản phẩm, sản phẩm Đang bán của một danh mục, thứ tự tên tiếng Việt; xóa danh mục còn sản phẩm Đang bán lẫn Ẩn làm chúng thành không có danh mục và không đổi trường nào khác của chúng (AC8), và một lần gán sản phẩm chạy cùng lúc với lần xóa không để lại sản phẩm nào trỏ tới danh mục đã xóa (AC10); danh mục Ẩn không lộ ra ở API của khách, các danh mục của sitemap; và migration V7 chạy trên schema V6 có dữ liệu giống Production, rồi các lệnh đọc, sửa, xóa sản phẩm của `v0.3.0` vẫn chạy trên schema mới (TW1).
+- **`admin`:** Vitest, Testing Library và MSW cho form danh mục (từng lỗi của AC3 và AC4), slug tự điền và cảnh báo đổi slug, hộp thoại xóa của danh mục không có sản phẩm và của danh mục còn sản phẩm (AC7, AC8), ô Danh mục của form sản phẩm và lỗi của AC10.
 - **`user`:** Vitest cho đọc tham số URL của trang danh mục (AC14), meta, canonical và JSON-LD (AC18, AC20, AC21), sitemap (AC19); render test cho trang danh mục, trạng thái trống, trang 404 và breadcrumb.
 - **E2E:** mỗi AC một test Playwright trở lên, tên bắt đầu bằng mã AC, chạy trên app thật và `api` thật, không mock API. Development dùng chung, nên mỗi test tạo danh mục và sản phẩm riêng qua `/api` của `admin` với tên có `E2E <runId>`, chỉ kiểm thứ tự và số lượng trong các danh mục của lần chạy đó (như AC1 và AC17), và xóa những gì nó tạo khi xong (TW3). Các AC có "trong vòng 60 giây" chờ bằng `expect.poll` tới 60 giây. Nửa sau của AC1 (chưa có danh mục nào) chỉ chạy được trên app dựng tại chỗ, nên mang tag `@local`.
 - **Accessibility:** axe (WCAG 2.0/2.1 A và AA) quét trang danh mục, trang "Không tìm thấy danh mục" và trang chi tiết có breadcrumb của `user` ở hai ngôn ngữ, giao diện sáng lẫn tối, cùng danh sách danh mục, form danh mục và hộp thoại xóa của `admin`.
@@ -206,7 +207,7 @@ const crumbs = [
   - thêm extension PostgreSQL vào database đang chạy của Development, Staging hay Production;
   - đổi `deploy.yaml`, nằm trong đường dẫn được bảo vệ `.ai-orchestrator/**`, hay secret và biến môi trường của app trên VPS.
 - **Never:**
-  - xóa hay sửa sản phẩm khi xóa danh mục, như `ON DELETE CASCADE` hay `SET NULL`;
+  - xóa sản phẩm khi xóa danh mục, như `ON DELETE CASCADE`, hay đổi trường nào của sản phẩm ngoài danh mục của nó;
   - để danh mục Ẩn hay đã xóa hiện ở bất kỳ chỗ nào của trang khách: liên kết, breadcrumb, JSON-LD, sitemap, hay một phản hồi 404 khác với của slug chưa từng có;
   - bỏ hay đổi kiểu một cột có sẵn của `app.products`, hay sửa V1–V6;
   - mock API danh mục hay sản phẩm trong E2E chạy trên môi trường;
@@ -216,7 +217,7 @@ const crumbs = [
 
 Ngoài DoD của Epic trong `.ai-orchestrator/docs/sdlc.md`:
 
-- Story của `admin` và Story của `user` đạt DoD: E2E của từng AC từ AC1 tới AC21 pass trên Development.
+- Story của `admin` và Story của `user` đạt DoD: E2E của từng AC từ AC1 tới AC21, trừ AC11 đã bỏ, pass trên Development.
 - Task nền đạt DoD: bộ regression pass, và mọi E2E của SHOP-7 vẫn pass.
 - axe không báo vi phạm WCAG A/AA nào trên các trang ở mục Testing Strategy. Ở bề rộng 320 px, trang danh mục, các liên kết danh mục và breadcrumb của `user` không làm trang có thanh cuộn ngang.
 - OpenAPI ở `/v3/api-docs` mô tả đúng hợp đồng của danh mục.
@@ -226,16 +227,10 @@ Ngoài DoD của Epic trong `.ai-orchestrator/docs/sdlc.md`:
 
 ## Open Questions
 
-Mười một câu dưới đây cần bạn trả lời trước gate ①. Các AC ở trên đã viết theo đề xuất của từng câu. Nếu bạn đồng ý cả, SPEC không cần sửa gì thêm. Câu 1 tới 5 là Open Points của Epic.
+Không có. Ngày 2026-11-21 bạn trả lời cả 11 câu, và mỗi câu trả lời đã thành quyết định ở mục của nó:
 
-1. **Xóa danh mục còn sản phẩm:** đề xuất không cho xóa, kể cả khi chỉ còn sản phẩm Ẩn. Quản trị viên phải bỏ danh mục khỏi các sản phẩm đó trước (AC8).
-2. **Ẩn danh mục:** đề xuất trang của danh mục trả 404, danh mục không có trong sitemap, và sản phẩm của nó vẫn hiện ở danh sách chung (AC6, AC16, AC19). Thêm vào đề xuất của Epic: danh mục Ẩn cũng không có trong các liên kết danh mục và trong breadcrumb (AC17, AC21), nhưng quản trị viên vẫn gán sản phẩm vào nó được (AC9).
-3. **Slug:** đề xuất tự tạo từ tên và sửa được trong form. Đổi slug thì đường dẫn cũ trả 404, như sản phẩm của SHOP-7, và form cảnh báo trước khi lưu (AC2, AC5).
-4. **Thứ tự danh mục ở `user`:** đề xuất theo tên, A→Z, theo cách xếp chữ tiếng Việt. `admin` dùng cùng thứ tự (AC1, AC17).
-5. **Breadcrumb của sản phẩm không thuộc danh mục nào:** đề xuất chỉ hiện "Trang chủ › ‹tên sản phẩm›". Sản phẩm của danh mục Ẩn cũng hiện như vậy (AC21).
-6. **Danh mục Hiện mà chưa có sản phẩm Đang bán nào:** đề xuất trang của nó vẫn mở được, với mã 200 và dòng "Chưa có sản phẩm nào trong danh mục này." (AC15). Nó không có trong các liên kết danh mục và trong sitemap, để khách và máy tìm kiếm không gặp trang trống (AC17, AC19). `seo` quyết thẻ robots của trang này.
-7. **Trang danh mục không có ô tìm:** đề xuất chỉ có sắp xếp Mới nhất, Giá thấp đến cao, Giá cao đến thấp, cùng "Xem thêm". Khách muốn tìm thì dùng ô tìm của trang Sản phẩm (AC13).
-8. **Tìm các sản phẩm của một danh mục trong `admin`:** vì câu 1 bắt bỏ danh mục khỏi từng sản phẩm trước khi xóa, đề xuất thêm bộ lọc Danh mục vào danh sách sản phẩm của `admin`, và cho số sản phẩm ở trang Danh mục là liên kết tới danh sách đã lọc (AC11). Nếu bạn muốn Story của `admin` gọn hơn, bỏ AC11: khi đó quản trị viên phải mở từng sản phẩm để tìm.
-9. **Mô tả của danh mục:** đề xuất danh mục chỉ có tên, slug và trạng thái, không có mô tả. Meta description của trang danh mục dựng từ một câu mẫu có tên danh mục, do `seo` viết ở mục SEO (AC18).
-10. **Tên danh mục:** đề xuất dài 1–60 ký tự, để title "‹Danh mục› | ‹tên site›" vừa khoảng 60 ký tự; không trùng tên, không phân biệt chữ hoa, chữ thường (AC3, AC4).
-11. **`lastmod` của danh mục trong sitemap:** đề xuất lấy lần sửa cuối của danh mục hay của một sản phẩm Đang bán của nó, lấy lần muộn hơn, vì trang danh mục đổi khi sản phẩm của nó đổi (AC19).
+- Bạn đồng ý 9 đề xuất: danh mục Ẩn (Category Rules, AC6, AC16, AC17, AC19, AC21), slug (AC2, AC5), thứ tự tên tiếng Việt (AC1, AC17), breadcrumb của sản phẩm không có danh mục (AC21), danh mục Hiện chưa có sản phẩm Đang bán (AC15, AC17, AC19), trang danh mục không có ô tìm (AC13), không có mô tả danh mục (Scope, AC18), tên dài 1–60 ký tự và không trùng (AC3, AC4), và `lastmod` của danh mục (AC19).
+- Bạn đổi đề xuất về xóa danh mục còn sản phẩm: xóa được, sau hộp thoại xác nhận nêu số sản phẩm, và các sản phẩm đó thành "Không có danh mục" (Category Rules, AC8, TW1).
+- Vì vậy bạn bỏ bộ lọc Danh mục của danh sách sản phẩm trong `admin`: AC11 giữ số với "(bỏ)", và Scope ghi nó ở phần Out.
+
+`seo` quyết thẻ robots của trang danh mục Hiện chưa có sản phẩm Đang bán ở mục SEO, và `sa` quyết cách làm sản phẩm thành không có danh mục khi xóa danh mục (TW1) ở plan.
