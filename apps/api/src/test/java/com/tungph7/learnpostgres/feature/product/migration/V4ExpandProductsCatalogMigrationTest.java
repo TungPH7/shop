@@ -306,7 +306,8 @@ class V4ExpandProductsCatalogMigrationTest extends AbstractContainerBaseTest {
 
   @Test
   void v4_adds_no_index() {
-    db.flyway().migrate();
+    // Stops at V4: V7 adds idx_products_category_id (SHOP-82).
+    db.flyway(MigrationDatabase.V4).migrate();
 
     assertThat(
             jdbc.sql(
