@@ -313,7 +313,81 @@ const MAVEN = ['mvn', 'mvnw', 'mvn.cmd', 'mvnw.cmd'];
 // project's registry, not one of the same name elsewhere.
 const REGISTRY_OPTION = /^--(?:@[\w.-]+:)?registry(?:=|$)|^-D(?:remoteRepositories|repoUrl)=/;
 const REGISTRY_VARIABLE = /^(?:npm_config_|yarn_|bun_config_)\S*registry\S*=/i;
-const MAVEN_SETTINGS = /^(?:-g?s|--(?:global-)?settings)(?:=|$)/;
+// Variables that point a package manager, Maven or the JVM that runs it elsewhere, before any program: a script of the
+// project may run the package manager (review of shop PR #80). MAVEN_ARGS adds words to every mvn and mvnw of Maven
+// 3.9; the JVM takes -D words, such as -Duser.home, from MAVEN_OPTS and the other two.
+// npm_config_userconfig and globalconfig point npm at another .npmrc, YARN_RC_FILENAME yarn at another .yarnrc.yml; a
+// value appended with += counts too, and the bare name, which export or declare sets after printf -v or read (review of
+// shop PR #81). The home and config folders of the user hold .npmrc and the rc files of pnpm and yarn, and
+// npm_config_prefix the global .npmrc: USERPROFILE=<folder> pnpm add read another registry (second review of shop PR
+// #81).
+const SOURCE_NAMES = '(?:(?:npm_config_|yarn_|bun_config_)\\S*registry\\S*|npm_config_(?:user|global)config|npm_config_prefix|YARN_RC_FILENAME|MAVEN_ARGS|MAVEN_OPTS|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS|USERPROFILE|HOME|HOMEDRIVE|HOMEPATH|XDG_CONFIG_HOME|LOCALAPPDATA|APPDATA)';
+export const SOURCE_VARIABLE = new RegExp(`^${SOURCE_NAMES}\\+?=`, 'i');
+export const SOURCE_NAME = new RegExp(`^${SOURCE_NAMES}$`, 'i');
+
+// The options of Maven 3.9 (CLIManager): short name, long name, and whether it takes a value.
+const MAVEN_OPTIONS = [
+  ['h', 'help'], ['q', 'quiet'], ['X', 'debug'], ['e', 'errors'], ['v', 'version'], ['V', 'show-version'], ['B', 'batch-mode'],
+  ['N', 'non-recursive'], ['o', 'offline'], ['U', 'update-snapshots'], ['C', 'strict-checksums'], ['c', 'lax-checksums'],
+  ['fae', 'fail-at-end'], ['ff', 'fail-fast'], ['fn', 'fail-never'], ['am', 'also-make'], ['amd', 'also-make-dependents'],
+  ['nsu', 'no-snapshot-updates'], ['ntp', 'no-transfer-progress'], ['npr', 'no-plugin-registry'], ['npu', 'no-plugin-updates'],
+  ['cpu', 'check-plugin-updates'], ['up', 'update-plugins'], ['llr', 'legacy-local-repository'], ['itr', 'ignore-transitive-repositories'],
+  ['emp', 'encrypt-master-password', true], ['ep', 'encrypt-password', true], ['D', 'define', true], ['f', 'file', true],
+  ['l', 'log-file', true], ['P', 'activate-profiles', true], ['pl', 'projects', true], ['rf', 'resume-from', true],
+  ['s', 'settings', true], ['gs', 'global-settings', true], ['t', 'toolchains', true], ['gt', 'global-toolchains', true],
+  ['T', 'threads', true], ['b', 'builder', true], [null, 'color', true],
+].map(([short, long, value = false]) => ({ short, long, value }));
+const SETTINGS = ['settings', 'global-settings'];
+// Maven reads settings.xml from .m2 of user.home.
+const SETTINGS_PROPERTY = /^(?:user\.home|[\w.-]*settings[\w.-]*)=/i;
+const optionNamed = (name) => MAVEN_OPTIONS.find(({ short, long }) => short === name || long === name);
+
+// Whether one word of a Maven command makes it read another settings file (second review of shop PR #79; review of shop
+// PR #80). Maven reads its words with commons-cli, which takes more than -s: the value joined to a short option (-sx.xml,
+// -gsx.xml), short options one after another (-qsx.xml), a long option by any prefix that names it, after one dash or
+// two (--sett, -settings), and -D before user.home. next: the word after it.
+export function readsMavenSettings(word, next) {
+  return mavenOptionsOf(word, next).some(({ long, value }) => SETTINGS.includes(long) || (long === 'define' && SETTINGS_PROPERTY.test(value ?? '')));
+}
+
+// The options one word of a Maven command sets, as commons-cli reads it: [{ long, value }], value being the joined
+// rest or the next word for an option that takes one. A long name by any prefix after one dash or two counts as each
+// option it may name (review of shop PR #81: --define, -define, -qD).
+function mavenOptionsOf(word, next) {
+  if (!word.startsWith('-') || word === '-' || word === '--') return [];
+  const valued = (option, rest) => ({ long: option.long, value: option.value ? (rest !== '' ? rest.replace(/^=/, '') : next) : undefined });
+  const prefixed = (name, rest) => MAVEN_OPTIONS.filter(({ long }) => name !== '' && long.startsWith(name)).map((option) => valued(option, rest));
+  if (word.startsWith('--')) {
+    const [name, ...value] = word.slice(2).split('=');
+    return prefixed(name, value.length > 0 ? `=${value.join('=')}` : '');
+  }
+  const token = word.slice(1);
+  const at = token.indexOf('=');
+  const name = at < 0 ? token : token.slice(0, at);
+  const exact = optionNamed(name);
+  if (exact) return [valued(exact, at < 0 ? '' : token.slice(at))];
+  if (at < 0 && MAVEN_OPTIONS.some(({ long }) => long.startsWith(token))) return prefixed(token, '');
+  // The longest name the word starts with; one that takes a value has the rest as its value.
+  for (let end = token.length - 1; end > 0; end -= 1) {
+    const option = optionNamed(token.slice(0, end));
+    if (option) {
+      if (option.value) return [valued(option, token.slice(end))];
+      break;
+    }
+  }
+  // Letters of options one after another, up to one that takes a value, which has the rest.
+  const found = [];
+  for (let i = 0; i < token.length; i += 1) {
+    const option = MAVEN_OPTIONS.find(({ short }) => short === token[i]);
+    if (!option) return found;
+    found.push(valued(option, token.slice(i + 1)));
+    if (option.value) return found;
+  }
+  return found;
+}
+
+// The first word of a Maven command that makes it read another settings file, or undefined.
+export const mavenSettingsWord = (args) => args.find((word, i) => readsMavenSettings(word, args[i + 1]));
 
 export function installTargets(program, args, { env = [] } = {}) {
   if (program === 'corepack') {
@@ -322,7 +396,7 @@ export function installTargets(program, args, { env = [] } = {}) {
   }
   // A settings file of Maven can hold a mirror, which serves every artifact from elsewhere, whatever the goal (second
   // review of shop PR #79).
-  const settings = MAVEN.includes(program) ? args.find((word) => MAVEN_SETTINGS.test(word)) : undefined;
+  const settings = MAVEN.includes(program) ? (env.find((word) => SOURCE_VARIABLE.test(word)) ?? mavenSettingsWord(args)) : undefined;
   if (settings) return [{ refused: settings, registry: true }];
   let targets;
   if (MAVEN.includes(program)) targets = mavenTargets(args);

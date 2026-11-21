@@ -24,7 +24,13 @@ export function qaSignal({ post, every = setInterval, stop = clearInterval, now 
   return async (run, start, logSize) => {
     const sha = run.qa?.sha;
     if (!sha) return start(run);
-    const send = (state, description) => post({ sha, state, description: description.slice(0, 140) }).catch((error) => log(`the status ${QA_CONTEXT} was not set: ${error.message}`));
+    // Each status goes out after the one before it: a beat still on its way when the run ends would reach GitHub after
+    // success, and leave ao/qa pending (review of shop PR #80).
+    let last = Promise.resolve();
+    const send = (state, description) => {
+      last = last.then(() => post({ sha, state, description: description.slice(0, 140) }).catch((error) => log(`the status ${QA_CONTEXT} was not set: ${error.message}`)));
+      return last;
+    };
     const testing = `qa tests ${run.key} on ${run.qa.environment}`;
     let ended = false;
     // Silence counts from the start of the run.
@@ -68,10 +74,13 @@ export function qaHolding(statuses, { approvers, now = Date.now, staleMs = STALE
 }
 
 // Waits while qaHolding holds the commit `sha`, reading its statuses again every pollMs; resolves null once free, or
-// the reason it gave up after maxMs. readStatuses(sha) resolves the statuses of the commit, newest first.
+// the reason it gave up. readStatuses(sha) resolves the statuses of the commit, newest first. maxMs counts for the
+// whole run of merge-gate, from its first wait: each PR on the same base waiting 100 minutes again ran past the 120
+// minutes of the job (review of shop PR #80). Past it, a PR still held gives up at once.
 export function waitForQa({ readStatuses, approvers, now = Date.now, sleep, staleMs = STALE_MS, pollMs = POLL_MS, maxMs = WAIT_MS, log = () => {} }) {
+  let since;
   return async (sha) => {
-    const since = now();
+    since ??= now();
     let told = false;
     for (;;) {
       const holding = qaHolding(await readStatuses(sha), { approvers, now, staleMs });

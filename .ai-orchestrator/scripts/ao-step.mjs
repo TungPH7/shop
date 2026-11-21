@@ -47,7 +47,7 @@ import { adfText, buildReviewPack, filesToQuote } from '../lib/workflow/review-p
 import { postKitCopyReports, readKitCopy, renderedReason } from '../lib/workflow/kit-copy.mjs';
 import { removeInstructions } from '../lib/workflow/review-tree.mjs';
 import { agentCommand, formatDecision, runGo } from '../lib/workflow/runner.mjs';
-import { CHANGES, appRolesOf, decideStep, dockerGate } from '../lib/workflow/steps.mjs';
+import { CHANGES, appRolesOf, decideStep, dockerGate, seoMarkText } from '../lib/workflow/steps.mjs';
 import { restoreWip, saveWip } from '../lib/workflow/wip.mjs';
 import { copyRunFiles, laneKeeper, removeNodeModules, runsSettings } from '../lib/workflow/lanes.mjs';
 import { installLane, pullsOfBranch, qaWatcher, runPlacer } from '../lib/workflow/lane-runs.mjs';
@@ -75,6 +75,8 @@ const RELEASE_COMMANDS = ['qa', 'release', 'ship', 'rollback', 'status'];
 const kitDir = resolve(process.env.AO_KIT_DIR ?? fileURLToPath(new URL('..', import.meta.url)));
 const projectDir = process.cwd();
 const runsDir = join(projectDir, '.ai', 'runs');
+// The mark of a comment of seo that --seo-ok takes, as the check prints it: its id and hash, or none (review of shop PR #81).
+const SEO_MARK = /^(?:\d+|none):(?:[0-9a-f]{16}|none)$/;
 // The locks of the commands that run agents, one file each (parallel-runs spec 5.1).
 const activeDir = join(runsDir, 'active');
 const lockFs = { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync };
@@ -187,7 +189,7 @@ export function runsFile(projectDir, file) {
 
 
 async function main() {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { go: { type: 'boolean', default: false }, answers: { type: 'string' }, note: { type: 'string' }, change: { type: 'string' }, stop: { type: 'boolean', default: false }, retest: { type: 'boolean', default: false }, 'light-report': { type: 'string' }, full: { type: 'boolean', default: false }, 'seo-ok': { type: 'boolean', default: false }, json: { type: 'boolean', default: false }, result: { type: 'string' }, budget: { type: 'string' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { go: { type: 'boolean', default: false }, answers: { type: 'string' }, note: { type: 'string' }, change: { type: 'string' }, stop: { type: 'boolean', default: false }, retest: { type: 'boolean', default: false }, 'light-report': { type: 'string' }, full: { type: 'boolean', default: false }, 'seo-ok': { type: 'string' }, json: { type: 'boolean', default: false }, result: { type: 'string' }, budget: { type: 'string' } } });
   const [command, arg, extra] = positionals;
   if (command === 'run') {
     await runCommand(positionals.slice(1), values);
@@ -209,7 +211,7 @@ async function main() {
     else console.log(`STOP: ${reason}`);
     writeResult(decision);
   };
-  const wrong = checkArgument(command, arg, space, extra) ?? checkChange(command, values.change, Boolean(values.note)) ?? (values.stop && command !== 'preview' ? '--stop goes with /ao-preview and /ao-run only' : null) ?? (values['light-report'] && command !== 'qa' ? '--light-report goes with /ao-qa only' : null) ?? (values.full && command !== 'review' ? '--full goes with /ao-review only' : null) ?? (values['seo-ok'] && command !== 'build' ? '--seo-ok goes with /ao-build only' : null) ?? (values.budget ? '--budget goes with /ao-run only' : null) ?? (values.result && !values.go ? '--result goes with --go' : null) ?? (values.json && values.go ? '--json is a dry run: it does not go with --go' : null);
+  const wrong = checkArgument(command, arg, space, extra) ?? checkChange(command, values.change, Boolean(values.note)) ?? (values.stop && command !== 'preview' ? '--stop goes with /ao-preview and /ao-run only' : null) ?? (values['light-report'] && command !== 'qa' ? '--light-report goes with /ao-qa only' : null) ?? (values.full && command !== 'review' ? '--full goes with /ao-review only' : null) ?? (values['seo-ok'] !== undefined && command !== 'build' ? '--seo-ok goes with /ao-build only' : null) ?? (values['seo-ok'] !== undefined && !SEO_MARK.test(values['seo-ok']) ? '--seo-ok takes the mark the check printed, such as 10612:a1b2c3d4e5f60718' : null) ?? (values.budget ? '--budget goes with /ao-run only' : null) ?? (values.result && !values.go ? '--result goes with --go' : null) ?? (values.json && values.go ? '--json is a dry run: it does not go with --go' : null);
   if (wrong) {
     early(wrong);
     return;
@@ -324,9 +326,25 @@ async function main() {
   const seoApps = Object.entries(projectApps).filter(([, app]) => app?.seo === true).map(([name]) => name);
   // Their hosts in every environment: the addresses seo's text may name besides schema.org (second review of shop PR #79).
   const seoHosts = seoApps.flatMap((name) => Object.values(projectApps[name]?.hosts ?? {})).filter((host) => typeof host === 'string');
-  const options = { roster, contract, gates, mapping, appRoles, seoApps, seoHosts, ...(values['seo-ok'] && { seoOk: true }), ...(values.answers && { answers: read(values.answers) }), ...(values.note && { note: read(values.note) }), ...(values.change && { change: values.change }), ...(values.retest && { retest: true }), ...(values['light-report'] && { lightReport: read(values['light-report']) }), ...(values.full && { full: true }) };
+  const options = { roster, contract, gates, mapping, appRoles, seoApps, seoHosts, ...(values['seo-ok'] !== undefined && { seoOk: values['seo-ok'] }), ...(values.answers && { answers: read(values.answers) }), ...(values.note && { note: read(values.note) }), ...(values.change && { change: values.change }), ...(values.retest && { retest: true }), ...(values['light-report'] && { lightReport: read(values['light-report']) }), ...(values.full && { full: true }) };
 
   const facts = await gather();
+  // Your seo-ok holds the comment of seo that is newest now (review of shop PR #80): kept for the later dev runs of the
+  // item, which wait for you again once seo writes or changes one. A dry run keeps nothing.
+  // It names the mark the check printed, and keeps nothing when the comment changed since (review of shop PR #81).
+  // It is kept whatever the build then does, so a review held for it goes on after /ao-build stops at the open PR
+  // (second review of shop PR #81).
+  if (values['seo-ok'] !== undefined && facts.item?.seo && values['seo-ok'] === seoMarkText(facts.item.seoMark)) {
+    const mark = facts.item.seoMark ?? { id: null, hash: null };
+    if (values.go) {
+      mkdirSync(join(runsDir, facts.item.key), { recursive: true });
+      writeFileSync(join(runsDir, facts.item.key, 'seo-ok.json'), `${JSON.stringify({ ...mark, at: new Date().toISOString() }, null, 2)}\n`);
+    }
+    facts.seoApproved = mark;
+    if (!values.json) console.log(`seo-ok ${values['seo-ok']}: ${mark.id ? `the comment ${mark.id} of SEO Specialist on ${facts.item.key}` : `no comment of SEO Specialist on ${facts.item.key}`} is the approved one${values.go ? ', kept for its later runs' : '; --go keeps it'}`);
+  } else if (values['seo-ok'] !== undefined && facts.item?.seo && !values.json) {
+    console.log(`seo-ok ${values['seo-ok']}: not the mark of the newest comment of SEO Specialist on ${facts.item.key}: seo wrote or changed one since you read it, so nothing is kept. Read it again on Jira before you approve it`);
+  }
   // A command that runs on the item of a preview in a lane stops it first, with --go: an agent may change its code. A
   // command of another item leaves it alone (C2 spec section 8).
   if (previewRecord?.lane && PREVIEW_STOPS.includes(command) && previewRecord.key === facts.item?.key) {

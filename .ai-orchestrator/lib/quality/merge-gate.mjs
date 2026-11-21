@@ -3,7 +3,7 @@
 // and changes-requested are read as the tracker guards read them. It also merges the PR of a release branch into main,
 // tags it and opens the merge back into develop, and merges those merges back (release-workflow spec 2.7).
 import { checkBranch, checkPrTitle, parseBranch } from '../tracker/conventions.mjs';
-import { adfText, changesRequestedOn, lastDecision, readChecks } from '../tracker/facts.mjs';
+import { adfText, changesRequestedOn, lastDecision, readChecks, sameRepo } from '../tracker/facts.mjs';
 import { ciAccount, latestFlagComment, needsYouMarker } from '../tracker/flags.mjs';
 import { raiseFlag } from '../tracker/sync.mjs';
 import { docsConditions, docsPullRequest, readDocsFacts } from './docs-pr.mjs';
@@ -44,18 +44,18 @@ export async function runMergeGate({ github, mergeClient, docs, notify, gates, a
     try {
       // The list already says whether merge-gate would skip it, before the reads.
       const reason = skipReason(listed, apps, gates);
-      const facts = reason ? undefined : await readMergeFacts(github, number, { docs, gates, apps, auditMain });
-      const decision = reason ? skip(reason) : decideMerge({ ...facts, gates, apps, approvers, today });
+      let facts = reason ? undefined : await readMergeFacts(github, number, { docs, gates, apps, auditMain });
+      let decision = reason ? skip(reason) : decideMerge({ ...facts, gates, apps, approvers, today });
       if (decision.action !== 'merge') {
         log(describe(number, decision, gates));
         if (decision.action === 'needs-you' && notify && onlyYou(decision.missing)) await tellYou({ pr: facts.pr, decision, github, getWriter, notify, apps, gates, dryRun, log });
         if (decision.action === 'conflict') await tellConflict({ pr: facts.pr, github, getWriter, apps, dryRun, log });
         continue;
       }
-      const what = `${decision.title} (${decision.method} at ${decision.sha.slice(0, 7)})${decision.docs ? `, the docs PR of ${decision.docs}` : ''}`;
+      const whatOf = (d) => `${d.title} (${d.method} at ${d.sha.slice(0, 7)})${d.docs ? `, the docs PR of ${d.docs}` : ''}`;
       if (dryRun) {
         const then = decision.release ? `, then tag ${decision.release.tag} and merge main back into ${decision.release.backMerge}` : '';
-        log(`Would merge #${number}: ${what}${then}`);
+        log(`Would merge #${number}: ${whatOf(decision)}${then}`);
         continue;
       }
       // A QA that tests the base: its deploy would stop it, and its run would be lost (Pilot 3, SHOP-28 and SHOP-69).
@@ -65,7 +65,17 @@ export async function runMergeGate({ github, mergeClient, docs, notify, gates, a
           log(`Waiting #${number}: ${held}`);
           continue;
         }
+        // The wait may have lasted up to 100 minutes, and you may have asked for changes or dismissed your approval
+        // meanwhile: the PR is read and decided again, and one no longer ready waits for the next run (review of shop
+        // PR #80).
+        facts = await readMergeFacts(github, number, { docs, gates, apps, auditMain });
+        decision = decideMerge({ ...facts, gates, apps, approvers, today: now().toISOString().slice(0, 10) });
+        if (decision.action !== 'merge') {
+          log(describe(number, decision, gates));
+          continue;
+        }
       }
+      const what = whatOf(decision);
       // The merge call pins the head, not the base: read the PR again right before it, and leave a PR whose base or head
       // moved since the facts were read to the next run (review round 2 of shop PR #13, Pilot 3 spec 2.9). The token is
       // bought first, so that only the merge call comes after that read (review round 3).
@@ -255,9 +265,6 @@ function describe(number, { action, reason, missing, paths, docs, note, base }, 
 
 // The PR of a release branch into main.
 export const isReleasePr = (pr) => parseBranch(pr.head.ref)?.kind === 'release' && pr.base.ref === 'main';
-
-// The head and the base of a PR are branches of this very repository, not of a fork.
-const sameRepo = (pr) => Boolean(pr.head.repo?.full_name) && pr.head.repo.full_name === pr.base.repo?.full_name;
 
 // A PR that merges main back: its head is main of this very repository, not a branch of that name in a fork.
 export const isBackMerge = (pr) => pr.head.ref === 'main' && sameRepo(pr);

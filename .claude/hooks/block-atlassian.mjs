@@ -1,6 +1,7 @@
 // PreToolUse hook for Bash and MCP tools (tracker-integration spec section 2.6): refuses the ways around jira-guard, and
 // writes outside the project space set in AO_JIRA_SPACE. The logic is checkToolCall in lib/tracker/guard.mjs. Allows
-// by printing nothing; refuses with permissionDecision "deny" and the reason.
+// by printing nothing, or with updatedInput for the comment of an agent; refuses with permissionDecision "deny" and the
+// reason.
 // The kit is in .ai-orchestrator/ of the project, or in AO_KIT_DIR.
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -27,4 +28,8 @@ try {
 }
 if (!decision.allow) {
   console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: decision.reason } }));
+} else if (decision.input) {
+  // The comment of an agent as the hook sends it (lib/tracker/stored-text.mjs, literalComment): Claude Code calls the
+  // tool with updatedInput in place of what the agent wrote.
+  console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', permissionDecisionReason: 'block-atlassian sends the comment as plain text', updatedInput: decision.input } }));
 }

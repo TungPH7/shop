@@ -11,7 +11,7 @@ import { gitRefusal, writeRefusal } from '../agents/scope.mjs';
 import { NON_AGENT_ROLES, WEB_ROLES } from '../rules/references.mjs';
 import { configReads, gitSubcommand } from './git-options.mjs';
 import { matchesGlob } from './glob.mjs';
-import { dependencyProblems, installRefusal, installTargets, workspaceCatalogs } from './dependencies.mjs';
+import { dependencyProblems, installRefusal, installTargets, SOURCE_NAME, SOURCE_VARIABLE, workspaceCatalogs } from './dependencies.mjs';
 
 const allow = { allow: true };
 const deny = (reason) => ({ allow: false, reason: `gh-guard: ${reason}` });
@@ -179,7 +179,9 @@ export function checkAgentCall(input, { gates: kitGates, contract, projectDir, r
       }
       // A spec catalog: takes its version from pnpm-workspace.yaml at the root of the project (second review of shop PR #79).
       const catalogs = workspaceCatalogs(readFile('pnpm-workspace.yaml')) ?? {};
-      const [problem] = dependencyProblems({ path: file.replaceAll('\\', '/'), before, after }, approved(), [], { catalogs });
+      // The file as Windows opens it: package.json::$DATA or package.json. is package.json (second review of shop PR #81).
+      const opened = file.replaceAll('\\', '/').replace(/:[^/]*$/, '').replace(/[. ]+$/, '');
+      const [problem] = dependencyProblems({ path: opened, before, after }, approved(), [], { catalogs });
       return problem ? deny(problem) : allow;
     }
     default:
@@ -194,6 +196,10 @@ function checkCommand(command, role, gates, roster, depth = 0) {
   if (BACKUP_FILE.test(command)) return deny(BACKUP);
   if (POWERSHELL_ENV.test(command)) return deny(IDENTITY);
   if (USER_VARIABLES.test(command)) return deny(USER_VARIABLES_REASON);
+  // ${NAME:=value} and ${NAME=value} set NAME as they expand (second review of shop PR #81).
+  const expanded = [...command.matchAll(EXPANSION_SET)].map(([, name]) => name);
+  if (expanded.some((name) => SESSION_VARIABLE.test(name))) return deny(IDENTITY);
+  if (gates.approvedLibraries && expanded.some((name) => SOURCE_NAME.test(name))) return deny(installRefusal([{ refused: expanded.find((name) => SOURCE_NAME.test(name)), registry: true }], []));
   for (const words of segments(command)) {
     const result = checkWords(words, role, gates, roster, depth);
     if (!result.allow) return result;
@@ -213,7 +219,8 @@ const WRAPPERS = {
   nice: ['-n', '--adjustment'],
   timeout: ['-s', '--signal', '-k', '--kill-after'],
 };
-const ASSIGNMENT = /^[A-Za-z_]\w*=/;
+// NAME=value or NAME+=value, which bash takes before a command too (review of shop PR #81).
+const ASSIGNMENT = /^[A-Za-z_]\w*\+?=/;
 // The basic auth password ao-step gives qa in its environment (release-workflow spec 2.5), named in a word of a command
 // the way bash, PowerShell or cmd expand it. Any process on the machine can read a command line, so the password goes
 // to curl on stdin: printf, a builtin of the shell, prints it into the pipe (Pilot 2, T6: qa ran curl -u).
@@ -237,14 +244,63 @@ const programOf = (word) => word?.split(/[\\/]/).at(-1).replace(/\.exe$/i, '').t
 const nested = (script, role, gates, roster, depth) => (depth < 5 ? checkCommand(script, role, gates, roster, depth + 1) : deny('too many nested shells'));
 // The shell builtins that set, export or clear a variable by name.
 const DECLARERS = new Set(['export', 'declare', 'typeset', 'readonly', 'local', 'unset', 'set']);
-const sessionVariable = (word) => SESSION_VARIABLE.test(word.split('=')[0]);
+// The name a word of a declarer or an assignment sets: what comes before =, or +=.
+const nameOf = (word) => word.split('=')[0].replace(/\+$/, '');
+const sessionVariable = (word) => SESSION_VARIABLE.test(nameOf(word));
+// The builtins that set a variable they name without NAME=: printf -v NAME, read NAME, mapfile NAME (second review of
+// shop PR #81). Under set -a, the shell exports it too.
+const NAME_SETTERS = new Set(['printf', 'read', 'readarray', 'mapfile', 'getopts']);
+const namesSet = (program, args) => (program === 'printf'
+  ? args.flatMap((word, i) => (word === '-v' ? [args[i + 1] ?? ''] : /^-v./.test(word) ? [word.slice(2)] : []))
+  : args.filter((word) => !word.startsWith('-')));
+// ${NAME:=value} and ${NAME=value}, which set NAME.
+const EXPANSION_SET = /\$\{([A-Za-z_]\w*):?=/g;
+// The variables that set the options or the start-up file of bash, before any program: SHELLOPTS=allexport exports every
+// variable set after it.
+const SHELL_SETUP = /^(?:SHELLOPTS|BASHOPTS|BASH_ENV)$/i;
+const SHELL_OPTIONS = 'do not set the options or the start-up file of a shell, set -a or allexport among them: a variable set after it is exported with no word for gh-guard to read. Pass a variable to one command as NAME=value in front of it';
+// Whether the options of set, or of a shell before its script, turn on allexport: -a, a group of flags with a, or
+// -o allexport.
+function exportsAll(args) {
+  for (let i = 0; i < args.length; i++) {
+    const word = args[i];
+    if (word === '--' || !/^[-+]/.test(word)) return false;
+    if (/^-[A-Za-z]*a[A-Za-z]*$/.test(word)) return true;
+    if (/^-[A-Za-z]*o$/.test(word) && /^allexport$/i.test(args[i + 1] ?? '')) return true;
+  }
+  return false;
+}
+// A variable that points a package manager, Maven or its JVM elsewhere, before any program, since a script of the
+// project may run them; or set for the commands after it (review of shop PR #80); or named to printf -v, read and the
+// like (second review of shop PR #81).
+function sourceWord(words, env, program) {
+  const before = env.find((word) => SOURCE_VARIABLE.test(word));
+  if (before) return before;
+  if (DECLARERS.has(program)) return words.slice(1).find((word) => SOURCE_VARIABLE.test(word) || SOURCE_NAME.test(word));
+  if (NAME_SETTERS.has(program)) return namesSet(program, words.slice(1)).find((word) => SOURCE_NAME.test(word));
+  return undefined;
+}
 
 // env: the VAR=value words before the command, which git reads too (GIT_CONFIG_*). A line of assignments alone changes
 // a variable the session already exports, so it counts too.
 function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
   if (env.some(sessionVariable)) return deny(IDENTITY);
+  if (env.some((word) => SHELL_SETUP.test(nameOf(word)))) return deny(SHELL_OPTIONS);
+  const first = words.length > 0 ? programOf(words[0]) : '';
+  const source = gates.approvedLibraries ? sourceWord(words, env, first) : undefined;
+  if (source) return deny(installRefusal([{ refused: source, registry: true }], []));
   if (words.length === 0) return allow;
-  const program = programOf(words[0]);
+  const program = first;
+  if (NAME_SETTERS.has(program) && namesSet(program, words.slice(1)).some((word) => SESSION_VARIABLE.test(word))) return deny(IDENTITY);
+  if (program === 'set' && exportsAll(words.slice(1))) return deny(SHELL_OPTIONS);
+  // set takes words, not names, after its options.
+  if (DECLARERS.has(program) && program !== 'set') {
+    const names = words.slice(1).filter((word) => !word.startsWith('-')).map(nameOf);
+    if (names.some((name) => SHELL_SETUP.test(name))) return deny(SHELL_OPTIONS);
+    // A name built from a variable, or a reference to another (declare -n), sets a variable gh-guard cannot name.
+    if (names.some((name) => /[$`]/.test(name))) return deny('write out the name of the variable you set or export: gh-guard reads the name, and a name built from a variable could be one of the session or of a package manager');
+    if (['declare', 'typeset', 'local'].includes(program) && words.slice(1).some((word) => /^-[A-Za-z]*n/.test(word))) return deny('do not make a reference to a variable (declare -n): gh-guard cannot tell which variable it sets');
+  }
   // A library installed by name, or downloaded and run by npx, must be on the approved list of project.yaml first, from
   // the project's registry and inside its range (C1 spec section 5, review of shop PR #79).
   if (gates.approvedLibraries) {
@@ -253,6 +309,7 @@ function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
   }
   if (DECLARERS.has(program) && words.slice(1).some((word) => !word.startsWith('-') && sessionVariable(word))) return deny(IDENTITY);
   if (SHELLS.has(program)) {
+    if (exportsAll(words.slice(1))) return deny(SHELL_OPTIONS);
     const at = words.findIndex((word, i) => i > 0 && /^-[a-z]*c[a-z]*$/.test(word));
     const script = words[at + 1] === '--' ? words[at + 2] : words[at + 1];
     if (at > 0 && script !== undefined) return nested(script, role, gates, roster, depth);
@@ -285,6 +342,8 @@ function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
       if (program === 'env' && /^(?:-u|--unset=)./.test(word) && sessionVariable(word.replace(/^-u|^--unset=/, ''))) return deny(IDENTITY);
       if (values.includes(word)) i++;
       else if (program === 'env' && ASSIGNMENT.test(word)) assignments.push(word);
+      // env sets a name built from a variable, as in env "$n=x": bash would not take it for an assignment.
+      else if (program === 'env' && /^[^=]*[$`][^=]*=/.test(word)) return deny('write out the name of the variable you set or export: gh-guard reads the name, and a name built from a variable could be one of the session or of a package manager');
       else if (!word.startsWith('-')) break;
     }
     if (program === 'timeout') i++;
@@ -560,12 +619,19 @@ function checkAoPr(words, role, gates) {
 // Windows paths ignore letter case, so the globs do too. tempDir may list several names of the temp folder, such as the
 // short (8.3) name os.tmpdir() gives for a user name with a space and the long one.
 function checkEdit(file, role, gates, projectDir, roster, tempDir) {
-  const path = relativeToProject(file, projectDir);
-  if (path === null) {
+  const inside = relativeToProject(file, projectDir);
+  if (inside === null) {
     const inTemp = [tempDir].flat().some((dir) => dir && relativeToProject(file, dir) !== null);
     return inTemp ? allow : deny(`${file} is outside the project: agents write only in the project and the temp folder`);
   }
+  // The path as Windows opens it, so a stream (seo-ok.json::$DATA) or a dot at the end (.npmrc.) is the file itself; and
+  // no short name, which reaches a file by another name (second review of shop PR #81).
+  if (inside.split('/').some((part) => SHORT_NAME.test(part))) return deny(`${file}: write a file by its long name, not a short name such as NPMRC~1`);
+  const path = windowsPath(inside);
   if (/^\.git(?:\/|$)/i.test(path)) return deny(GIT_DIR);
+  // The seo-ok of an item, its run state and the locks are ao-step's: an agent that wrote them could approve a comment
+  // of seo, or free an item another run holds (review of shop PR #81). The screenshots of a preview stay the agents'.
+  if (/^\.ai\/runs\/(?:active\/|[^/]+\/(?:seo-ok|state)\.json$)/i.test(path)) return deny(`${path} is ao-step's: agents do not write it`);
   const hit = gates.protected_paths.find(({ path: glob }) => matchesGlob(glob.toLowerCase(), path.toLowerCase()));
   if (hit && !(hit.editors ?? []).includes(role)) {
     return deny(`${hit.path} is protected: ${hit.editors ? `only ${hit.editors.join(', ')} may edit it` : 'agents do not edit it'}`);

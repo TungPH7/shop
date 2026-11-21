@@ -34,38 +34,49 @@ export function seoSection(spec) {
 }
 
 // What has no place in seo's text: [problem], [] when nothing. hosts: those of the apps with seo: true, in every
-// environment (project.yaml).
+// environment (project.yaml). A problem names its line and, for a command, its program from the list above, never the
+// words seo wrote: the reason of a STOP and the log of /ao-run reach the main session, which has Bash, before you read
+// them (review of shop PR #80).
 export function seoTextProblems(text, { hosts = [] } = {}) {
-  const problems = [];
+  const addresses = [];
+  const commands = [];
   const allowed = new Set([...hosts, ...DOC_HOSTS].map((host) => String(host).toLowerCase()));
   const named = new Set();
-  for (const address of String(text ?? '').match(/https?:\/\/[^\s"'<>`)\]}]+/g) ?? []) {
-    let host;
-    try {
-      host = new URL(address).hostname.toLowerCase();
-    } catch {
-      host = null;
+  const lines = String(text ?? '').split(/\r?\n/);
+  lines.forEach((line, i) => {
+    for (const address of line.match(/https?:\/\/[^\s"'<>`)\]}]+/g) ?? []) {
+      let host;
+      try {
+        host = new URL(address).hostname.toLowerCase();
+      } catch {
+        host = null;
+      }
+      const label = host ?? address;
+      if ((host && allowed.has(host)) || named.has(label)) continue;
+      named.add(label);
+      addresses.push(host ? `an address outside the hosts of the apps with seo: true and schema.org, on line ${i + 1}` : `an address that cannot be read, on line ${i + 1}`);
     }
-    const label = host ?? address;
-    if ((host && allowed.has(host)) || named.has(label)) continue;
-    named.add(label);
-    problems.push(host ? `an address on ${host}, which is no host of an app with seo: true nor schema.org` : `an address that cannot be read: ${address}`);
-  }
+  });
+  // The first word, cut at any space as COMMAND reads it (review of shop PR #81).
+  const programOf = (words) => {
+    const [first] = words.split(/\s/);
+    return PROGRAMS.find((program) => program === first) ?? 'unknown';
+  };
   let shell = false;
-  for (const line of String(text ?? '').split(/\r?\n/)) {
+  lines.forEach((line, i) => {
     const fence = /^\s*(```|~~~)\s*([\w-]*)/.exec(line);
     if (fence) {
       if (shell) shell = false;
       else if (SHELL_LANGUAGES.includes(fence[2].toLowerCase())) {
         shell = true;
-        problems.push(`a shell block (${fence[1]}${fence[2]})`);
+        commands.push(`a shell block (${fence[2].toLowerCase()}) on line ${i + 1}`);
       }
-      continue;
+      return;
     }
-    if (shell) continue;
+    if (shell) return;
     const start = line.replace(LINE_START, '');
-    if (COMMAND.test(start)) problems.push(`a command: ${start.trim()}`);
-    for (const [, span] of line.matchAll(/`([^`]+)`/g)) if (COMMAND.test(span.trim())) problems.push(`a command: ${span.trim()}`);
-  }
-  return [...new Set(problems)];
+    if (COMMAND.test(start)) commands.push(`a command (${programOf(start.trim())}) on line ${i + 1}`);
+    for (const [, span] of line.matchAll(/`([^`]+)`/g)) if (COMMAND.test(span.trim())) commands.push(`a command (${programOf(span.trim())}) on line ${i + 1}`);
+  });
+  return [...new Set([...addresses, ...commands])];
 }

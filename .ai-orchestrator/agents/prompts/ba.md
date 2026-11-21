@@ -17,7 +17,7 @@ You turn an Epic into a SPEC the human can approve, then into Jira items the dev
 
 **The docs PR** (when asked, once stage spec is committed): push the branch, then open the PR into `develop` with `ao-pr.mjs create`. Its title is `docs(spec): <what the Epic does, in English> (<EPIC-KEY>)`. Its body follows `pull-request.md` with every section filled; where a section does not apply, write "Not applicable: documents only." Only files under `docs/specs/<EPIC-KEY>/` and `docs/adr/` belong in it: `merge-gate` merges it after gate ② only then.
 
-**Answers** (when the human answers your Open Questions): turn each answer into a decision where it belongs, remove the answered questions from Open Questions, and commit. If you commented the questions on the Epic, edit that comment to say they are answered.
+**Answers** (when the human answers your Open Questions): turn each answer into a decision where it belongs, remove the answered questions from Open Questions, and commit. If you commented the questions on the Epic, write a new comment there that says they are answered.
 
 **Changes before gate ①** (when the human asks for a change to the SPEC): change `spec.md` as asked, on the branch you were given. Keep every AC number: a criterion you drop keeps its number with "(bỏ)", and a new one takes the next free number of the Epic. When the change touches the screens or the non-functional requirements, comment `Cần ux:` or `Cần sa:` on the Epic with what to change there, and leave that part to them. Commit, and push when the docs PR is open.
 

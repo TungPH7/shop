@@ -2,6 +2,7 @@
 // a client (lib/tracker/jira-client.mjs or github-client.mjs, or a fake in tests) and does no other I/O.
 import { checkBranch, extractKeys, parseBranch } from './conventions.mjs';
 import { expectedOptions } from './expected.mjs';
+import { plainText } from './stored-text.mjs';
 
 const ITEM_FIELDS = ['issuetype', 'status', 'labels', 'description', 'parent', 'subtasks', 'issuelinks'];
 // dor-met as automation checks it (contract note on `refine`): a Story or Task under an Epic whose plan is approved,
@@ -144,7 +145,7 @@ export function jiraTime(created) {
 // any other comment, or a report whose Result is not filled in. NOT TESTED counts as a report, so it hides an older FAIL
 // (agent-roster spec 2.9).
 export function qaReportResult(body) {
-  const lines = (typeof body === 'string' ? body : adfText(body)).split('\n').map((line) => line.replace(/^#+\s*/, '').trim());
+  const lines = plainText(typeof body === 'string' ? body : adfText(body)).split('\n').map((line) => line.replace(/^#+\s*/, '').trim());
   if (!lines.some((line) => /^QA report\b/i.test(line))) return null;
   const at = lines.findIndex((line) => /^Result$/i.test(line));
   const result = lines.slice(at + 1).find((line) => line !== '');
@@ -173,6 +174,15 @@ const FAILED = ['failure', 'timed_out'];
 // Review states that decide; COMMENTED does not.
 const DECISIVE = ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'];
 
+// Whether the head of a PR is in its own repository: one test for the guards, ao-step and merge-gate (reviews of shop
+// PR #80 and #81). GitHub gives head.repo null once a fork is deleted; a record with no repository on either side, as
+// in the recordings of the tests, counts as one.
+export const sameRepo = (pr) => {
+  const base = pr?.base?.repo?.full_name;
+  const head = pr?.head?.repo?.full_name;
+  return base ? head === base : !head;
+};
+
 // The ids among `needed` of the GitHub guards that hold for the item (as readItem returns it), in the order asked.
 // After qa-fail an item has several PRs; the newest one counts. `approvers` are your GitHub logins, for merge-approved.
 export async function githubGuards(github, { item, needed, contract, mapping, approvers = [] }) {
@@ -183,7 +193,6 @@ export async function githubGuards(github, { item, needed, contract, mapping, ap
     return cache.get(key);
   };
   // A PR from a fork is never the item's, whatever its branch is called (review round 2 of shop PR #21).
-  const sameRepo = (pr) => pr.head?.repo?.full_name === pr.base?.repo?.full_name;
   const allPulls = () => once('pulls', async () => (await github.getAll('/pulls', { state: 'all', sort: 'created', direction: 'desc' })).filter(sameRepo));
   const pullsOf = async (key) => (await allPulls()).filter(({ head }) => parseBranch(head.ref)?.key === key);
   const newest = async () => (await pullsOf(item.key))[0];
