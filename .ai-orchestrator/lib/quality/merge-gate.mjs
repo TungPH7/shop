@@ -3,7 +3,7 @@
 // and changes-requested are read as the tracker guards read them. It also merges the PR of a release branch into main,
 // tags it and opens the merge back into develop, and merges those merges back (release-workflow spec 2.7).
 import { checkBranch, checkPrTitle, parseBranch } from '../tracker/conventions.mjs';
-import { adfText, changesRequestedOn, lastDecision, readChecks } from '../tracker/facts.mjs';
+import { adfText, changesRequestedOn, lastDecision, readChecks, sameRepo } from '../tracker/facts.mjs';
 import { ciAccount, latestFlagComment, needsYouMarker } from '../tracker/flags.mjs';
 import { raiseFlag } from '../tracker/sync.mjs';
 import { docsConditions, docsPullRequest, readDocsFacts } from './docs-pr.mjs';
@@ -267,7 +267,6 @@ function describe(number, { action, reason, missing, paths, docs, note, base }, 
 export const isReleasePr = (pr) => parseBranch(pr.head.ref)?.kind === 'release' && pr.base.ref === 'main';
 
 // The head and the base of a PR are branches of this very repository, not of a fork.
-const sameRepo = (pr) => Boolean(pr.head.repo?.full_name) && pr.head.repo.full_name === pr.base.repo?.full_name;
 
 // A PR that merges main back: its head is main of this very repository, not a branch of that name in a fork.
 export const isBackMerge = (pr) => pr.head.ref === 'main' && sameRepo(pr);

@@ -11,7 +11,7 @@ import { gitRefusal, writeRefusal } from '../agents/scope.mjs';
 import { NON_AGENT_ROLES, WEB_ROLES } from '../rules/references.mjs';
 import { configReads, gitSubcommand } from './git-options.mjs';
 import { matchesGlob } from './glob.mjs';
-import { dependencyProblems, installRefusal, installTargets, SOURCE_VARIABLE, workspaceCatalogs } from './dependencies.mjs';
+import { dependencyProblems, installRefusal, installTargets, SOURCE_NAME, SOURCE_VARIABLE, workspaceCatalogs } from './dependencies.mjs';
 
 const allow = { allow: true };
 const deny = (reason) => ({ allow: false, reason: `gh-guard: ${reason}` });
@@ -213,7 +213,8 @@ const WRAPPERS = {
   nice: ['-n', '--adjustment'],
   timeout: ['-s', '--signal', '-k', '--kill-after'],
 };
-const ASSIGNMENT = /^[A-Za-z_]\w*=/;
+// NAME=value or NAME+=value, which bash takes before a command too (review of shop PR #81).
+const ASSIGNMENT = /^[A-Za-z_]\w*\+?=/;
 // The basic auth password ao-step gives qa in its environment (release-workflow spec 2.5), named in a word of a command
 // the way bash, PowerShell or cmd expand it. Any process on the machine can read a command line, so the password goes
 // to curl on stdin: printf, a builtin of the shell, prints it into the pipe (Pilot 2, T6: qa ran curl -u).
@@ -245,7 +246,7 @@ function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
   if (env.some(sessionVariable)) return deny(IDENTITY);
   // A variable that points a package manager, Maven or its JVM elsewhere, before any program, since a script of the
   // project may run them; or set for the commands after it (review of shop PR #80).
-  const source = gates.approvedLibraries ? (env.find((word) => SOURCE_VARIABLE.test(word)) ?? (DECLARERS.has(programOf(words[0])) ? words.slice(1).find((word) => SOURCE_VARIABLE.test(word)) : undefined)) : undefined;
+  const source = gates.approvedLibraries ? (env.find((word) => SOURCE_VARIABLE.test(word)) ?? (DECLARERS.has(programOf(words[0])) ? words.slice(1).find((word) => SOURCE_VARIABLE.test(word) || SOURCE_NAME.test(word)) : undefined)) : undefined;
   if (source) return deny(installRefusal([{ refused: source, registry: true }], []));
   if (words.length === 0) return allow;
   const program = programOf(words[0]);
@@ -570,6 +571,9 @@ function checkEdit(file, role, gates, projectDir, roster, tempDir) {
     return inTemp ? allow : deny(`${file} is outside the project: agents write only in the project and the temp folder`);
   }
   if (/^\.git(?:\/|$)/i.test(path)) return deny(GIT_DIR);
+  // The seo-ok of an item, its run state and the locks are ao-step's: an agent that wrote them could approve a comment
+  // of seo, or free an item another run holds (review of shop PR #81). The screenshots of a preview stay the agents'.
+  if (/^\.ai\/runs\/(?:active\/|[^/]+\/(?:seo-ok|state)\.json$)/i.test(path)) return deny(`${path} is ao-step's: agents do not write it`);
   const hit = gates.protected_paths.find(({ path: glob }) => matchesGlob(glob.toLowerCase(), path.toLowerCase()));
   if (hit && !(hit.editors ?? []).includes(role)) {
     return deny(`${hit.path} is protected: ${hit.editors ? `only ${hit.editors.join(', ')} may edit it` : 'agents do not edit it'}`);

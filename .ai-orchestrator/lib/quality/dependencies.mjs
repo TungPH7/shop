@@ -316,7 +316,12 @@ const REGISTRY_VARIABLE = /^(?:npm_config_|yarn_|bun_config_)\S*registry\S*=/i;
 // Variables that point a package manager, Maven or the JVM that runs it elsewhere, before any program: a script of the
 // project may run the package manager (review of shop PR #80). MAVEN_ARGS adds words to every mvn and mvnw of Maven
 // 3.9; the JVM takes -D words, such as -Duser.home, from MAVEN_OPTS and the other two.
-export const SOURCE_VARIABLE = /^(?:(?:npm_config_|yarn_|bun_config_)\S*registry\S*|MAVEN_ARGS|MAVEN_OPTS|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)=/i;
+// npm_config_userconfig and globalconfig point npm at another .npmrc, YARN_RC_FILENAME yarn at another .yarnrc.yml; a
+// value appended with += counts too, and the bare name, which export or declare sets after printf -v or read (review of
+// shop PR #81).
+const SOURCE_NAMES = '(?:(?:npm_config_|yarn_|bun_config_)\\S*registry\\S*|npm_config_(?:user|global)config|YARN_RC_FILENAME|MAVEN_ARGS|MAVEN_OPTS|JAVA_TOOL_OPTIONS|JDK_JAVA_OPTIONS|_JAVA_OPTIONS)';
+export const SOURCE_VARIABLE = new RegExp(`^${SOURCE_NAMES}\\+?=`, 'i');
+export const SOURCE_NAME = new RegExp(`^${SOURCE_NAMES}$`, 'i');
 
 // The options of Maven 3.9 (CLIManager): short name, long name, and whether it takes a value.
 const MAVEN_OPTIONS = [
@@ -340,33 +345,43 @@ const optionNamed = (name) => MAVEN_OPTIONS.find(({ short, long }) => short === 
 // -gsx.xml), short options one after another (-qsx.xml), a long option by any prefix that names it, after one dash or
 // two (--sett, -settings), and -D before user.home. next: the word after it.
 export function readsMavenSettings(word, next) {
-  if (!word.startsWith('-') || word === '-' || word === '--') return false;
+  return mavenOptionsOf(word, next).some(({ long, value }) => SETTINGS.includes(long) || (long === 'define' && SETTINGS_PROPERTY.test(value ?? '')));
+}
+
+// The options one word of a Maven command sets, as commons-cli reads it: [{ long, value }], value being the joined
+// rest or the next word for an option that takes one. A long name by any prefix after one dash or two counts as each
+// option it may name (review of shop PR #81: --define, -define, -qD).
+function mavenOptionsOf(word, next) {
+  if (!word.startsWith('-') || word === '-' || word === '--') return [];
+  const valued = (option, rest) => ({ long: option.long, value: option.value ? (rest !== '' ? rest.replace(/^=/, '') : next) : undefined });
+  const prefixed = (name, rest) => MAVEN_OPTIONS.filter(({ long }) => name !== '' && long.startsWith(name)).map((option) => valued(option, rest));
   if (word.startsWith('--')) {
-    const name = word.slice(2).split('=')[0];
-    return name !== '' && MAVEN_OPTIONS.some(({ long }) => long.startsWith(name) && SETTINGS.includes(long));
+    const [name, ...value] = word.slice(2).split('=');
+    return prefixed(name, value.length > 0 ? `=${value.join('=')}` : '');
   }
   const token = word.slice(1);
-  const name = token.split('=')[0];
-  if (token.startsWith('D')) return SETTINGS_PROPERTY.test(token.length > 1 ? token.slice(1) : (next ?? ''));
+  const at = token.indexOf('=');
+  const name = at < 0 ? token : token.slice(0, at);
   const exact = optionNamed(name);
-  if (exact) return SETTINGS.includes(exact.long);
-  if (!token.includes('=') && MAVEN_OPTIONS.some(({ long }) => long.startsWith(token))) return MAVEN_OPTIONS.some(({ long }) => long.startsWith(token) && SETTINGS.includes(long));
+  if (exact) return [valued(exact, at < 0 ? '' : token.slice(at))];
+  if (at < 0 && MAVEN_OPTIONS.some(({ long }) => long.startsWith(token))) return prefixed(token, '');
   // The longest name the word starts with; one that takes a value has the rest as its value.
   for (let end = token.length - 1; end > 0; end -= 1) {
     const option = optionNamed(token.slice(0, end));
     if (option) {
-      if (option.value) return SETTINGS.includes(option.long);
+      if (option.value) return [valued(option, token.slice(end))];
       break;
     }
   }
-  // Letters of options one after another, up to one that takes a value.
-  for (const letter of token) {
-    const option = MAVEN_OPTIONS.find(({ short }) => short === letter);
-    if (!option) return false;
-    if (SETTINGS.includes(option.long)) return true;
-    if (option.value) return false;
+  // Letters of options one after another, up to one that takes a value, which has the rest.
+  const found = [];
+  for (let i = 0; i < token.length; i += 1) {
+    const option = MAVEN_OPTIONS.find(({ short }) => short === token[i]);
+    if (!option) return found;
+    found.push(valued(option, token.slice(i + 1)));
+    if (option.value) return found;
   }
-  return false;
+  return found;
 }
 
 // The first word of a Maven command that makes it read another settings file, or undefined.

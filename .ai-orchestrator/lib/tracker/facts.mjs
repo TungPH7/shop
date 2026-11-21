@@ -176,6 +176,15 @@ const DECISIVE = ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'];
 
 // The ids among `needed` of the GitHub guards that hold for the item (as readItem returns it), in the order asked.
 // After qa-fail an item has several PRs; the newest one counts. `approvers` are your GitHub logins, for merge-approved.
+// Whether the head of a PR is in its own repository: one test for the guards, ao-step and merge-gate (reviews of shop
+// PR #80 and #81). GitHub gives head.repo null once a fork is deleted; a record with no repository on either side, as
+// in the recordings of the tests, counts as one.
+export const sameRepo = (pr) => {
+  const base = pr?.base?.repo?.full_name;
+  const head = pr?.head?.repo?.full_name;
+  return base ? head === base : !head;
+};
+
 export async function githubGuards(github, { item, needed, contract, mapping, approvers = [] }) {
   const workType = contract.work_types.find(({ jira_issue_type: type }) => type === item.type)?.id;
   const cache = new Map();
@@ -184,7 +193,6 @@ export async function githubGuards(github, { item, needed, contract, mapping, ap
     return cache.get(key);
   };
   // A PR from a fork is never the item's, whatever its branch is called (review round 2 of shop PR #21).
-  const sameRepo = (pr) => pr.head?.repo?.full_name === pr.base?.repo?.full_name;
   const allPulls = () => once('pulls', async () => (await github.getAll('/pulls', { state: 'all', sort: 'created', direction: 'desc' })).filter(sameRepo));
   const pullsOf = async (key) => (await allPulls()).filter(({ head }) => parseBranch(head.ref)?.key === key);
   const newest = async () => (await pullsOf(item.key))[0];

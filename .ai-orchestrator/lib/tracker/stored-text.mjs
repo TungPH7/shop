@@ -18,14 +18,38 @@ export function plainText(text) {
     .replace(/[^\S\n]+/g, ' ');
 }
 
-const ENTITIES = { nbsp: ' ', amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", colon: ':', num: '#', ast: '*', lowbar: '_', grave: '`', bsol: '\\' };
-const entity = (whole, name) => {
+// The named references the hooks decode: the signs of markdown, the spaces and the marks with no width. A reference not
+// here is left as it is, and the hooks fail closed on it (review of shop PR #81): Jira may decode every reference of
+// HTML5, some with no ";" too, so one this table does not know could hide a word.
+const SPACE = ' ';
+const ENTITIES = {
+  nbsp: SPACE, ensp: SPACE, emsp: SPACE, emsp13: SPACE, emsp14: SPACE, numsp: SPACE, puncsp: SPACE, thinsp: SPACE, hairsp: SPACE, mediumspace: SPACE, thickspace: SPACE, tab: SPACE, newline: '\n',
+  zerowidthspace: '', zwj: '', zwnj: '', shy: '', nobreak: '', wj: '', negativemediumspace: '', negativethickspace: '', negativethinspace: '', negativeverythinspace: '', invisibletimes: '', invisiblecomma: '', it: '', ic: '',
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", colon: ':', semi: ';', num: '#', ast: '*', midast: '*', lowbar: '_', grave: '`', bsol: '\\', verbar: '|', vert: '|', lsqb: '[', rsqb: ']', lbrack: '[', rbrack: ']', lpar: '(', rpar: ')', lcub: '{', rcub: '}', lbrace: '{', rbrace: '}', plus: '+', excl: '!', quest: '?', period: '.', comma: ',', dollar: '$', percnt: '%', sol: '/', equals: '=', hat: '^', tilde: '~',
+};
+// A reference: numeric with or without ";", as HTML reads it, or a name.
+const REFERENCE = /&(#[xX][0-9a-fA-F]+|#\d+|[A-Za-z][A-Za-z0-9]*)(;?)/g;
+const entity = (whole, name, semi) => {
   if (name[0] === '#') {
     const code = name[1] === 'x' || name[1] === 'X' ? Number.parseInt(name.slice(2), 16) : Number.parseInt(name.slice(1), 10);
     return Number.isInteger(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
   }
-  return ENTITIES[name.toLowerCase()] ?? whole;
+  const known = ENTITIES[name.toLowerCase()];
+  if (known !== undefined) return known;
+  // With no ";", HTML reads the longest name it knows at the start, as &nbspreport is a space and "report".
+  if (!semi) {
+    for (let end = name.length - 1; end >= 2; end -= 1) {
+      const start = ENTITIES[name.slice(0, end).toLowerCase()];
+      if (start !== undefined) return `${start}${name.slice(end)}`;
+    }
+  }
+  return whole;
 };
+// A reference left after decoding, such as &acirc; or the &T of AT&T, or null: the hooks fail closed on it.
+const LEFT = /&(?:#[0-9A-Za-z]*|[A-Za-z][A-Za-z0-9]*);?/;
+export const undecodedReference = (text) => LEFT.exec(String(text ?? ''))?.[0] ?? null;
+// The text with each reference left read as `by`: a space, or nothing.
+export const withReferencesAs = (text, by) => String(text ?? '').replace(new RegExp(LEFT.source, 'g'), by);
 // The tags of HTML that start a block: each starts a line, as Jira keeps them.
 const BLOCK_TAG = /<\/?(?:p|div|br|li|ul|ol|h[1-6]|blockquote|pre|table|thead|tbody|tr|td|th|hr|section|article|header|footer)\b[^>]*>/gi;
 // What starts a line of markdown and is gone from the text Jira keeps: a quote, a heading, a list, a cell of a table.
@@ -36,7 +60,7 @@ export function markupText(text) {
   const decoded = String(text ?? '')
     .replace(BLOCK_TAG, '\n')
     .replace(/<[^>]*>/g, '')
-    .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, entity);
+    .replace(REFERENCE, entity);
   const plain = plainText(decoded)
     // A link keeps its words: [Cần](url) is Cần.
     .replace(/\[([^\]\n]*)\]\([^)\n]*\)/g, '$1')

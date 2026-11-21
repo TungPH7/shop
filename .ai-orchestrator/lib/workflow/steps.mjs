@@ -72,14 +72,15 @@ function withSeo(decision, facts, options) {
   const epicType = contract.work_types.find(({ id }) => id === 'epic').jira_issue_type;
   const epic = facts.epic?.key ?? (item.parent?.type === epicType ? item.parent.key : null);
   const kindOf = (run) => SEO_KINDS.find(({ purposes, roles }) => purposes.includes(run.purpose) && roles.includes(run.role))?.kind;
-  // Outside an Epic, every dev run builds the comment of seo you approved with seo-ok, not only the first build: one seo
-  // wrote or changed since waits for you again (review of shop PR #80).
+  // Outside an Epic, every run that builds, reviews or tests the comment of seo needs the one you approved with seo-ok,
+  // not only the first build: one seo wrote or changed since waits for you again (reviews of shop PR #80 and #81). The
+  // prompt names the comment only then, as the one you approved.
   const outside = !epic && seoOutsideEpic(item, options);
-  if (outside && decision.runs.some((run) => kindOf(run) === 'dev')) {
+  if (outside && decision.runs.some((run) => kindOf(run))) {
     const held = seoApprovalStop(facts, options);
     if (held) return { ...held, lines: decision.lines ?? [] };
   }
-  const comment = outside ? item.seoMark?.id : undefined;
+  const comment = outside ? (item.seoMark?.id ?? undefined) : undefined;
   const runs = decision.runs.map((run) => {
     const kind = kindOf(run);
     return kind && run.prompt ? { ...run, prompt: `${run.prompt}
@@ -143,6 +144,14 @@ function carryOn(command, facts, options, asker) {
     return go([{ role: asked.role, key, effort: asked.effort, purpose: asked.purpose, resume: asked.session, prompt: answersPrompt(key, options.answers, { pr, role: asked.role }), checkout: asked.checkout }]);
   }
   if (!last) return null;
+  // Every review that stopped on the head of the PR goes on, each in its own session, whichever run is on record last:
+  // reviewer and security run at once and hit the usage limit together (review of shop PR #81).
+  const { pr } = facts;
+  const stoppedOnHead = (r) => STOPPED.includes(r.outcome) && REVIEWS.includes(r.purpose) && r.session && r.head && r.head === pr.headSha && !pr.reports?.[r.role]?.onHead;
+  const stoppedReviews = pr ? [...new Set(runs.map(({ role }) => role))].map((role) => runs.filter((r) => r.role === role).at(-1)).filter(stoppedOnHead).sort((a, b) => a.n - b.n) : [];
+  if (stoppedReviews.length > 0) {
+    return go(stoppedReviews.map((r) => ({ role: r.role, key, effort: r.effort, purpose: r.purpose, resume: r.session, prompt: resumePrompt(key, r.role), checkout: r.checkout, head: r.head, worktree: { name: reviewTree(pr.number, r.role), sha: r.head } })));
+  }
   if (STOPPED.includes(last.outcome)) {
     // A run is on record from its start (lib/workflow/runner.mjs): one killed before the first line of its log has no
     // session, and is made afresh (reviewer of ao-pilot PR #23).
@@ -151,10 +160,9 @@ function carryOn(command, facts, options, asker) {
     const goOn = { role: last.role, key, effort: last.effort, purpose: last.purpose, resume: last.session, prompt: resumePrompt(key, last.role), ...(last.head && { head: last.head }), ...(last.note && { note: last.note }), ...(last.rebuild && { rebuild: last.rebuild }), ...(last.request && { request: last.request }) };
     if (REVIEWS.includes(last.purpose)) {
       // A review goes on only on the head it was reviewing, with its worktree back, while its report is not on that
-      // head: on a new head, ao-pr would post what it wrote about the old one as the report of the new head.
-      const { pr } = facts;
-      if (!pr || !last.head || last.head !== pr.headSha || pr.reports?.[last.role]?.onHead) return null;
-      return go([{ ...goOn, checkout: last.checkout, head: last.head, worktree: { name: reviewTree(pr.number, last.role), sha: last.head } }]);
+      // head: on a new head, ao-pr would post what it wrote about the old one as the report of the new head. Those that
+      // stopped on this head went on above.
+      return null;
     }
     // A build goes on where its agent left the checkout, on the branch it made, as build-again does: the checkout of
     // its first run is develop.
@@ -706,20 +714,21 @@ const seoOutsideEpic = (item, options) => {
 // description points to a SPEC has no comment, and its mark has no id. Null when the dev runs may go, or the stop.
 function seoApprovalStop(facts, options) {
   const { item } = facts;
-  if (options.seoOk) return null;
-  const now = item.seoMark ?? { id: null, hash: null };
+  const mark = seoMarkText(item.seoMark);
   const approved = facts.seoApproved;
-  if (approved && approved.id === now.id && approved.hash === now.hash) return null;
+  // seo-ok names the mark the check printed, so it holds the comment you read, not one written since (review of shop
+  // PR #81).
+  if (options.seoOk === mark || (approved && seoMarkText(approved) === mark)) return null;
   const issues = seoTextProblems(item.seoComment ?? '', { hosts: options.seoHosts ?? [] });
   const holds = issues.length > 0 ? `. It holds ${issues.join('; ')} (lines of the comment)` : '';
-  if (approved) {
-    return stop('you', `the newest comment of SEO Specialist on ${item.key} is not the one you approved with seo-ok: seo wrote or changed one since${holds}`, `Read the newest comment of SEO Specialist on ${item.key} on Jira; when it is right, /ao-build ${item.key} seo-ok`);
-  }
-  return stop('you',
-    `${item.key} has the label ao-seo and is in no Epic: its dev agent builds the comment of SEO Specialist word for word, and seo wrote it from web pages${holds}`,
-    `Read the comment of SEO Specialist on ${item.key} (or the section ## SEO its description points to); when it is right, /ao-build ${item.key} seo-ok`,
-  );
+  const next = `Read the newest comment of SEO Specialist on ${item.key} on Jira (or the section ## SEO its description points to); when it is right, /ao-build ${item.key} seo-ok ${mark}`;
+  if (options.seoOk) return stop('you', `the comment of SEO Specialist on ${item.key} changed after the check showed it: seo wrote or changed one since${holds}`, next);
+  if (approved) return stop('you', `the newest comment of SEO Specialist on ${item.key} is not the one you approved with seo-ok: seo wrote or changed one since${holds}`, next);
+  return stop('you', `${item.key} has the label ao-seo and is in no Epic: its dev agent builds the comment of SEO Specialist word for word, and seo wrote it from web pages${holds}`, next);
 }
+
+// The mark of a comment of seo as seo-ok names it: its id and hash, or none.
+export const seoMarkText = (mark) => `${mark?.id ?? 'none'}:${mark?.hash ?? 'none'}`;
 
 // The next branch of an item after QA fail: the same kind, key and slug, with -r2, -r3… (tracker-integration spec 2.5).
 const nextRound = (headRef) => {

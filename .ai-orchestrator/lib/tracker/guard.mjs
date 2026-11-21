@@ -5,7 +5,7 @@ import { NON_AGENT_ROLES, WEB_ROLES } from '../rules/references.mjs';
 import { checkTransition } from '../transitions.mjs';
 import { extractKeys } from './conventions.mjs';
 import { adfText, githubGuards, jiraGuards, jiraTime, qaReportResult, readItem } from './facts.mjs';
-import { markupText, plainText } from './stored-text.mjs';
+import { markupText, plainText, undecodedReference, withReferencesAs } from './stored-text.mjs';
 import { countRework, reworkStatus } from './rework.mjs';
 
 // input: the PreToolUse input of mcp__atlassian__transitionJiraIssue. Returns { allow: true } or { allow: false, reason }.
@@ -170,6 +170,10 @@ export function checkToolCall(input, { mapping, space }) {
   }
   // A role that reads web pages makes no request (second review of shop PR #79): "Cần <role>:" runs that role, ba or sa
   // with Bash among them, on what a page may have written.
+  // A reference of HTML the hook cannot decode could hide such a request from it, and Jira may decode it (review of shop
+  // PR #81): seo writes the character itself.
+  const left = WEB_ROLES.includes(input.agent_type) ? storedTexts(args).map(undecodedReference).find(Boolean) : null;
+  if (left) return deny(`seo writes no HTML reference that this hook cannot read (${left}): write the character itself`);
   if (WEB_ROLES.includes(input.agent_type) && holdsRequest(args)) {
     return deny('seo reads web pages, so it asks no other role: a request of "Cần <role>:" would run that role on what a page wrote. Say what you need in your answer, for the human');
   }
@@ -199,7 +203,9 @@ function storedTexts(value) {
 }
 
 // Whether any text of a tool input reads as a QA report (qaReportResult).
-const holdsQaReport = (value) => storedTexts(value).some((text) => qaReportResult(text) !== null);
+// A reference the hook cannot decode is read both as a space and as nothing, as Jira might decode it (review of shop
+// PR #81).
+const holdsQaReport = (value) => storedTexts(value).some((text) => [text, withReferencesAs(text, ' '), withReferencesAs(text, '')].some((read) => qaReportResult(read) !== null));
 
 // Whether any text of a tool input holds a request to a role (lib/workflow/requests.mjs): a line that starts with
 // "Cần <role>:", after an Agent value or not; or, anywhere, "Cần <role>:" to a role other than seo itself, which an

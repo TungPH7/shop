@@ -12,7 +12,7 @@ import { pathTier, requiredReviewRoles } from '../quality/review-tiers.mjs';
 import { waiverOnHead } from '../quality/waivers.mjs';
 import { parseBranch } from '../tracker/conventions.mjs';
 import { expectedOptions } from '../tracker/expected.mjs';
-import { adfText, changesRequestedOn, githubGuards, jiraGuards, qaEnvironment, readChecks, readLatestQaReport } from '../tracker/facts.mjs';
+import { adfText, changesRequestedOn, githubGuards, sameRepo, jiraGuards, qaEnvironment, readChecks, readLatestQaReport } from '../tracker/facts.mjs';
 import { latestFlagComment } from '../tracker/flags.mjs';
 import { countRework } from '../tracker/rework.mjs';
 import { recordedLine } from './findings.mjs';
@@ -115,13 +115,14 @@ export async function readWorkItem(jira, key, ctx) {
 function newestSigned(comments, agentName) {
   if (!agentName) return null;
   const signed = comments
-    .map(({ id, body, created }) => ({ id: id ?? null, text: (typeof body === 'string' ? body : adfText(body)).trim(), at: Date.parse(String(created).replace(/([+-]\d\d)(\d\d)$/, '$1:$2')) }))
+    .map(({ id, body, created }) => ({ id: id ?? null, body, text: (typeof body === 'string' ? body : adfText(body)).trim(), at: Date.parse(String(created).replace(/([+-]\d\d)(\d\d)$/, '$1:$2')) }))
     .filter(({ text }) => text.startsWith(`${agentName}:`))
     .sort((a, b) => b.at - a.at);
   return signed[0] ?? null;
 }
 
-const seoMarkOf = (comment) => (comment ? { id: comment.id, hash: createHash('sha256').update(comment.text).digest('hex').slice(0, 16) } : null);
+// The hash takes the whole body, so the target of a link or a card changes it too (review of shop PR #81).
+const seoMarkOf = (comment) => (comment ? { id: comment.id, hash: createHash('sha256').update(typeof comment.body === 'string' ? comment.body : JSON.stringify(comment.body ?? null)).digest('hex').slice(0, 16) } : null);
 
 // The mark of the comment of seo your seo-ok holds, which ao-step keeps in .ai/runs/<KEY>/seo-ok.json, or null.
 function seoApprovedOf(local, key) {
@@ -184,7 +185,6 @@ async function projectAt(github, sha) {
 
 // A PR from a fork is never an item's, whatever its branch is called: the repository is public, and /ao-run would review
 // and fix an outsider's code (review of shop PR #80). GitHub gives head.repo null once the fork is deleted.
-export const sameRepo = (pr) => pr.head?.repo?.full_name === pr.base?.repo?.full_name;
 
 // The PRs of a work item's branches, newest first, from this repository only.
 export async function pullsOf(github, key) {
@@ -248,7 +248,7 @@ export async function readPullRequest(github, number, { gates, apps, approvers =
     // A PR from a fork may share the name of a branch here; /ao-preview runs only branches of this repository. Only a
     // head and base both named this repository count as one: GitHub gives head.repo null once the fork is deleted
     // (live-run-fixes spec 2.8).
-    fromFork: !(pr.head?.repo?.full_name && pr.head.repo.full_name === pr.base?.repo?.full_name),
+    fromFork: !sameRepo(pr),
     author: pr.user?.login ?? null,
     headRef: pr.head.ref,
     headSha: head,

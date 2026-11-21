@@ -57,7 +57,11 @@ export function seoTextProblems(text, { hosts = [] } = {}) {
       addresses.push(host ? `an address outside the hosts of the apps with seo: true and schema.org, on line ${i + 1}` : `an address that cannot be read, on line ${i + 1}`);
     }
   });
-  const programOf = (words) => PROGRAMS.find((program) => words === program || words.startsWith(`${program} `) || words.startsWith(`${program}\t`));
+  // The first word, cut at any space as COMMAND reads it (review of shop PR #81).
+  const programOf = (words) => {
+    const [first] = words.split(/\s/);
+    return PROGRAMS.find((program) => program === first) ?? 'unknown';
+  };
   let shell = false;
   lines.forEach((line, i) => {
     const fence = /^\s*(```|~~~)\s*([\w-]*)/.exec(line);
