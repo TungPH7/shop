@@ -38,6 +38,7 @@ import com.tungph7.learnpostgres.common.error.NotFoundException;
 import com.tungph7.learnpostgres.common.error.ProblemDetailFactory;
 import com.tungph7.learnpostgres.common.logging.LoggingProperties;
 import com.tungph7.learnpostgres.common.security.TestSecurityConfig;
+import com.tungph7.learnpostgres.feature.category.dto.StoreCategory;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.ProductSort;
 import com.tungph7.learnpostgres.feature.product.dto.ProductPage;
@@ -162,8 +163,7 @@ class StoreCategoryProductsWebMvcTest {
 
   @Test
   void get_ofAProductInAVisibleCategory_returnsTheNameAndSlugOfTheCategory() throws Exception {
-    when(service.get("ao-thun-co-tron"))
-        .thenReturn(product(new StoreProduct.CategoryLink("Áo", "ao")));
+    when(service.get("ao-thun-co-tron")).thenReturn(product(new StoreCategory("Áo", "ao")));
 
     String body =
         mockMvc
@@ -205,7 +205,7 @@ class StoreCategoryProductsWebMvcTest {
         24);
   }
 
-  private static StoreProduct product(StoreProduct.CategoryLink category) {
+  private static StoreProduct product(StoreCategory category) {
     return new StoreProduct(
         ID,
         "Áo thun cổ tròn",

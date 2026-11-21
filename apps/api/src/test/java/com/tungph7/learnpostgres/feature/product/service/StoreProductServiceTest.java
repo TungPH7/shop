@@ -24,6 +24,7 @@ import com.tungph7.learnpostgres.common.error.BadRequestException;
 import com.tungph7.learnpostgres.common.error.BusinessException;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.error.NotFoundException;
+import com.tungph7.learnpostgres.feature.category.dto.StoreCategory;
 import com.tungph7.learnpostgres.feature.category.repository.CategoryRepository;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
@@ -96,8 +97,7 @@ class StoreProductServiceTest {
     when(queryRepository.findActiveDetail("ao-thun-co-tron"))
         .thenReturn(Optional.of(detailRow("Áo", "ao")));
 
-    assertThat(service.get("ao-thun-co-tron").category())
-        .isEqualTo(new StoreProduct.CategoryLink("Áo", "ao"));
+    assertThat(service.get("ao-thun-co-tron").category()).isEqualTo(new StoreCategory("Áo", "ao"));
   }
 
   @Test

@@ -155,7 +155,11 @@ public class StoreProductController {
       @Parameter(
               description =
                   "Order: NEWEST, PRICE_ASC or PRICE_DESC (then newest). Defaults to NEWEST;"
-                      + " RELEVANCE is refused")
+                      + " RELEVANCE is refused",
+              schema =
+                  @Schema(
+                      type = "string",
+                      allowableValues = {"NEWEST", "PRICE_ASC", "PRICE_DESC"}))
           @RequestParam(name = "sort", required = false)
           ProductSort sort,
       @Parameter(description = "Products to skip, 0 or more")

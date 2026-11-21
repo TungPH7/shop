@@ -15,6 +15,8 @@ import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 import com.tungph7.learnpostgres.feature.product.validation.ValidCategoryId;
 import com.tungph7.learnpostgres.feature.product.validation.ValidCompareAtPrice;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * The body of {@code PUT /api/admin/products/{id}}: {@code UpdateProductInput} of the API Contract
  * of the plan of SHOP-7, every field sent. Checked against the Product Rules by Bean Validation as
@@ -63,7 +65,16 @@ public record UpdateProductRequest(
     @NotNull(message = "must not be null") ProductStatus status,
     @NotNull(message = "must not be null") ProductAvailability availability,
     @NotNull(message = "must not be null") Long version,
-    @ValidCategoryId CategoryIdField categoryId)
+    @Schema(
+            type = "string",
+            format = "uuid",
+            nullable = true,
+            description =
+                "Absent: the product keeps its category. null: no category. Else the id of an"
+                    + " existing category, visible or hidden; any other value is a field error on"
+                    + " categoryId")
+        @ValidCategoryId
+        CategoryIdField categoryId)
     implements ValidCompareAtPrice.Prices {
 
   /**

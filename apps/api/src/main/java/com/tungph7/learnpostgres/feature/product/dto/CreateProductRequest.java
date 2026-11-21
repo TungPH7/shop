@@ -16,6 +16,8 @@ import com.tungph7.learnpostgres.feature.product.validation.ValidCategoryId;
 import com.tungph7.learnpostgres.feature.product.validation.ValidCompareAtPrice;
 import com.tungph7.learnpostgres.feature.product.validation.ValidSlug;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * The body of {@code POST /api/admin/products}: {@code CreateProductInput} of the API Contract of
  * the plan of SHOP-7, checked against the Product Rules by Bean Validation, every invalid field in
@@ -67,7 +69,15 @@ public record CreateProductRequest(
         BigDecimal compareAtPrice,
     ProductStatus status,
     ProductAvailability availability,
-    @ValidCategoryId String categoryId)
+    @Schema(
+            type = "string",
+            format = "uuid",
+            nullable = true,
+            description =
+                "Id of an existing category, visible or hidden; absent or null for none. Any other"
+                    + " value is a field error on categoryId")
+        @ValidCategoryId
+        String categoryId)
     implements ValidCompareAtPrice.Prices {
 
   public static final int NAME_MAX_LENGTH = 150;
