@@ -12,6 +12,7 @@ import jakarta.validation.constraints.Size;
 import com.tungph7.learnpostgres.common.text.FormText;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
+import com.tungph7.learnpostgres.feature.product.validation.ValidCategoryId;
 import com.tungph7.learnpostgres.feature.product.validation.ValidCompareAtPrice;
 import com.tungph7.learnpostgres.feature.product.validation.ValidSlug;
 
@@ -39,6 +40,9 @@ import com.tungph7.learnpostgres.feature.product.validation.ValidSlug;
  * @param compareAtPrice whole dong, above {@code price}, at most 999,999,999; or {@code null}
  * @param status {@code ACTIVE} when absent
  * @param availability {@code IN_STOCK} when absent
+ * @param categoryId absent or {@code null}: no category; otherwise the id of an existing category,
+ *     hidden too (plan of SHOP-81, API Contract). Read as a string, so {@code "abc"} is a field
+ *     error next to the others ({@link ValidCategoryId})
  */
 @ValidCompareAtPrice
 public record CreateProductRequest(
@@ -62,7 +66,8 @@ public record CreateProductRequest(
         @Max(value = CreateProductRequest.PRICE_MAX, message = "must be at most 999999999")
         BigDecimal compareAtPrice,
     ProductStatus status,
-    ProductAvailability availability)
+    ProductAvailability availability,
+    @ValidCategoryId String categoryId)
     implements ValidCompareAtPrice.Prices {
 
   public static final int NAME_MAX_LENGTH = 150;

@@ -12,6 +12,7 @@ import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 /**
  * A product as the admin API returns it: {@code AdminProduct} of the API Contract of the plan of
  * SHOP-7. Prices are whole dong; {@code version} is sent back when the product is edited (AC13).
+ * {@code categoryId} is the category of the product, hidden too, or {@code null} (SHOP-81).
  */
 public record AdminProduct(
     UUID id,
@@ -24,7 +25,8 @@ public record AdminProduct(
     ProductAvailability availability,
     @ApiInstant Instant createdAt,
     @ApiInstant Instant updatedAt,
-    long version) {
+    long version,
+    UUID categoryId) {
 
   /**
    * The product as it was saved. The instants are cut to milliseconds, as the API Contract writes
@@ -44,7 +46,8 @@ public record AdminProduct(
         product.getAvailability(),
         toMillis(product.getCreatedAt()),
         toMillis(product.getUpdatedAt()),
-        product.getVersion());
+        product.getVersion(),
+        product.getCategoryId());
   }
 
   private static Instant toMillis(Instant instant) {

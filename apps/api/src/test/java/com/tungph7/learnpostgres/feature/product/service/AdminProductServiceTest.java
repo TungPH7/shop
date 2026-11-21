@@ -29,6 +29,7 @@ import com.tungph7.learnpostgres.common.error.BusinessException;
 import com.tungph7.learnpostgres.common.error.ConflictException;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.logging.CorrelationContext;
+import com.tungph7.learnpostgres.feature.category.repository.CategoryRepository;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
@@ -55,7 +56,11 @@ class AdminProductServiceTest {
     when(correlation.currentId()).thenReturn(Optional.empty());
     service =
         new AdminProductService(
-            repository, mock(ProductQueryRepository.class), correlation, mock(EntityManager.class));
+            repository,
+            mock(ProductQueryRepository.class),
+            correlation,
+            mock(EntityManager.class),
+            mock(CategoryRepository.class));
   }
 
   @Test
@@ -168,7 +173,7 @@ class AdminProductServiceTest {
 
     service.create(
         new CreateProductRequest(
-            "a".repeat(150), null, null, new BigDecimal("1"), null, null, null));
+            "a".repeat(150), null, null, new BigDecimal("1"), null, null, null, null));
 
     assertThat(savedSlug()).isEqualTo("a".repeat(98) + "-3");
   }
@@ -219,7 +224,8 @@ class AdminProductServiceTest {
         null,
         ProductStatus.ACTIVE,
         ProductAvailability.IN_STOCK,
-        0L);
+        0L,
+        null);
   }
 
   /** The product the repository returns once saved: only its version is read back. */
@@ -238,7 +244,7 @@ class AdminProductServiceTest {
 
   private static CreateProductRequest request(String slug) {
     return new CreateProductRequest(
-        "Áo thun", slug, null, new BigDecimal("200000"), null, null, null);
+        "Áo thun", slug, null, new BigDecimal("200000"), null, null, null, null);
   }
 
   private static DataIntegrityViolationException violation(String constraint) {

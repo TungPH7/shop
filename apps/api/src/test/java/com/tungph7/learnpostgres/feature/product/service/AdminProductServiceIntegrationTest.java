@@ -443,6 +443,7 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
                 new BigDecimal("100000"),
                 null,
                 null,
+                null,
                 null));
 
     assertThat(product.slug()).isEqualTo("ao-thun-shop51-2");
@@ -486,7 +487,8 @@ class AdminProductServiceIntegrationTest extends AbstractContainerBaseTest {
 
   private AdminProduct create(String name, String slug) {
     return service.create(
-        new CreateProductRequest(name, slug, null, new BigDecimal("100000"), null, null, null));
+        new CreateProductRequest(
+            name, slug, null, new BigDecimal("100000"), null, null, null, null));
   }
 
   private AdminProduct createAfter(CyclicBarrier start, String name) throws Exception {
