@@ -120,13 +120,126 @@ Việc kỹ thuật đi cùng Epic. Plan đưa chúng vào Task nền và hai St
 - **TW2 · Hợp đồng API của danh mục**, dùng chung cho `api`, `admin` và `user`, theo cách chia của ADR-0003: phần quản trị dưới `/api/admin/…`, và phần của khách chỉ có GET và HEAD, chỉ trả danh mục Hiện. Phần quản trị: danh sách danh mục có số sản phẩm; chi tiết, thêm, sửa theo `version` như sản phẩm, và xóa, kể cả danh mục còn sản phẩm (AC8); thêm và sửa sản phẩm nhận danh mục, và chi tiết sản phẩm của quản trị trả danh mục của nó. Phần của khách: các danh mục cho liên kết của AC17; một danh mục theo slug, kèm HEAD cho Proxy của `user` trả 404 thật trước khi render (AC16, như trang chi tiết sản phẩm của SHOP-24); sản phẩm Đang bán của một danh mục, có sắp xếp và phân trang; danh mục Hiện của một sản phẩm trong chi tiết sản phẩm, cho breadcrumb (AC20, AC21); các danh mục của sitemap (AC19). Lỗi theo Problem Details như `api` đang làm. `sa` ghi hợp đồng trong plan.
 - **TW3 · Dữ liệu của E2E:** helper của `apps/admin/e2e/support/` và `apps/user/e2e/support/` tạo và xóa danh mục qua `/api` của host `admin`, như helper sản phẩm của SHOP-7. Tên danh mục của E2E kết thúc bằng `E2E <runId>` như tên sản phẩm, và vừa 60 ký tự. Trước mỗi lần chạy, E2E xóa các danh mục có tên E2E tạo cách đây hơn 1 giờ, sau khi đã xóa các sản phẩm E2E cũ (NFR23 của SHOP-7). E2E không ghi gì trên Production.
 
+### Non-functional requirements
+
+`sa` ghi mục này ngày 2026-11-21. Mỗi yêu cầu có mã NFR<n> để plan và item trỏ tới, và nói cách kiểm. Các mã ở đây là của SHOP-81. Những yêu cầu của SHOP-7 mà SPEC này nhắc, như "NFR7 của SHOP-7", vẫn giữ nguyên. Không quyết định nào ở đây cần quyền mà agent không có.
+
+**Quy mô**
+
+- **NFR1 · Quy mô thiết kế:** tới 200 danh mục và 10.000 sản phẩm (NFR1 của SHOP-7); 1–2 quản trị viên cùng lúc, mỗi người tới 2 tab; trang của khách tới 10 yêu cầu/giây. Ở quy mô này, mỗi danh sách sau trả hết trong một lệnh, không phân trang, như `design.md` đã chọn: danh sách danh mục của `admin` (S1.4), ô Danh mục của form sản phẩm (S4.2), các liên kết danh mục (S7.4) và các danh mục của sitemap. Nếu quá 200 danh mục, một Epic sau thêm phân trang. Tài nguyên giữ như `deploy.yaml`: `api` 768 MB, database 256 MB.
+
+**Hiệu năng**
+
+- **NFR2 · `api`:** đo ở `api`, với 200 danh mục và 10.000 sản phẩm, trong đó một danh mục có 5.000 sản phẩm:
+  - danh sách danh mục của quản trị kèm số sản phẩm, các danh mục cho liên kết của khách, các danh mục của sitemap, một danh mục theo slug (GET và HEAD), và chi tiết sản phẩm kèm danh mục, ở cả quản trị lẫn khách: mỗi lệnh xong trong 200 ms;
+  - sản phẩm Đang bán của một danh mục, với mỗi kiểu sắp xếp và ở trang bất kỳ: xong trong 200 ms;
+  - thêm và sửa danh mục, thêm và sửa sản phẩm có danh mục: mỗi lệnh xong trong 300 ms;
+  - xóa danh mục có 5.000 sản phẩm: xong trong 1 s, gồm cả lần đặt danh mục của các sản phẩm đó về trống (NFR15).
+
+  Số câu SQL của mỗi lệnh không tăng theo số danh mục hay số sản phẩm, tức không có N+1. Danh sách danh mục đếm sản phẩm trong cùng câu SQL với danh sách, và chi tiết sản phẩm đọc danh mục trong cùng câu với sản phẩm. Kiểm: integration test (Testcontainers) nạp dữ liệu trên, chạy mỗi lệnh 5 lần và lấy trung vị như NFR2 của SHOP-7, và đếm câu SQL của từng lệnh.
+- **NFR3 · Giới hạn của mỗi lệnh:** lệnh lấy sản phẩm của một danh mục nhận cùng tham số và giới hạn như danh sách sản phẩm của khách (NFR3 của SHOP-7): tối đa 100 sản phẩm mỗi lệnh (`user` dùng 24); kiểu sắp xếp chỉ là Mới nhất, Giá thấp đến cao hay Giá cao đến thấp; `offset` từ 0; giá trị sai trả 400 nêu tham số đó. Lệnh này không có từ khóa và không có Liên quan nhất (AC13). Trang danh mục của `user` đọc `page × 24` sản phẩm theo khối, như trang danh sách (Architecture Decisions 10 của plan SHOP-7), và dừng ở tổng số sản phẩm Đang bán của danh mục, nên `?page=999999` chỉ đọc tới hết danh mục. Kiểm: WebMvc test cho 400 của từng tham số sai; unit test của DAL với `page=999999`.
+- **NFR4 · Trang của khách:** S5, S7 và S8 giữ ngưỡng NFR4 của SHOP-7. Đo trên Staging bằng performance trace của chrome-devtools, giả lập điện thoại (Slow 4G, CPU chậm 4 lần):
+  - LCP ≤ 2,5 s và CLS ≤ 0,1;
+  - trên S5, đổi sắp xếp và bấm Xem thêm có INP ≤ 200 ms;
+  - TTFB ≤ 600 ms khi dữ liệu đã có trong cache của `user`.
+
+  Hàng liên kết danh mục (S7.3) không được đẩy lưới sản phẩm xuống sau khi lưới đã hiện: nó hiện cùng lúc với lưới, hay trước lưới. Epic không thêm thư viện JavaScript nào chạy ở trình duyệt: ô sắp xếp và nút Xem thêm của S5 dùng lại component của danh sách sản phẩm. Kiểm: `qa` ghi số đo vào báo cáo QA của Story `user`.
+- **NFR5 · `admin`:** trên Staging, trang Danh mục (S1) và ô Danh mục của form sản phẩm (S4.2) có dữ liệu trong 1 s sau khi mở. Sau khi bấm Lưu hay Xóa, thông báo kết quả hiện trong 1 s, như NFR6 của SHOP-7. Kiểm: `qa` ghi số đo vào báo cáo QA của Story `admin`.
+
+**Độ trễ của dữ liệu**
+
+- **NFR6 · Mốc 60 giây** (Category Rules, Độ trễ): như NFR7 của SHOP-7, không có lệnh báo `user` làm mới. Mọi lệnh đọc danh mục ở phía server của `user` dùng profile `catalog` của `cacheLife` đang có: trang danh mục, sản phẩm của danh mục, các liên kết danh mục, danh mục trong chi tiết sản phẩm và sitemap. Server phục vụ dữ liệu cũ tối đa 25 s, và cache router của trình duyệt giữ tối đa 30 s, nên cộng lại tối đa 55 s. Các lệnh đọc này nằm trong `<Suspense>`, và `pnpm run build` không gọi `api`. Bước HEAD của Proxy không cache (`no-store`), như với trang chi tiết sản phẩm. Trang chi tiết sản phẩm lấy danh mục từ chính phản hồi chi tiết sản phẩm, không qua một lệnh và một mục cache riêng, nên breadcrumb không lệch với phần còn lại của trang. Kiểm: E2E của AC5 tới AC9 chờ bằng `expect.poll` tới 60 s, như Testing Strategy.
+
+**Bảo mật**
+
+- **NFR7 · Ai gọi được lệnh ghi:** như NFR8 của SHOP-7 và ADR-0003, lệnh ghi danh mục chỉ nằm dưới `/api/admin/…`, sau basic auth của host `admin`, và `api` không có host công khai. Phần của khách chỉ có GET và HEAD. `user` chỉ gọi các lệnh đọc của khách, không gọi `/api/admin/**`, và không có route hay Server Action nào ghi danh mục. Chỉ helper E2E gọi API quản trị, qua host `admin` (TW3). Kiểm: `security` review PR của Task nền và hai Story; unit test cho thấy DAL danh mục của `user` chỉ gửi GET, và Proxy chỉ gửi HEAD.
+- **NFR8 · Danh mục Ẩn không lộ ra:** lệnh đọc của khách chỉ trả danh mục Hiện, và không nhận tham số nào mở ra danh mục Ẩn.
+  - Slug chưa từng có, slug của danh mục Ẩn và slug của danh mục đã xóa cho cùng một phản hồi 404, chỉ khác `instance`, `timestamp` và `correlationId`, như NFR9 của SHOP-7. Điều này đúng ở GET và HEAD của danh mục, ở lệnh lấy sản phẩm của danh mục, và ở trang của khách (AC16).
+  - Phản hồi của khách về một danh mục chỉ có tên và slug, và ở sitemap thêm lần sửa cuối. Nó không có trạng thái, số sản phẩm (Category Rules: chỉ `admin` thấy số này) hay `version`. Tổng số trên trang danh mục ("Đã xem 24 trên 30 sản phẩm") chỉ đếm sản phẩm Đang bán.
+  - Chi tiết sản phẩm của khách chỉ có danh mục khi danh mục đó Hiện. Khi danh mục Ẩn, trường danh mục là `null`, giống hệt sản phẩm không có danh mục (AC21).
+
+  Kiểm: WebMvc test so phản hồi 404 của ba trường hợp, và so chi tiết của một sản phẩm thuộc danh mục Ẩn với một sản phẩm không có danh mục; E2E của AC6, AC16, AC17, AC19 và AC21.
+- **NFR9 · Dữ liệu vào:**
+  - `api` kiểm mọi trường theo Category Rules bằng Bean Validation, và nêu mọi trường sai trong cùng một 400 (AC3). Độ dài và khoảng trắng tính như ở sản phẩm (`FormText`, đơn vị UTF-16).
+  - `categoryId` của lệnh thêm và sửa sản phẩm là UUID của một danh mục đang có, kể cả danh mục Ẩn, hay `null`. Mọi giá trị khác là 400 trên trường `categoryId` (AC10).
+  - Slug lấy từ đường dẫn của khách chỉ đi tới `api` sau khi qua bước kiểm định dạng như `isStoreSlug` của sản phẩm, ở cả Proxy lẫn DAL của `user`. Nhờ vậy một slug như `..%2Fadmin%2Fcategories` không thành lệnh tới một đường dẫn khác của `api`.
+  - Mọi câu SQL dùng tham số bind.
+
+  Kiểm: unit test của validation; unit test của DAL và của Proxy với slug `..`, `%2F` và `%E0`.
+- **NFR10 · Dữ liệu ra:** tên danh mục luôn hiện như chữ, ở cả `admin` lẫn `user`: trong bảng, hộp thoại, toast, `<option>`, `aria-label`, breadcrumb, H1, `<title>` và meta description (qua Metadata API của Next). JSON-LD chỉ dựng qua `JsonLd` đang có, vốn đổi `<` thành `<`. Kiểm: một test của `user` và một test của `admin` dùng tên danh mục `</script><script>alert(1)</script>` (34 ký tự, vừa 60), và thấy không script nào chạy, và khối JSON-LD và thẻ meta không mở thẻ mới.
+- **NFR11 · Lỗi, trùng và log:** Problem Details không lộ stack trace, câu SQL hay tên ràng buộc, như `api` đang làm. Tên trùng, slug trùng và một danh mục vừa bị xóa đều dựa vào ràng buộc của database, không chỉ vào bước kiểm trước, vì hai lệnh chạy cùng lúc đều qua được bước kiểm trước:
+  - vi phạm UNIQUE của tên hay của slug là 409, mỗi trường một mã riêng, để form hiện lỗi dưới đúng ô (AC4). Slug tự sinh mà thua một lần thêm cùng lúc thì thử số kế tiếp, như sản phẩm;
+  - vi phạm khóa ngoại của danh mục khi thêm hay sửa sản phẩm là 400 trên trường `categoryId`, cùng thân với bước kiểm trước (AC10), không phải 500.
+
+  `api` ghi log INFO cho mỗi lần thêm, sửa và xóa danh mục, gồm thao tác, `id`, slug và correlation id. Khi xóa, log có thêm số sản phẩm của danh mục lúc xóa. Log không ghi thân yêu cầu hay header `Authorization`. Kiểm: unit test của exception handler; integration test cho hai lần thêm cùng tên cùng lúc, và cho một lần gán chạy cùng lúc với lần xóa (Testing Strategy); `security` review.
+- **NFR12 · Ghi chồng và thử lại:**
+  - Lệnh sửa danh mục gửi `version` của `BaseEntity`, và `api` trả 409 khi `version` khác bản trong database (S2.4).
+  - Xóa danh mục là idempotent: trả 204 cả khi danh mục đã không còn. Vì vậy một lần xóa ở tab khác (S3.7) và một lần gửi lại sau khi mất phản hồi cho cùng kết quả.
+  - Thêm danh mục không cần idempotency key. Tên không được trùng (Category Rules), nên một lần thêm gửi lại sau khi lần trước đã thành công nhận 409 tên trùng, không tạo ra bản thứ hai.
+  - `admin` không tự thử lại lệnh ghi (NFR19 của SHOP-7: `retry.ts` chỉ thử lại GET, HEAD và OPTIONS).
+
+  Kiểm: WebMvc test của 409 và của hai lần DELETE liền nhau; unit test của hook ghi với MSW.
+- **NFR13 · Dependency và CSP:** Epic không thêm dependency nào ở ba app, không nới CSP nào, và không thêm extension PostgreSQL nào. Collation ICU ở Tech Stack là một đối tượng của schema `app`, không phải extension. Kiểm: `security` review, và `apps/api/pom.xml`, `package.json` của các app, `pnpm-lock.yaml` cùng `next.config.ts` không đổi.
+
+**Dữ liệu**
+
+- **NFR14 · Ràng buộc trong database** (TW1): database là chốt sau `api`. `app.categories` có:
+  - tên `NOT NULL`, CHECK dài 1–60 ký tự, và UNIQUE không phân biệt chữ hoa, chữ thường nhưng phân biệt dấu, bằng collation ở Tech Stack: "Áo" trùng "áo", còn "Áo" và "Ao" là hai tên khác nhau (AC4);
+  - slug `citext` UNIQUE như slug của sản phẩm, có CHECK định dạng và tối đa 100 ký tự. Sản phẩm không có CHECK này vì có dữ liệu cũ sai định dạng (NFR15 của SHOP-7); danh mục thì không có dữ liệu cũ nào;
+  - trạng thái `NOT NULL`, mặc định Hiện, có CHECK chỉ nhận hai giá trị;
+  - `version` và các cột của `BaseEntity`, cùng trigger `updated_at` như ở `app.products`.
+
+  `app.products.category_id` là `UUID` cho phép trống, có khóa ngoại tới `app.categories (id)` với `ON DELETE SET NULL` (NFR15). Cột này có index, vì lệnh xóa danh mục và trang danh mục tìm sản phẩm theo nó. Kiểm: integration test ghi thẳng bằng SQL từng giá trị sai, và thấy database từ chối.
+- **NFR15 · Xóa danh mục còn sản phẩm** (AC8, AC10, TW1): `sa` chọn `ON DELETE SET NULL` của khóa ngoại. Chính lệnh `DELETE` của danh mục làm các sản phẩm của nó thành không có danh mục, trong cùng câu lệnh và cùng transaction. Một lần gán sản phẩm chạy cùng lúc có hai khả năng: chờ lần xóa xong rồi nhận 400 của NFR11, hoặc xong trước rồi bị lần xóa đặt lại về trống. Không lúc nào có sản phẩm trỏ tới danh mục đã xóa. Với các sản phẩm đó:
+  - `category_id` thành trống. Tên, slug, mô tả, giá, giá gốc, trạng thái, tình trạng, `created_at`, `created_by` và `updated_by` giữ nguyên;
+  - `updated_at` đổi thành lúc xóa, vì trigger `trg_products_set_updated_at` của V3 chạy cho mọi UPDATE, kể cả UPDATE do khóa ngoại sinh ra. Điều này đúng ý: trang chi tiết của các sản phẩm đó đổi breadcrumb và JSON-LD (AC21), nên `lastmod` của chúng trong sitemap cũng đổi;
+  - `version` giữ nguyên. Nhờ vậy một form sửa sản phẩm đang mở không nhận 409 sửa chồng. Nếu form còn chọn danh mục đã xóa, nó nhận lỗi của AC10; nếu đã chọn danh mục khác hay "Không có danh mục", nó lưu được bình thường;
+  - trigger giá cũ `trg_products_sync_legacy_price` có chạy nhưng không làm gì, vì không cột giá nào đổi.
+
+  Kiểm: integration test xóa một danh mục có sản phẩm Đang bán lẫn Ẩn, rồi so từng cột của các sản phẩm đó trước và sau (Testing Strategy, AC8).
+- **NFR16 · Migration V7** (TW1): chỉ bước expand. V7 chạy trong một transaction, không sửa V1–V6 và không đụng cột giá cũ. Với 10.000 sản phẩm, V7 xong trong 10 s, và chỉ khóa `app.products` trong lúc thêm cột, khóa ngoại và index. Cột mới không có DEFAULT nên không viết lại bảng, và mọi dòng có sẵn có `category_id` trống. Trong lúc chuyển bản, và sau một lần rollback, `v0.3.0` chạy đúng trên schema V7:
+  - nó khởi động được: Flyway của nó bỏ qua V7 vì là migration "future" (mặc định `*:future`; `application*.yml` không đặt `ignore-migration-patterns`), và `ddl-auto: validate` không xét bảng hay cột mà entity không map;
+  - nó đọc, thêm, sửa và xóa sản phẩm như trước. Khi nó thêm, `category_id` trống. Khi nó sửa, entity của nó không map `category_id`, nên danh mục của sản phẩm còn nguyên. Khi nó xóa, khóa ngoại không cản, vì `app.products` là phía trỏ đi;
+  - nó không biết tới danh mục, nên `user` của nó không có trang danh mục. Danh mục còn nguyên trong database để bản sau dùng lại.
+
+  Danh mục không cần bước contract: V7 không thay hay bỏ cột nào, nên không bản sau nào phải gỡ gì của V7. Kiểm: integration test của migration ở Testing Strategy, cộng một test chạy các lệnh đọc, thêm, sửa và xóa sản phẩm của `v0.3.0` trên schema V7. Plan chọn cách chạy các lệnh đó, như bộ test sản phẩm của tag `v0.3.0`, hay một entity chỉ map các cột của `v0.3.0`.
+- **NFR17 · Thứ tự ổn định:** danh mục xếp theo tên với collation ở Tech Stack, rồi theo `id`. Sản phẩm của một danh mục xếp như danh sách của khách, với `id` (UUIDv7) làm khóa cuối, và Xem thêm bỏ những sản phẩm đã hiện, theo `id` (NFR18 của SHOP-7). Kiểm: integration test với các tên "An toàn", "Áo khoác", "Ăn vặt", "Bao tay", "Dép", "Đầm" và "quần" (chữ thường), mong đúng thứ tự đó; và với sản phẩm cùng giá, cùng `created_at`.
+- **NFR18 · Số sản phẩm của danh mục:** đếm lúc đọc, trong câu SQL của danh sách, không lưu thành cột hay bộ đếm. Nhờ vậy số luôn đúng, kể cả khi `v0.3.0` thêm hay xóa sản phẩm sau một lần rollback. Kiểm: integration test của AC1.
+- **NFR19 · Hai bản của các app chạy lẫn nhau:** trong lúc deployer chuyển bản, và sau một lần rollback, một app có thể gặp bản trước của app kia. Một tab `admin` đã mở từ trước khi deploy cũng vẫn chạy code cũ.
+  - Khi `user` hay `admin` của `v0.3.0` gặp `api` mới: trường danh mục mới của chi tiết sản phẩm chỉ là phần thêm, và schema Zod cũ, vốn không strict, bỏ qua nó. Một tab `admin` của `v0.3.0` gửi lệnh sửa sản phẩm không có `categoryId`. Khi đó `api` không được lặng lẽ bỏ danh mục của sản phẩm: nó giữ danh mục đang có, hay từ chối bằng 400. Plan chọn một trong hai cách và ghi ở API Contract. Lựa chọn "Không có danh mục" của form mới luôn gửi `categoryId: null` một cách tường minh.
+  - Khi `user` mới gặp `api` của `v0.3.0`: chi tiết sản phẩm thiếu trường danh mục thì được coi như không có danh mục (breadcrumb hai mục), không phải lỗi. Các lệnh danh mục trả 404, nên trang danh mục là S6, và hàng liên kết danh mục ẩn đi như NFR20.
+
+  Kiểm: unit test của schema Zod với payload không có trường danh mục; WebMvc test của lệnh sửa sản phẩm không có `categoryId`.
+
+**Khả dụng**
+
+- **NFR20 · Khi `api` lỗi:** như NFR26 của SHOP-7, mỗi lệnh `user` gửi tới `api` có thời hạn 5 s, và lỗi hay hết giờ không bao giờ thành 404 hay một trang trống:
+  - trang danh mục: Proxy trả 503, `Retry-After: 30`, `Cache-Control: no-store`, với một trang lỗi ngắn, như trang chi tiết sản phẩm. DAL ném lỗi thay vì trả `null`, nên trang là lỗi 5xx (S5.5), không phải S6 hay "Chưa có sản phẩm nào trong danh mục này.";
+  - sitemap: trả 5xx thay vì một sitemap thiếu danh mục;
+  - hàng liên kết danh mục của S7: `sa` chọn ẩn hàng và ghi log lỗi, còn danh sách sản phẩm vẫn hiện như cũ. Hàng này chỉ là lối tắt tới các trang danh mục, nên lỗi của nó không làm hỏng cả trang Sản phẩm. Lỗi không vào cache, nên hàng hiện lại ở lần đọc kế tiếp khi `api` chạy lại;
+  - `admin`: hiện trạng thái lỗi của S1.4, S2.3 và S4.2.
+
+  Kiểm: unit test của DAL với `api` chậm và với `api` trả 500; render test của S7 khi lệnh danh mục lỗi.
+- **NFR21 · Deploy:** smoke test giữ như `deploy.yaml`. Epic không đổi `deploy.yaml`, secret hay biến môi trường nào, nên không cần mục Ask first nào. Deployer không tự dump database trước khi chạy migration, nên ở gate ⑤ bạn xác nhận bản backup mới nhất của Production cách đó không quá 24 giờ, như NFR27 của SHOP-7.
+
+**Lưu giữ**
+
+- **NFR22 · Danh mục đã xóa:** xóa là xóa hẳn dòng, không có thùng rác hay xóa mềm (AC7, AC8). Liên kết của các sản phẩm với danh mục đó mất cùng lúc. Nó chỉ lấy lại được từ các bản backup hằng ngày của kit (khoảng 4 tuần, như NFR20 của SHOP-7), bằng tay, bởi người có quyền trên VPS. Danh mục không chứa dữ liệu cá nhân, và `created_by`, `updated_by` vẫn là `system` tới Epic đăng nhập.
+- **NFR23 · Công cụ tìm kiếm:** danh mục Ẩn, đã xóa hay vừa đổi slug rời các trang của khách và sitemap trong 60 s (NFR6). Đường dẫn cũ trả 404 và không chuyển hướng (Scope: Out), nên công cụ tìm kiếm bỏ nó ở lần thu thập sau. Việc đó nằm ngoài tầm của Epic.
+
 ## Tech Stack
 
-Không thêm framework hay dependency: stack như README gốc và README của từng app, như SPEC của SHOP-7 đã ghi. Những điểm Epic này đụng tới:
+Không thêm framework, dependency hay extension PostgreSQL nào (NFR13): stack như README gốc và README của từng app. Các phiên bản dưới đây đọc từ `apps/api/pom.xml`, `package.json` của từng app và `.ai-orchestrator/deploy.yaml` ngày 2026-11-21, và Epic không đổi bản nào. Những điểm Epic này đụng tới:
 
-- **`api`:** Java 21, Spring Boot 4.0.6, PostgreSQL 17. Thêm migration V7. Slug của danh mục sinh bằng cùng code với slug của sản phẩm (`ProductSlugs`), không chép một bản thứ hai; `sa` chọn chỗ đặt phần dùng chung đó. Thứ tự tên theo tiếng Việt (Category Rules) cũng do `sa` chọn cách làm, như collation hay hàm `app.search_fold` đã có.
-- **`admin`:** route và chữ mới trong i18n của `admin`.
-- **`user`:** route `/[locale]/categories/[slug]`; Proxy của `user` (`src/proxy.ts`) thêm bước HEAD cho trang danh mục, như với trang chi tiết sản phẩm; JSON-LD dựng bằng `breadcrumbLd` và `JsonLd` đang có.
+- **`api`:** Java 21; Spring Boot 4.0.9, theo `pom.xml` (SPEC của SHOP-7 ghi 4.0.6); springdoc-openapi 3.0.3 cho `/v3/api-docs`; Testcontainers 2.0.5. PostgreSQL 17: `postgres:17-alpine`, ghim theo digest ở `deploy.yaml`, và cùng tag đó ở Testcontainers. Thêm migration V7 sau V6.
+- **Slug dùng chung** (quyết định của `sa`): phần chung của `ProductSlugs` chuyển sang `common/text/Slugs.java` của `api`, cạnh `FormText`. Phần chung đó gồm: bỏ dấu, `đ` thành `d`, gạch ngang, cắt ở 100 ký tự, kiểm định dạng và hậu tố `-2`, `-3`… `ProductSlugs` gọi `Slugs` mà vẫn giữ tên, hằng và hành vi của nó, nên test của nó chạy không cần sửa. Slug của danh mục gọi cùng `Slugs`. Mỗi bên chỉ giữ chữ dự phòng riêng, cho một tên không còn chữ hay số nào sau khi bỏ dấu: `san-pham` cho sản phẩm như cũ, `danh-muc` cho danh mục.
+- **Thứ tự tên tiếng Việt và tên không trùng** (quyết định của `sa`): V7 tạo một collation ICU không tất định trong schema `app`, như `CREATE COLLATION app.vi_ci (provider = icu, locale = 'vi-u-ks-level2', deterministic = false)`, và cột tên của `app.categories` dùng collation đó. Một collation giữ cả hai quy tắc của Category Rules:
+  - `ORDER BY name` xếp theo bảng chữ cái tiếng Việt: ă sau a, đ sau d, rồi tới dấu thanh, và không phân biệt chữ hoa, chữ thường. Ví dụ: "An toàn", "Áo khoác", "Ăn vặt", "Bao tay", "Dép", "Đầm", "quần" (NFR17). Hàm `app.search_fold` không xếp được như vậy, vì nó gộp ă với a và đ với d;
+  - UNIQUE của tên so ở mức 2 của ICU: chữ hoa và chữ thường là một, còn dấu thì khác. Vì vậy "Áo" trùng "áo" mà không trùng "Ao" (AC4). Cách so này không phụ thuộc vào locale của database trên VPS, trong khi chính locale đó quyết định `lower()` và `citext` có đổi được chữ có dấu như "Á" hay không.
+
+  ICU không phải một extension: PostgreSQL 16 trở đi dựng với ICU theo mặc định, và `CREATE COLLATION` chỉ cần quyền CREATE trên schema `app`, mà user của app có vì nó sở hữu schema đó (V1). V7 tự kiểm collation có xếp đúng tiếng Việt không, như "Az" phải đứng trước "Ăn", điều mà collation gốc của ICU làm ngược lại. Nếu không đúng, V7 dừng lần deploy với một thông báo rõ, như V6 làm, và Development gặp lỗi đó trước Staging và Production. Cột tên này không dùng được với `LIKE`, và Epic cũng không tìm theo tên danh mục. Nếu integration test đầu tiên trên `postgres:17-alpine` cho thấy image không có dữ liệu ICU của `vi`, plan đổi sang `ORDER BY app.search_fold(name), name, id` (khi đó đ xếp lẫn với d) và một UNIQUE trên tên do `api` gấp về chữ thường, rồi ghi rõ chỗ khác đó.
+- **`admin`:** React 19.2.7, React Router 7.18.5, TanStack Query 5.101.0, nuqs 2.8.9, zod 4.6.7 và Vite 8.3.8, không đổi. Thêm route và chữ mới trong i18n của `admin`.
+- **`user`:** Next 16.4.6, next-intl 4.13.0, React 19.2.7 và zod 4.6.7, không đổi. Thêm route `/[locale]/categories/[slug]`. Proxy của `user` (`src/proxy.ts`) thêm bước HEAD cho trang danh mục, như với trang chi tiết sản phẩm. JSON-LD dựng bằng `breadcrumbLd` và `JsonLd` đang có. Mọi lệnh đọc danh mục dùng profile `catalog` của `cacheLife` đang có (NFR6).
 
 ## Commands
 
@@ -148,6 +261,7 @@ Trên Development hay Staging, `/ao-qa` đặt `E2E_USER_URL`, `E2E_ADMIN_URL`, 
 ```
 apps/api/src/main/java/com/tungph7/learnpostgres/feature/category/  → controller, service, repository, dto, domain của danh mục
 apps/api/src/main/java/com/tungph7/learnpostgres/feature/product/   → danh mục trong sản phẩm, sản phẩm của một danh mục
+apps/api/src/main/java/com/tungph7/learnpostgres/common/text/       → Slugs, phần chung của slug sản phẩm và danh mục
 apps/api/src/main/resources/db/migration/                           → V7
 apps/api/src/test/java/com/tungph7/learnpostgres/feature/category/  → unit, WebMvc, DataJpa và integration test (Testcontainers)
 apps/admin/src/features/category/                                    → api, components, hooks, model của danh mục
@@ -233,4 +347,13 @@ Không có. Ngày 2026-11-21 bạn trả lời cả 11 câu, và mỗi câu tr�
 - Bạn đổi đề xuất về xóa danh mục còn sản phẩm: xóa được, sau hộp thoại xác nhận nêu số sản phẩm, và các sản phẩm đó thành "Không có danh mục" (Category Rules, AC8, TW1).
 - Vì vậy bạn bỏ bộ lọc Danh mục của danh sách sản phẩm trong `admin`: AC11 giữ số với "(bỏ)", và Scope ghi nó ở phần Out.
 
-`seo` quyết thẻ robots của trang danh mục Hiện chưa có sản phẩm Đang bán ở mục SEO, và `sa` quyết cách làm sản phẩm thành không có danh mục khi xóa danh mục (TW1) ở plan.
+`seo` quyết thẻ robots của trang danh mục Hiện chưa có sản phẩm Đang bán ở mục SEO. `sa` đã quyết cách làm sản phẩm thành không có danh mục khi xóa danh mục (TW1) ở NFR15, và plan ghi chi tiết của cách đó.
+
+`sa` không có câu hỏi cho bạn. Các quyết định của `sa` nằm ở mục Non-functional requirements và Tech Stack, và không quyết định nào cần quyền mà agent không có. Bạn duyệt chúng cùng SPEC ở gate ①:
+
+- quy mô 200 danh mục, với các danh sách danh mục không phân trang (NFR1);
+- `ON DELETE SET NULL` khi xóa danh mục: `updated_at` của các sản phẩm đó đổi, còn `version` của chúng giữ nguyên (NFR15);
+- collation ICU tiếng Việt cho thứ tự tên và cho tên không trùng, có đường lui nếu image không có dữ liệu ICU (Tech Stack);
+- `Slugs` dùng chung cho hai loại slug, với slug dự phòng `danh-muc` của danh mục (Tech Stack);
+- lệnh sửa từ một tab `admin` cũ không làm mất danh mục của sản phẩm (NFR19);
+- hàng liên kết danh mục ẩn đi khi `api` lỗi, còn danh sách sản phẩm vẫn hiện (NFR20).
