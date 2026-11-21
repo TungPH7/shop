@@ -31,7 +31,6 @@ public record StoreProduct(
     String description,
     @ApiInstant Instant updatedAt,
     @Schema(
-            nullable = true,
             description =
                 "The category of the product when it is VISIBLE; null when the product has none or"
                     + " its category is hidden")

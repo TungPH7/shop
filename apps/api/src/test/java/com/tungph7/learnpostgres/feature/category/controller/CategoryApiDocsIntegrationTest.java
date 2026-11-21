@@ -123,7 +123,9 @@ class CategoryApiDocsIntegrationTest extends AbstractContainerBaseTest {
                 .value(containsString("Absent")))
         .andExpect(
             jsonPath(SCHEMAS + ".StoreProduct.properties.category.$ref")
-                .value("#/components/schemas/StoreCategory"));
+                .value("#/components/schemas/StoreCategory"))
+        // Next to $ref, a type "null" would say the category is always null (OpenAPI 3.1).
+        .andExpect(jsonPath(SCHEMAS + ".StoreProduct.properties.category.type").doesNotExist());
   }
 
   private ResultActions apiDocs() throws Exception {
