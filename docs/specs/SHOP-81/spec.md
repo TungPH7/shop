@@ -339,9 +339,179 @@ Ngoài DoD của Epic trong `.ai-orchestrator/docs/sdlc.md`:
 - Bản release chứa Epic lên Production sau gate ⑤, và smoke test sau deploy pass.
 - Mục SEO của `seo` và mục Non-functional requirements của `sa` đạt, mỗi yêu cầu theo cách kiểm của nó.
 
+## SEO
+
+`seo` ghi mục này ngày 2026-11-21, cho các màn hình của `user` (`seo: true`): S5, S6, S7 và S8. S1 đến S4 là của `admin` (`seo: false`), nên không có SEO. Chữ dưới đây là bản cuối, dev đặt đúng từng chữ vào `apps/user/messages/{vi,en}.json`; code dựng trang theo các quy tắc ở đây.
+
+### Quy tắc chung của mục SEO
+
+- **Từ khóa chính của trang danh mục là chính tên danh mục**, do quản trị viên nhập (Scope: Out: không có tên theo ngôn ngữ). Lúc viết SPEC chưa có tên nào, nên không có từ khóa cụ thể và không có lượng tìm kiếm hằng tháng: mọi chỗ ghi "chưa có số liệu". Việc chọn tên danh mục theo từ khóa thật là việc của người nhập; hướng dẫn ở cuối mục này, cho user guide.
+- **Chưa tìm xem trang nào đang xếp hạng.** Không có từ khóa nào để tìm, và kết quả tìm cho một tên bịa ra sẽ là số liệu giả. Khi shop có các danh mục thật, nên tìm lại từ khóa của từng danh mục (Open Questions, câu 2).
+- **Chữ trong ngoặc nhọn là giá trị đưa vào như đối số của ICU của next-intl, không nối chuỗi:** `{name}` là tên danh mục nguyên như người nhập (tới 60 ký tự), `{total}` là số sản phẩm Đang bán của danh mục. Tên hiện như chữ, không bao giờ như HTML (NFR10).
+- **Đếm ký tự theo `String.length`.** Hậu tố của title do mẫu của root layout thêm vào là ` · tungph7 codebase`, 19 ký tự (`siteConfig.name` có 16, cộng ` · `). Mọi con số title dưới đây đã gồm hậu tố này. Không đặt `title.absolute` cho trang danh mục, để hậu tố vẫn do mẫu thêm vào.
+- **Trang web nhỏ, nên không đặt từ khóa vào chỗ nào ngoài những chỗ dưới đây.** Không thêm H2 hay đoạn chữ chỉ để chèn từ khóa.
+
+### S5 · Trang danh mục (`/[locale]/categories/[slug]`)
+
+- **Intent:** mua hay so sánh trong một loại hàng ("áo khoác", "bao tay"); thường xếp hạng là một trang danh mục của cửa hàng: tên loại hàng, lưới sản phẩm có giá, bộ lọc hay sắp xếp. Trang của SPEC (lưới thẻ, giá, sắp xếp) khớp với dạng đó.
+- **Cluster:** trụ cột của các sản phẩm trong danh mục (mỗi trang chi tiết là vệ tinh, liên kết ngược về đây bằng breadcrumb S8); vệ tinh của `/[locale]/products` (liên kết ở S7, và thanh điều hướng mục Sản phẩm).
+- **Keywords:** chính `{name}` (chưa có số liệu); phụ: không đặt từ khóa phụ cố định, vì danh mục chỉ có tên. Nếu quản trị viên đặt tên có hai ba từ (như "Áo khoác nữ"), chính các từ đó là từ phụ và đã nằm trong từ khóa chính.
+- **Ranking pages:** không tìm được: không có từ khóa cụ thể lúc này (xem Quy tắc chung).
+- **Slug:** `/vi/categories/{slug}` · `/en/categories/{slug}`. Slug là slug đã lưu của danh mục, sinh từ tên không dấu (Category Rules), và giống nhau ở hai ngôn ngữ. SPEC giữ `categories` ở cả `/vi`; khai pathname tiếng Việt như `/vi/danh-muc/...` không thuộc Epic này.
+
+**Title.** Dev chọn câu đầu tiên trong ba câu dưới đây mà tổng độ dài (cả ` · tungph7 codebase`) không quá 60 ký tự:
+
+| Bậc | vi | en |
+|---|---|---|
+| 1 (khóa `Category.titleLong`) | `{name} – Xem giá và tình trạng còn hàng` | `{name} – See prices and stock status` |
+| 2 (khóa `Category.titleShort`) | `{name} – Xem giá, còn hàng` | `{name} – Prices and stock` |
+| 3 | `{name}` | `{name}` |
+
+Bậc 1 vừa 50–60 ký tự khi `{name}` có 1–8 ký tự (vi) hay 1–11 ký tự (en); bậc 2 vừa khi 11–21 (vi) hay 12–22 (en); bậc 3 cho tên dài hơn, tới 41 ký tự. Tên dài hơn 41 ký tự giữ nguyên ở bậc 3 và Google tự cắt. Vì từ khóa là chữ do người nhập, dev không cắt tên, không thêm chữ đệm để đủ 50 ký tự; title ngắn hơn 50 là chấp nhận được.
+
+Ví dụ: "Áo khoác" (8 ký tự) → vi `Áo khoác – Xem giá và tình trạng còn hàng · tungph7 codebase` (60). "Jackets" (7) → en `Jackets – See prices and stock status · tungph7 codebase` (56).
+
+**Meta description.** Dev ghép các câu theo thứ tự, và chỉ thêm câu 2 khi tổng không quá 160 ký tự. Không có thương hiệu: title đã có (khóa `Category.metaDescription1`, `Category.metaDescription2`):
+
+| Câu | vi | en |
+|---|---|---|
+| 1 (từ khóa chính ở đầu) | `{name}: xem giá, tình trạng còn hàng và chi tiết từng sản phẩm đang bán tại cửa hàng.` | `{name}: see prices, stock status and details for every product currently on sale in the shop.` |
+| 2 (kêu gọi hành động) | `Sắp xếp theo giá hoặc mới nhất, rồi chọn ngay sản phẩm bạn cần.` | `Sort by price or newest, then pick the product you need.` |
+
+Hai câu dài `{name}` + 144 ký tự (cả hai ngôn ngữ), nên vừa 150–160 khi `{name}` có 6–16 ký tự. Tên dài hơn 16 ký tự chỉ có câu 1 (`{name}` + 80 ký tự). Tên ngắn hơn 6 ký tự cho 145–149 ký tự: chấp nhận. Giới hạn cứng là 160. Ví dụ: "Áo khoác" → 152 ký tự, "Jackets" → 151 ký tự. Chữ nói đúng điều trang có: giá và tình trạng còn hàng của từng sản phẩm.
+
+**Chữ của trang:**
+
+| Chữ | vi | en |
+|---|---|---|
+| H1 (S5.3) | `{name}` | `{name}` |
+| Đoạn mở đầu (đề xuất, chờ quyết định ở Open Questions, câu 1) | `{name} gồm {total} sản phẩm đang bán, kèm giá và tình trạng còn hàng. Chọn một sản phẩm để xem mô tả chi tiết.` | `{name} has {total} products on sale, each with its price and stock status. Pick a product to see its full description.` |
+| Nhãn ô sắp xếp (S5.4) | không đổi: "Sắp xếp" | không đổi: "Sort by" |
+| Nút (S5.8) | không đổi: "Xem thêm" | không đổi: "Load more" |
+| Liên kết (S5.10) | không đổi: "Xem tất cả sản phẩm" | không đổi: "View all products" |
+| Alt | không có ảnh: thẻ sản phẩm dùng ô màu có chữ cái đầu, là chữ trang trí, không cần alt | như vi |
+
+H1 giữ như `design.md` S5.3: đúng tên danh mục, không tiền tố hay hậu tố, vì tên đó là từ khóa chính và AC12, AC15 cũng đọc như vậy. Đoạn mở đầu, khi có, dùng ICU plural cho `{total}` bằng 1 (vi không đổi; en `{name} has 1 product on sale, …`).
+
+- **Outline:** một H1; không có H2 hay H3. Lưới là `<ul aria-label="Danh sách sản phẩm">` (S5.5), tên sản phẩm là chữ trong thẻ có liên kết. Trang chứa từ khóa chính ở title, H1, breadcrumb, meta description, và (nếu có) đoạn mở đầu, đủ cho trang loại này; không thêm H2 để "phủ" từ khóa. Độ dài trang do sản phẩm quyết, không có chữ độn.
+- **Information gain:** dữ liệu của chính shop: giá, giá gốc, tình trạng còn hàng và số sản phẩm Đang bán của từng danh mục, mới trong vòng 60 giây (NFR6). Không có nội dung biên tập (SPEC không có mô tả danh mục), nên đây là lợi thế duy nhất so với trang loại này ở nơi khác; trang không giả vờ có hơn thế.
+- **E-E-A-T:** Trust nằm ở dữ liệu đúng: giá và tình trạng đọc từ `api`, không viết tay; không có số sao, đánh giá, huy hiệu "bán chạy" hay số liệu nào mà shop không có (Epic không có đánh giá). Experience và Expertise: danh mục là phân loại của chính quản trị viên của shop. Lưu ý: `user` chưa có trang liên hệ, giao hàng hay đổi trả (không thuộc Epic này); đó là thiếu sót chung của site, không riêng của danh mục.
+- **Internal links:** tên từng sản phẩm của lưới → `/[locale]/products/{slug sản phẩm}` (anchor là tên sản phẩm); `Trang chủ` / `Home` → `/[locale]`; mục Sản phẩm của thanh điều hướng → `/[locale]/products`; "Xem tất cả sản phẩm" → `/[locale]/products` (chỉ khi trống). Mọi liên kết là `<a href>` thật do `Link` của next-intl dựng; không dùng nút có `onClick` để chuyển trang. Các anchor khác nhau vì là tên sản phẩm.
+- **Technical:**
+  - **Dữ liệu có cấu trúc:** một khối JSON-LD `BreadcrumbList` hai mục, `breadcrumbLd` và `JsonLd` đang có: 1 `Trang chủ`/`Home` → `localizedUrl(locale, '/')`; 2 `{name}` → `localizedUrl(locale, '/categories/{slug}')` (AC18). Cùng danh sách mục với breadcrumb trên trang. Không thêm `ItemList`, `CollectionPage`, `FAQPage` hay `Product` cho trang này: Google không cho kết quả đặc biệt nào cho chúng ở trang loại này. `Organization` và `WebSite` đã ở root layout.
+  - **Canonical:** `localizedUrl(locale, '/categories/{slug đã lưu}')`: ngôn ngữ đang xem, không `?sort=`, không `?page=`, và đúng slug đã lưu kể cả khi đường dẫn viết hoa (`/vi/categories/AO` → `…/ao`) (AC18). `?page=` ở trang này là danh sách nối thêm (trang `?page=2` đã chứa cả 24 sản phẩm đầu), nên canonical về trang gốc đúng và không đặt `noindex` cho các biến thể `?sort=`/`?page=`: noindex ở đó mâu thuẫn với canonical.
+  - **hreflang:** `vi`, `en` và `x-default` (về `/vi`, ngôn ngữ mặc định), bằng `buildPageMetadata` (`localizedAlternates`) đang có. `lang` của trang là locale của đường dẫn, như root layout đang đặt. Hai ngôn ngữ chỉ khác chữ giao diện và hậu tố title, vì tên danh mục nhập một lần; hreflang vẫn đúng và mỗi ngôn ngữ có canonical của chính nó.
+  - **Danh mục Hiện mà chưa có sản phẩm Đang bán (AC15):** HTTP 200 như SPEC, và thẻ robots `noindex` (dev gọi `buildPageMetadata` với `index: false`, ra `noindex, nofollow` như các trang riêng tư của site, và không có canonical hay hreflang). Lý do: trang gần như trống chỉ có một câu báo, nên là trang mỏng; nó không có trong sitemap (AC19) và không có liên kết nào dẫn tới (AC17), nên `noindex` chỉ che trường hợp có người đặt liên kết ngoài. Khi danh mục có sản phẩm, trang tự đổi về `index` ở lần đọc kế tiếp (trong vòng 60 giây) và máy tìm kiếm lập chỉ mục lại ở lần thu thập sau. Dev quyết bằng cùng dữ liệu của trang, không thêm lệnh gọi `api`.
+  - **Sitemap (AC19):** có đường dẫn của danh mục Hiện có sản phẩm Đang bán, ở ngôn ngữ mặc định, kèm hreflang `vi`/`en` và `lastmod`, như các mục sản phẩm của `sitemap.ts` (hàm `addressesOf`); không đặt `priority` hay `changeFrequency`, vì Google bỏ qua cả hai và các mục sản phẩm cũng không đặt. Danh mục Ẩn, đã xóa hay chỉ có sản phẩm Ẩn không có.
+  - **robots.txt:** không đổi: `allow: /`, `disallow: /api/`. Trang danh mục thu thập được. Danh mục Ẩn trả 404 thật, không chặn bằng `robots.txt`.
+  - **Ảnh để chia sẻ:** `opengraph-image.tsx` của `[locale]` đang có, chung cho cả site; không có ảnh danh mục (Scope: Out), nên không làm ảnh riêng.
+  - **Trong HTML trả về:** H1, breadcrumb, đoạn mở đầu, 24 thẻ sản phẩm đầu, `<title>`, meta description, canonical, hreflang và JSON-LD phải có trong HTML của phản hồi đầu tiên, không chỉ sau khi trình duyệt chạy JavaScript. Dữ liệu danh mục đọc trong `<Suspense>` (NFR6) và được stream vào cùng phản hồi, nên điều này giữ được; `qa` kiểm bằng cách đọc HTML thô.
+- **Core Web Vitals:** LCP dưới 2,5 s, INP dưới 200 ms, CLS dưới 0,1 (NFR4 đo trên Staging). Trang không có ảnh, nên LCP thường là H1 hay thẻ sản phẩm đầu. Breadcrumb và H1 chờ tên danh mục: khung xương của lưới phải giữ chỗ cho chúng để không đẩy lưới xuống (CLS).
+
+**Kiểm (cho `qa`), trên HTML thô của `/vi/categories/{slug}` và `/en/categories/{slug}`, một danh mục có sản phẩm Đang bán:**
+
+1. Đúng một `<h1>`, chữ là tên danh mục; `<html lang>` là `vi` hay `en`.
+2. `<title>` theo bậc đã chọn ở trên, có hậu tố ` · tungph7 codebase`, không quá 60 ký tự khi tên dưới 42 ký tự. Meta description theo câu 1 hay câu 1 + 2, không quá 160 ký tự, có tên danh mục.
+3. `<link rel="canonical">` là địa chỉ tuyệt đối của chính trang ở ngôn ngữ đang xem, không tham số, kể cả khi mở với `?sort=price-asc&page=2` và với slug viết hoa. Có `<link rel="alternate" hreflang>` cho `vi`, `en` và `x-default`.
+4. Đúng một khối `application/ld+json` `BreadcrumbList`, hai mục, `position` 1 và 2, URL tuyệt đối, khớp breadcrumb nhìn thấy; không có `<` thô trong khối.
+5. Tên danh mục `</script><script>alert(1)</script>` không làm hỏng `<title>`, meta hay JSON-LD (NFR10).
+6. Danh mục Hiện chưa có sản phẩm Đang bán: HTTP 200, `<meta name="robots" content="noindex…">`, không có canonical; danh mục có sản phẩm: không có thẻ robots `noindex`.
+7. `/sitemap.xml` có `<url>` của danh mục với `xhtml:link` `vi`/`en` và `lastmod`; không có danh mục trống, Ẩn hay đã xóa. `/robots.txt` không chặn `/categories/`.
+8. Có ít nhất một tên sản phẩm của danh mục trong HTML thô, không chỉ sau khi chạy JavaScript.
+
+### S6 · Không tìm thấy danh mục (`/[locale]/categories/[slug]`, HTTP 404)
+
+- **Intent:** không áp dụng: trang không để lập chỉ mục.
+- **Cluster:** không thuộc cụm nào.
+- **Keywords:** không có.
+- **Slug:** như S5.
+
+| Chữ | vi | en |
+|---|---|---|
+| Title (khóa `CategoryNotFound.title`, mẫu thêm hậu tố) | `Không tìm thấy danh mục` | `Category not found` |
+| H1 (S6.2) | `Không tìm thấy danh mục` | `Category not found` |
+| Dòng giải thích (S6.3) | không đổi theo `design.md` | không đổi theo `design.md` |
+| Nút (S6.4) | không đổi: "Xem tất cả sản phẩm" | không đổi: "View all products" |
+
+- **Technical:** mã HTTP 404 ở GET và HEAD, giống nhau cho slug chưa từng có, danh mục Ẩn và danh mục đã xóa (AC16, NFR8). Không canonical, không hreflang, không JSON-LD, không có trong sitemap. Không đặt `noindex` bằng tay: mã 404 đủ để máy tìm kiếm bỏ trang, và Next đã đặt `noindex` cho `notFound()`. Không chuyển hướng 301 tới danh sách sản phẩm: đó là soft 404 và lộ ra khác biệt giữa danh mục Ẩn và slug lạ.
+- **Core Web Vitals:** như S5; trang nhẹ, chỉ chữ.
+
+**Kiểm:** HTML thô của ba trường hợp (slug lạ, danh mục Ẩn, danh mục đã xóa) giống nhau, trừ phần động của Next; mã 404 ở cả `vi` và `en`; không có canonical hay hreflang; không có trong sitemap.
+
+### S7 · Liên kết danh mục ở danh sách sản phẩm (`/[locale]/products`)
+
+Trang đã có title, meta, canonical, hreflang và BreadcrumbList (SHOP-7, `Products.metaTitle`, `Products.metaDescription`). Epic này **không đổi** chúng, và không đổi H1 "Sản phẩm" / "Products".
+
+- **Intent:** để khách và máy tìm kiếm đi từ danh sách chung tới từng loại hàng.
+- **Cluster:** trụ cột chung của cửa hàng; liên kết xuống từng trang danh mục (S5).
+- **Keywords:** chính của trang: `sản phẩm` / `products` (chưa có số liệu), như SHOP-7. Từ khóa của danh mục không đưa vào title hay H1 của trang này, để không tranh nhau (xem mục Không tranh từ khóa).
+
+| Chữ | vi | en |
+|---|---|---|
+| Nhãn của hàng (S7.3, khóa `Products.categories`) | `Danh mục` | `Categories` |
+| `aria-label` của `<nav>` | `Danh mục` | `Categories` |
+| Chữ của mỗi liên kết (S7.4) | `{name}` | `{name}` |
+| Alt | không có ảnh | không có ảnh |
+
+- **Internal links:** mỗi liên kết danh mục → `/[locale]/categories/{slug}`, anchor là tên danh mục (khác nhau vì tên khác nhau); không kèm số sản phẩm. Phải là `<a href>` có trong HTML trả về, không phải nút chuyển trang bằng JavaScript, để máy tìm kiếm đi theo được. Đây là cách duy nhất trang danh mục được tìm thấy ngoài sitemap.
+- **Technical:** không đổi metadata, canonical, hreflang và JSON-LD của trang. Hàng liên kết không vào `generateMetadata`, nên lỗi `api` ở đây chỉ ẩn hàng (NFR20), không đổi title hay mã HTTP. Sitemap không đổi so với `/products` đã có.
+- **Core Web Vitals:** NFR4: hàng liên kết hiện cùng lúc với lưới hay trước lưới, không đẩy lưới xuống sau khi lưới đã hiện (CLS dưới 0,1).
+
+**Kiểm:** HTML thô của `/vi/products` và `/en/products` có `<nav aria-label="Danh mục">` / `Categories` với một `<a href="/vi/categories/{slug}">` (hay `/en/…`) cho mỗi danh mục Hiện có sản phẩm Đang bán, theo thứ tự A→Z, và không có danh mục Ẩn, trống hay đã xóa; `<title>`, canonical và JSON-LD không đổi so với trước Epic.
+
+### S8 · Breadcrumb ở chi tiết sản phẩm (`/[locale]/products/[slug]`)
+
+Trang đã có title (`{tên sản phẩm} | tungph7 codebase`), meta description, canonical, hreflang và JSON-LD `Product` (SHOP-7, AC27). Epic này **không đổi** chúng, và thêm breadcrumb với `BreadcrumbList`.
+
+- **Intent:** mua hay xem chi tiết một sản phẩm cụ thể (từ khóa dài: tên sản phẩm).
+- **Cluster:** vệ tinh của trang danh mục của nó (S5), hay của `/[locale]/products` khi sản phẩm không có danh mục.
+- **Keywords:** chính là tên sản phẩm (chưa có số liệu), như SHOP-7; không thêm từ khóa mới.
+
+| Chữ | vi | en |
+|---|---|---|
+| Mục đầu của breadcrumb (khóa `Seo.home` đang có) | `Trang chủ` | `Home` |
+| Mục giữa (khi có danh mục Hiện) | `{tên danh mục}` | `{category name}` |
+| Mục cuối | `{tên sản phẩm}` | `{product name}` |
+| `aria-label` của `<nav>` | `Đường dẫn trang` | `Breadcrumb` |
+| Alt | không đổi (ô giữ chỗ, không ảnh) | không đổi |
+
+- **Internal links:** `Trang chủ` → `/[locale]`; tên danh mục → `/[locale]/categories/{slug}`, cùng ngôn ngữ (đây là liên kết ngược của vệ tinh về trụ cột); "← Sản phẩm" → `/[locale]/products` giữ như S8.3; tên sản phẩm là chữ.
+- **Technical:**
+  - **Dữ liệu có cấu trúc:** thêm một khối JSON-LD `BreadcrumbList`, từ cùng danh sách mục với breadcrumb nhìn thấy (đoạn code ở Code Style): ba mục khi sản phẩm thuộc một danh mục Hiện (`Trang chủ`, `{tên danh mục}`, `{tên sản phẩm}`), hai mục khi không (AC20, AC21). `item` là URL tuyệt đối ở ngôn ngữ đang xem, của mục cuối là `localizedUrl(locale, '/products/{slug}')`. Khối `Product` có sẵn giữ nguyên và là khối riêng, vì SHOP-7 đã dựng nó qua `productLd`; không gộp.
+  - **Danh mục Ẩn hay đã xóa không có ở bất kỳ chỗ nào** của trang: breadcrumb, JSON-LD, chữ ẩn (AC21, NFR8). Tên danh mục chỉ lấy từ phản hồi chi tiết sản phẩm (NFR6), không từ nguồn nào khác.
+  - Canonical, hreflang, `lang`, sitemap và robots: không đổi.
+- **Core Web Vitals:** NFR4. Breadcrumb xuống dòng khi dài, không tràn, nên CLS dưới 0,1 ở 320 px; breadcrumb nằm trong `<Suspense>` cùng chi tiết, khung xương giữ chỗ.
+
+**Kiểm:** HTML thô của một sản phẩm có danh mục Hiện: `<nav aria-label="Đường dẫn trang">` (en `Breadcrumb`) gồm `<ol>` ba mục, hai mục đầu là `<a>`, mục cuối không là liên kết; một khối `BreadcrumbList` ba mục, `position` 1 đến 3, URL tuyệt đối, khớp từng chữ với breadcrumb nhìn thấy; khối `Product` vẫn có, đúng một. Sản phẩm không danh mục, hay có danh mục Ẩn: hai mục, và không có tên danh mục đó ở bất kỳ chỗ nào của HTML (tìm cả chuỗi trong HTML thô).
+
+### Không tranh từ khóa
+
+Đọc các trang có sẵn của `user` (`Home`, `About`, `Products`, trang chi tiết sản phẩm) và `messages/{vi,en}.json` ngày 2026-11-21:
+
+| Trang | Từ khóa chính | Title và H1 |
+|---|---|---|
+| Trang chủ | tên thương hiệu | `Nền tảng enterprise server-first` |
+| Giới thiệu | giới thiệu | `Giới thiệu` |
+| Sản phẩm | `sản phẩm` / `products` | `Sản phẩm` / `Products` |
+| Chi tiết sản phẩm | tên sản phẩm | `{tên sản phẩm} | tungph7 codebase` |
+| **Danh mục (mới)** | **tên danh mục** | `{name} – …` / `{name}` |
+
+- Trang danh mục giữ riêng từ khóa là tên loại hàng: không trang nào có sẵn dùng tên một loại hàng ở title và H1. Trang Sản phẩm giữ từ khóa chung `sản phẩm`, nên **không đặt tên danh mục là "Sản phẩm", "Products" hay "Tất cả"**: tên đó tranh với `/products`.
+- Hai trang tranh nhau chỉ khi tên sản phẩm giống hệt tên danh mục (như danh mục "Áo thun" và sản phẩm "Áo thun"): cùng từ khóa trong title và H1. Quy tắc: tên sản phẩm phải cụ thể hơn tên danh mục (thêm mẫu, kiểu, chất liệu, như "Áo thun cổ tròn" trong danh mục "Áo"). Khi giống hệt, trang danh mục giữ từ khóa đó, và trang sản phẩm liên kết lên nó bằng breadcrumb, còn danh mục liên kết xuống từng sản phẩm. Quy tắc này nằm trong hướng dẫn cho người nhập, không có kiểm tra nào trong code.
+
+### Hướng dẫn cho người nhập dữ liệu (cho user guide)
+
+Quản trị viên nhập, `seo` không viết:
+
+- **Tên danh mục** là tên của trang trên Google, nên đặt như khách vẫn gõ: một loại hàng, 1 đến 4 từ ("Áo khoác nữ", "Bao tay"), viết như viết bình thường (không IN HOA toàn bộ, không biểu tượng, không từ quảng cáo như "Giá sốc", không tên thương hiệu của shop). Giữ **tối đa 21 ký tự** để title hiện đủ bậc 2, hay tối đa 41 để title hiện trọn tên; giới hạn 60 của form là giới hạn kỹ thuật, không phải khuyến nghị.
+- **Slug** để hệ thống tự sinh từ tên; nó đã là từ khóa không dấu. **Đừng đổi slug sau khi danh mục đã mở:** đường dẫn cũ trả 404 và không chuyển hướng (Scope: Out), nên danh mục mất vị trí ở máy tìm kiếm. Đổi tên thì slug giữ nguyên, nên đổi tên là an toàn hơn đổi slug.
+- **Danh mục tạm không bán:** chọn Ẩn thay vì Xóa, để sau này mở lại ở cùng đường dẫn. Xóa là không hoàn tác.
+- **Một danh mục chỉ nên có khi có sản phẩm để bày:** danh mục trống không vào sitemap và có thẻ `noindex`; đừng tạo trước hàng chục danh mục trống.
+- **Mỗi sản phẩm một danh mục** và tên sản phẩm cụ thể hơn tên danh mục (xem Không tranh từ khóa). Mô tả sản phẩm: câu đầu nói sản phẩm là gì và dùng để làm gì, vì đó là đoạn Google hay lấy làm mô tả; 150 đến 160 ký tự đầu là phần hiện ra.
+
 ## Open Questions
 
-Không có. Ngày 2026-11-21 bạn trả lời cả 11 câu, và mỗi câu trả lời đã thành quyết định ở mục của nó:
+Ngoài các câu của `seo` ở cuối mục này, không có. Ngày 2026-11-21 bạn trả lời cả 11 câu, và mỗi câu trả lời đã thành quyết định ở mục của nó:
 
 - Bạn đồng ý 9 đề xuất: danh mục Ẩn (Category Rules, AC6, AC16, AC17, AC19, AC21), slug (AC2, AC5), thứ tự tên tiếng Việt (AC1, AC17), breadcrumb của sản phẩm không có danh mục (AC21), danh mục Hiện chưa có sản phẩm Đang bán (AC15, AC17, AC19), trang danh mục không có ô tìm (AC13), không có mô tả danh mục (Scope, AC18), tên dài 1–60 ký tự và không trùng (AC3, AC4), và `lastmod` của danh mục (AC19).
 - Bạn đổi đề xuất về xóa danh mục còn sản phẩm: xóa được, sau hộp thoại xác nhận nêu số sản phẩm, và các sản phẩm đó thành "Không có danh mục" (Category Rules, AC8, TW1).
@@ -357,3 +527,11 @@ Không có. Ngày 2026-11-21 bạn trả lời cả 11 câu, và mỗi câu tr�
 - `Slugs` dùng chung cho hai loại slug, với slug dự phòng `danh-muc` của danh mục (Tech Stack);
 - lệnh sửa từ một tab `admin` cũ không làm mất danh mục của sản phẩm (NFR19);
 - hàng liên kết danh mục ẩn đi khi `api` lỗi, còn danh sách sản phẩm vẫn hiện (NFR20).
+
+### Câu hỏi của `seo`
+
+`seo` chạy một mình nên không chờ trả lời; SEO ở trên đã chọn một cách cho mỗi câu, và bạn duyệt cùng SPEC ở gate ①.
+
+1. **Đoạn mở đầu dưới H1 của S5 (cho `ux` và bạn).** `design.md` không có khối này: S5 đi thẳng từ H1 tới ô sắp xếp. SEO đề xuất một câu ngắn dựng từ mẫu, không phải mô tả do quản trị viên nhập (nên không trái Scope: Out): vi `{name} gồm {total} sản phẩm đang bán, kèm giá và tình trạng còn hàng. Chọn một sản phẩm để xem mô tả chi tiết.` Lý do: từ khóa chính nằm trong 100 chữ đầu của nội dung và máy trả lời bằng AI có một câu để trích. Nếu bạn đồng ý, `ux` thêm khối S5.12 (nằm dưới H1, trên ô sắp xếp, ẩn ở trang trống S5.9) vào `design.md`; nếu không, bỏ dòng "Đoạn mở đầu" khỏi bảng S5, và các yêu cầu khác của SEO không đổi. Dev không tự thêm khối này khi `design.md` chưa có nó.
+2. **Từ khóa thật cho tên danh mục (cho bạn).** Tên danh mục là từ khóa chính của trang, mà `seo` chưa có tên nào, số tìm kiếm hằng tháng nào từ Google Keyword Planner hay Search Console, và chưa tìm được trang nào đang xếp hạng. Trước khi đặt tên các danh mục đầu tiên ở Production, bạn có thể gửi danh sách tên dự định và số tìm kiếm của chúng (nếu có) vào Epic hay một item sau, để `seo` đối chiếu với từ khóa mọi người đang gõ. Nếu không, SEO ở trên vẫn đúng với mọi tên.
+3. **`noindex` của danh mục trống (cho bạn duyệt).** SPEC giao `seo` quyết thẻ robots của danh mục Hiện chưa có sản phẩm Đang bán: SEO chọn `noindex` (S5). Nếu bạn muốn trang này vẫn vào chỉ mục, đổi sang canonical và hreflang như S5 và bỏ `index: false`; đổi như vậy cũng nên đưa danh mục trống vào sitemap, và AC19 hiện không có.
