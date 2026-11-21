@@ -22,7 +22,7 @@ Mã item trong plan (T1, ADM, USR) là mã tạm. `ba` tạo các item trên Jir
 1. **Ba item, mỗi item lớn hơn mức 5 file code, nên mỗi item chia thành các bước.** SPEC đặt tối đa 3 item cho lần chạy thật T14 (Constraints). Theo Task List, T1 có khoảng 30 file code, ADM khoảng 20 và USR khoảng 20, không tính file test, file JSON i18n và tài liệu. Đó là gấp bốn tới sáu lần mức "khoảng 5 file" của một Story.
    - Task List chia mỗi item thành các bước theo thứ tự. Mỗi bước có khoảng 5 file code trở xuống, là một commit hay vài commit, và để build, lint, typecheck và test của app xanh trước khi sang bước sau.
    - Agent làm lần lượt từng bước, và `reviewer` đọc PR theo từng commit.
-   - Bạn duyệt ngoại lệ về cỡ item này cùng plan ở gate ② (Open Questions).
+   - Ngày 2026-11-21 bạn chọn giữ 3 item, thay vì tách thành 9 item nhỏ, nên plan không tách thêm. Vì vậy `reviewer` không đòi tách một item chỉ vì nó quá 5 file.
 2. **T1 là một Task làm API**, như Architecture Decisions 4 của plan SHOP-7. Lý do: mọi E2E của hai Story, kể cả của `user`, tạo và dọn danh mục qua `POST` và `DELETE /api/admin/categories` (TW3), nên API này phải có trước Story đầu tiên. Vì vậy ADM và USR chỉ có phần `fe-dev`. Bạn duyệt ngoại lệ "Task làm API" cùng plan ở gate ②, để `reviewer` không đòi đổi T1 thành Story.
 3. **Hai Story không chờ nhau.** AC5–AC9 có vế Then ở cả hai app: một phần ở `admin`, một phần "trong vòng 60 giây" ở trang khách. Plan chia mỗi tiêu chí theo app:
    - E2E của ADM làm thao tác qua giao diện `admin`, rồi kiểm phần của `admin`;
@@ -531,7 +531,7 @@ Không có.
 |---|---|---|
 | `postgres:17-alpine` không có dữ liệu ICU của `vi`, nên V7 dừng ở bước kiểm collation | Medium | Test đầu tiên của T1, bước 1, cho biết ngay, trước Development. Khi đó `be-dev` comment `Cần sa:` trên T1, và `sa` đổi plan và ADR-0005 sang đường lui của Tech Stack trong SPEC: `ORDER BY app.search_fold(name), name, id`, và UNIQUE trên tên do `api` gấp về chữ thường. Với đường lui, "đ" xếp lẫn với "d", và plan ghi rõ chỗ khác đó |
 | V7 lỗi trên Production, hay `v0.3.0` không chạy được sau rollback | High | V7 chỉ thêm. Test của bước 1 chạy V7 trên dữ liệu giống Production, và chạy code `v0.3.0` trên V7. Lần deploy lên Development rồi Staging chạy V7 trước Production. Bản backup không quá 24 giờ ở gate ⑤ |
-| Ba item lớn làm PR dài, review lâu và nhiều vòng sửa hơn | Medium | Các bước của Task List, mỗi bước khoảng 5 file và xanh trước bước sau. `reviewer` đọc theo commit. Nếu bạn muốn item nhỏ hơn, xem Open Questions |
+| Ba item lớn làm PR dài, review lâu và nhiều vòng sửa hơn | Medium | Các bước của Task List, mỗi bước khoảng 5 file và xanh trước bước sau. `reviewer` đọc theo commit. Bạn đã chọn giữ 3 item (Architecture Decisions 1) |
 | Một lần gán sản phẩm chạy cùng lúc với lần xóa danh mục thành 500, hay để lại sản phẩm trỏ tới danh mục đã xóa | High | Khóa ngoại là chốt cuối (ADR-0004). Vi phạm `products_category_fk` thành 400 trên `categoryId`. Integration test hai kết nối ở bước 7 của T1 |
 | Danh mục Ẩn lộ ra ở trang khách: trong JSON-LD, chữ ẩn hay một 404 khác | High | API của khách lọc `VISIBLE` trong SQL. WebMvc test so ba phản hồi 404 và so chi tiết sản phẩm. E2E của AC16 và AC21 tìm tên danh mục Ẩn trong HTML thô. `security` review cả ba PR |
 | Slug trên đường dẫn của khách đi tới một đường dẫn khác của `api`, như `/api/admin/categories` | Medium | `isStoreSlug` ở cả Proxy lẫn DAL, trước mọi lệnh. Unit test với `..`, `%2F` và `%E0` (NFR9) |
@@ -542,11 +542,6 @@ Không có.
 
 ## Open Questions
 
-- **Ba item lớn hơn mức 5 file của một Story.** SPEC đặt tối đa 3 item (Constraints), và plan giữ đúng con số đó. Vì vậy mỗi item có khoảng 20–30 file code, gấp bốn tới sáu lần mức "khoảng 5 file code" của một Story hay Sub-task.
-  - Đề xuất của `sa`: giữ 3 item, mỗi item chia thành các bước như Task List (Architecture Decisions 1). Bạn duyệt ngoại lệ này khi duyệt plan ở gate ②.
-  - Nếu bạn muốn item nhỏ, `sa` tách thành 9 item trước gate ②:
-    - T1 thành ba Task: V7 với `Slugs`; API quản trị danh mục; danh mục trong API sản phẩm cùng API của khách;
-    - ADM thành hai Story: S1–S3; S4;
-    - USR thành bốn Story: S5; S6 với Proxy; S7 với S8; sitemap.
+Không có. Ngày 2026-11-21 bạn trả lời câu duy nhất, về ba item lớn hơn mức 5 file: giữ 3 item. Câu trả lời đã thành quyết định ở Architecture Decisions 1.
 
-    Khi đó Epic vượt mức 3 item của lần chạy T14.
+Câu hỏi mới ở các item của Epic: agent làm theo đề xuất của mình và ghi quyết định vào artifact của chặng đó. Agent chỉ hỏi bạn những việc cần quyền mà agent không có.
