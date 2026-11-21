@@ -346,8 +346,8 @@ Ngoài DoD của Epic trong `.ai-orchestrator/docs/sdlc.md`:
 ### Quy tắc chung của mục SEO
 
 - **Từ khóa chính của trang danh mục là chính tên danh mục**, do quản trị viên nhập (Scope: Out: không có tên theo ngôn ngữ). Lúc viết SPEC chưa có tên nào, nên không có từ khóa cụ thể và không có lượng tìm kiếm hằng tháng: mọi chỗ ghi "chưa có số liệu". Việc chọn tên danh mục theo từ khóa thật là việc của người nhập; hướng dẫn ở cuối mục này, cho user guide.
-- **Chưa tìm xem trang nào đang xếp hạng.** Không có từ khóa nào để tìm, và kết quả tìm cho một tên bịa ra sẽ là số liệu giả. Khi shop có các danh mục thật, nên tìm lại từ khóa của từng danh mục (Open Questions, câu 2).
-- **Chữ trong ngoặc nhọn là giá trị đưa vào như đối số của ICU của next-intl, không nối chuỗi:** `{name}` là tên danh mục nguyên như người nhập (tới 60 ký tự), `{total}` là số sản phẩm Đang bán của danh mục. Tên hiện như chữ, không bao giờ như HTML (NFR10).
+- **Chưa tìm xem trang nào đang xếp hạng.** Không có từ khóa nào để tìm, và kết quả tìm cho một tên bịa ra sẽ là số liệu giả. Khi shop có các danh mục thật, nên tìm lại từ khóa của từng danh mục. Ngày 2026-11-21 bạn quyết để việc đó sau: các chữ dưới đây đúng với mọi tên danh mục, nên Epic này không chờ nó.
+- **Chữ trong ngoặc nhọn là giá trị đưa vào như đối số của ICU của next-intl, không nối chuỗi:** `{name}` là tên danh mục nguyên như người nhập (tới 60 ký tự). Tên hiện như chữ, không bao giờ như HTML (NFR10).
 - **Đếm ký tự theo `String.length`.** Hậu tố của title do mẫu của root layout thêm vào là ` · tungph7 codebase`, 19 ký tự (`siteConfig.name` có 16, cộng ` · `). Mọi con số title dưới đây đã gồm hậu tố này. Không đặt `title.absolute` cho trang danh mục, để hậu tố vẫn do mẫu thêm vào.
 - **Trang web nhỏ, nên không đặt từ khóa vào chỗ nào ngoài những chỗ dưới đây.** Không thêm H2 hay đoạn chữ chỉ để chèn từ khóa.
 
@@ -385,15 +385,14 @@ Hai câu dài `{name}` + 144 ký tự (cả hai ngôn ngữ), nên vừa 150–1
 | Chữ | vi | en |
 |---|---|---|
 | H1 (S5.3) | `{name}` | `{name}` |
-| Đoạn mở đầu (đề xuất, chờ quyết định ở Open Questions, câu 1) | `{name} gồm {total} sản phẩm đang bán, kèm giá và tình trạng còn hàng. Chọn một sản phẩm để xem mô tả chi tiết.` | `{name} has {total} products on sale, each with its price and stock status. Pick a product to see its full description.` |
 | Nhãn ô sắp xếp (S5.4) | không đổi: "Sắp xếp" | không đổi: "Sort by" |
 | Nút (S5.8) | không đổi: "Xem thêm" | không đổi: "Load more" |
 | Liên kết (S5.10) | không đổi: "Xem tất cả sản phẩm" | không đổi: "View all products" |
 | Alt | không có ảnh: thẻ sản phẩm dùng ô màu có chữ cái đầu, là chữ trang trí, không cần alt | như vi |
 
-H1 giữ như `design.md` S5.3: đúng tên danh mục, không tiền tố hay hậu tố, vì tên đó là từ khóa chính và AC12, AC15 cũng đọc như vậy. Đoạn mở đầu, khi có, dùng ICU plural cho `{total}` bằng 1 (vi không đổi; en `{name} has 1 product on sale, …`).
+H1 giữ như `design.md` S5.3: đúng tên danh mục, không tiền tố hay hậu tố, vì tên đó là từ khóa chính và AC12, AC15 cũng đọc như vậy. Trang không có đoạn mở đầu dưới H1 (bạn quyết ngày 2026-11-21, để `design.md` và việc của dev không thêm khối nào): dòng "Chưa có sản phẩm nào trong danh mục này." và dòng tiến độ của S5.7 là chữ duy nhất ngoài H1.
 
-- **Outline:** một H1; không có H2 hay H3. Lưới là `<ul aria-label="Danh sách sản phẩm">` (S5.5), tên sản phẩm là chữ trong thẻ có liên kết. Trang chứa từ khóa chính ở title, H1, breadcrumb, meta description, và (nếu có) đoạn mở đầu, đủ cho trang loại này; không thêm H2 để "phủ" từ khóa. Độ dài trang do sản phẩm quyết, không có chữ độn.
+- **Outline:** một H1; không có H2 hay H3. Lưới là `<ul aria-label="Danh sách sản phẩm">` (S5.5), tên sản phẩm là chữ trong thẻ có liên kết. Trang chứa từ khóa chính ở title, H1, breadcrumb và meta description, đủ cho trang loại này; không thêm H2 để "phủ" từ khóa. Độ dài trang do sản phẩm quyết, không có chữ độn.
 - **Information gain:** dữ liệu của chính shop: giá, giá gốc, tình trạng còn hàng và số sản phẩm Đang bán của từng danh mục, mới trong vòng 60 giây (NFR6). Không có nội dung biên tập (SPEC không có mô tả danh mục), nên đây là lợi thế duy nhất so với trang loại này ở nơi khác; trang không giả vờ có hơn thế.
 - **E-E-A-T:** Trust nằm ở dữ liệu đúng: giá và tình trạng đọc từ `api`, không viết tay; không có số sao, đánh giá, huy hiệu "bán chạy" hay số liệu nào mà shop không có (Epic không có đánh giá). Experience và Expertise: danh mục là phân loại của chính quản trị viên của shop. Lưu ý: `user` chưa có trang liên hệ, giao hàng hay đổi trả (không thuộc Epic này); đó là thiếu sót chung của site, không riêng của danh mục.
 - **Internal links:** tên từng sản phẩm của lưới → `/[locale]/products/{slug sản phẩm}` (anchor là tên sản phẩm); `Trang chủ` / `Home` → `/[locale]`; mục Sản phẩm của thanh điều hướng → `/[locale]/products`; "Xem tất cả sản phẩm" → `/[locale]/products` (chỉ khi trống). Mọi liên kết là `<a href>` thật do `Link` của next-intl dựng; không dùng nút có `onClick` để chuyển trang. Các anchor khác nhau vì là tên sản phẩm.
@@ -405,7 +404,7 @@ H1 giữ như `design.md` S5.3: đúng tên danh mục, không tiền tố hay h
   - **Sitemap (AC19):** có đường dẫn của danh mục Hiện có sản phẩm Đang bán, ở ngôn ngữ mặc định, kèm hreflang `vi`/`en` và `lastmod`, như các mục sản phẩm của `sitemap.ts` (hàm `addressesOf`); không đặt `priority` hay `changeFrequency`, vì Google bỏ qua cả hai và các mục sản phẩm cũng không đặt. Danh mục Ẩn, đã xóa hay chỉ có sản phẩm Ẩn không có.
   - **robots.txt:** không đổi: `allow: /`, `disallow: /api/`. Trang danh mục thu thập được. Danh mục Ẩn trả 404 thật, không chặn bằng `robots.txt`.
   - **Ảnh để chia sẻ:** `opengraph-image.tsx` của `[locale]` đang có, chung cho cả site; không có ảnh danh mục (Scope: Out), nên không làm ảnh riêng.
-  - **Trong HTML trả về:** H1, breadcrumb, đoạn mở đầu, 24 thẻ sản phẩm đầu, `<title>`, meta description, canonical, hreflang và JSON-LD phải có trong HTML của phản hồi đầu tiên, không chỉ sau khi trình duyệt chạy JavaScript. Dữ liệu danh mục đọc trong `<Suspense>` (NFR6) và được stream vào cùng phản hồi, nên điều này giữ được; `qa` kiểm bằng cách đọc HTML thô.
+  - **Trong HTML trả về:** H1, breadcrumb, 24 thẻ sản phẩm đầu, `<title>`, meta description, canonical, hreflang và JSON-LD phải có trong HTML của phản hồi đầu tiên, không chỉ sau khi trình duyệt chạy JavaScript. Dữ liệu danh mục đọc trong `<Suspense>` (NFR6) và được stream vào cùng phản hồi, nên điều này giữ được; `qa` kiểm bằng cách đọc HTML thô.
 - **Core Web Vitals:** LCP dưới 2,5 s, INP dưới 200 ms, CLS dưới 0,1 (NFR4 đo trên Staging). Trang không có ảnh, nên LCP thường là H1 hay thẻ sản phẩm đầu. Breadcrumb và H1 chờ tên danh mục: khung xương của lưới phải giữ chỗ cho chúng để không đẩy lưới xuống (CLS).
 
 **Kiểm (cho `qa`), trên HTML thô của `/vi/categories/{slug}` và `/en/categories/{slug}`, một danh mục có sản phẩm Đang bán:**
@@ -511,13 +510,13 @@ Quản trị viên nhập, `seo` không viết:
 
 ## Open Questions
 
-Ngoài các câu của `seo` ở cuối mục này, không có. Ngày 2026-11-21 bạn trả lời cả 11 câu, và mỗi câu trả lời đã thành quyết định ở mục của nó:
+Không có. Ngày 2026-11-21 bạn trả lời cả 11 câu, và mỗi câu trả lời đã thành quyết định ở mục của nó:
 
 - Bạn đồng ý 9 đề xuất: danh mục Ẩn (Category Rules, AC6, AC16, AC17, AC19, AC21), slug (AC2, AC5), thứ tự tên tiếng Việt (AC1, AC17), breadcrumb của sản phẩm không có danh mục (AC21), danh mục Hiện chưa có sản phẩm Đang bán (AC15, AC17, AC19), trang danh mục không có ô tìm (AC13), không có mô tả danh mục (Scope, AC18), tên dài 1–60 ký tự và không trùng (AC3, AC4), và `lastmod` của danh mục (AC19).
 - Bạn đổi đề xuất về xóa danh mục còn sản phẩm: xóa được, sau hộp thoại xác nhận nêu số sản phẩm, và các sản phẩm đó thành "Không có danh mục" (Category Rules, AC8, TW1).
 - Vì vậy bạn bỏ bộ lọc Danh mục của danh sách sản phẩm trong `admin`: AC11 giữ số với "(bỏ)", và Scope ghi nó ở phần Out.
 
-`seo` quyết thẻ robots của trang danh mục Hiện chưa có sản phẩm Đang bán ở mục SEO. `sa` đã quyết cách làm sản phẩm thành không có danh mục khi xóa danh mục (TW1) ở NFR15, và plan ghi chi tiết của cách đó.
+`seo` quyết thẻ robots của trang danh mục Hiện chưa có sản phẩm Đang bán ở mục SEO: `noindex`, và bạn đồng ý ngày 2026-11-21. `sa` đã quyết cách làm sản phẩm thành không có danh mục khi xóa danh mục (TW1) ở NFR15, và plan ghi chi tiết của cách đó.
 
 `sa` không có câu hỏi cho bạn. Các quyết định của `sa` nằm ở mục Non-functional requirements và Tech Stack, và không quyết định nào cần quyền mà agent không có. Bạn duyệt chúng cùng SPEC ở gate ①:
 
@@ -528,10 +527,4 @@ Ngoài các câu của `seo` ở cuối mục này, không có. Ngày 2026-11-21
 - lệnh sửa từ một tab `admin` cũ không làm mất danh mục của sản phẩm (NFR19);
 - hàng liên kết danh mục ẩn đi khi `api` lỗi, còn danh sách sản phẩm vẫn hiện (NFR20).
 
-### Câu hỏi của `seo`
-
-`seo` chạy một mình nên không chờ trả lời; SEO ở trên đã chọn một cách cho mỗi câu, và bạn duyệt cùng SPEC ở gate ①.
-
-1. **Đoạn mở đầu dưới H1 của S5 (cho `ux` và bạn).** `design.md` không có khối này: S5 đi thẳng từ H1 tới ô sắp xếp. SEO đề xuất một câu ngắn dựng từ mẫu, không phải mô tả do quản trị viên nhập (nên không trái Scope: Out): vi `{name} gồm {total} sản phẩm đang bán, kèm giá và tình trạng còn hàng. Chọn một sản phẩm để xem mô tả chi tiết.` Lý do: từ khóa chính nằm trong 100 chữ đầu của nội dung và máy trả lời bằng AI có một câu để trích. Nếu bạn đồng ý, `ux` thêm khối S5.12 (nằm dưới H1, trên ô sắp xếp, ẩn ở trang trống S5.9) vào `design.md`; nếu không, bỏ dòng "Đoạn mở đầu" khỏi bảng S5, và các yêu cầu khác của SEO không đổi. Dev không tự thêm khối này khi `design.md` chưa có nó.
-2. **Từ khóa thật cho tên danh mục (cho bạn).** Tên danh mục là từ khóa chính của trang, mà `seo` chưa có tên nào, số tìm kiếm hằng tháng nào từ Google Keyword Planner hay Search Console, và chưa tìm được trang nào đang xếp hạng. Trước khi đặt tên các danh mục đầu tiên ở Production, bạn có thể gửi danh sách tên dự định và số tìm kiếm của chúng (nếu có) vào Epic hay một item sau, để `seo` đối chiếu với từ khóa mọi người đang gõ. Nếu không, SEO ở trên vẫn đúng với mọi tên.
-3. **`noindex` của danh mục trống (cho bạn duyệt).** SPEC giao `seo` quyết thẻ robots của danh mục Hiện chưa có sản phẩm Đang bán: SEO chọn `noindex` (S5). Nếu bạn muốn trang này vẫn vào chỉ mục, đổi sang canonical và hreflang như S5 và bỏ `index: false`; đổi như vậy cũng nên đưa danh mục trống vào sitemap, và AC19 hiện không có.
+Ba câu của `seo` ngày 2026-11-21 cũng đã được trả lời, và thành quyết định ở mục SEO: không có đoạn mở đầu dưới H1 của S5 (S5), từ khóa thật của tên danh mục để sau (Quy tắc chung của mục SEO), và `noindex` cho danh mục Hiện chưa có sản phẩm Đang bán (S5, Technical).
