@@ -28,10 +28,11 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
 /**
- * The store API of products, {@code /api/products}, {@code /api/products/{slug}} and {@code
- * /api/sitemap/products} (ADR-0003): called only by the server of {@code user}, with {@code GET}
- * and {@code HEAD} (NFR8). It shows only {@code ACTIVE} products and takes no status parameter
- * (NFR9). The API Contract is in the plan of SHOP-7.
+ * The store API of products, {@code /api/products}, {@code /api/products/{slug}}, {@code
+ * /api/sitemap/products} (ADR-0003) and {@code /api/categories/{slug}/products}: called only by the
+ * server of {@code user}, with {@code GET} and {@code HEAD} (NFR8). It shows only {@code ACTIVE}
+ * products and takes no status parameter (NFR9). The API Contract is in the plan of SHOP-7, and the
+ * category parts in the plan of SHOP-81.
  */
 @RestController
 @Tag(name = "Store products", description = "The products shoppers see, for the user app")
@@ -46,10 +47,19 @@ public class StoreProductController {
    */
   static final String SITEMAP_PATH = "/api/sitemap/products";
 
+  /**
+   * The products of one category (plan of SHOP-81, Architecture Decisions 5): here rather than in
+   * {@code feature/category}, which imports nothing of {@code feature/product}.
+   */
+  static final String CATEGORY_PRODUCTS_PATH = "/api/categories/{slug}/products";
+
   private static final String SLUG_DESCRIPTION = "Slug of the product, compared ignoring case";
   private static final String NOT_FOUND_DESCRIPTION =
       "PRODUCT_NOT_FOUND: no product has this slug, or it is hidden or deleted;"
           + " the body is the same in each case";
+  private static final String CATEGORY_NOT_FOUND_DESCRIPTION =
+      "CATEGORY_NOT_FOUND: no category has this slug, or it is hidden or deleted; the body is the"
+          + " same in each case, and the same as for GET /api/categories/{slug}";
 
   private final StoreProductService service;
 
@@ -108,6 +118,59 @@ public class StoreProductController {
   }
 
   /**
+   * One page of the {@code ACTIVE} products of the {@code VISIBLE} category with this slug, in the
+   * order of {@code sort} (plan of SHOP-81, AC12–AC14). An invalid parameter is a 400 {@code
+   * INVALID_PARAMETER} that names it, and so is {@code sort=RELEVANCE}, since there is no keyword
+   * (NFR3); an unknown one, such as {@code status}, is ignored (NFR8). A category a shopper cannot
+   * see is the 404 of the category itself.
+   */
+  @GetMapping(path = CATEGORY_PRODUCTS_PATH, produces = MediaType.APPLICATION_JSON_VALUE)
+  @Operation(
+      summary = "List the products of a category of the store",
+      description =
+          "Only the ACTIVE products of a VISIBLE category; totalItems counts only them. sort"
+              + " defaults to NEWEST; PRICE_ASC and PRICE_DESC put the newest first on ties, and"
+              + " id is always the last key, so a page never repeats or skips a product. A status"
+              + " or q parameter is ignored. An invalid offset, limit or sort, or sort RELEVANCE,"
+              + " is a 400 INVALID_PARAMETER naming it.")
+  @ApiResponse(responseCode = "200", description = "OK")
+  @ApiResponse(
+      responseCode = "400",
+      description =
+          "INVALID_PARAMETER: a parameter of the wrong type or out of range, or sort RELEVANCE",
+      content =
+          @Content(
+              mediaType = "application/problem+json",
+              schema = @Schema(ref = "#/components/schemas/ProblemDetail")))
+  @ApiResponse(
+      responseCode = "404",
+      description = CATEGORY_NOT_FOUND_DESCRIPTION,
+      content =
+          @Content(
+              mediaType = "application/problem+json",
+              schema = @Schema(ref = "#/components/schemas/ProblemDetail")))
+  public ProductPage<StoreProductSummary> listOfCategory(
+      @Parameter(description = "Slug of the category, compared ignoring case") @PathVariable("slug")
+          String slug,
+      @Parameter(
+              description =
+                  "Order: NEWEST, PRICE_ASC or PRICE_DESC (then newest). Defaults to NEWEST;"
+                      + " RELEVANCE is refused")
+          @RequestParam(name = "sort", required = false)
+          ProductSort sort,
+      @Parameter(description = "Products to skip, 0 or more")
+          @RequestParam(name = "offset", defaultValue = "0")
+          @Min(0)
+          int offset,
+      @Parameter(description = "Products of the page, 1 to 100")
+          @RequestParam(name = "limit", defaultValue = "24")
+          @Min(1)
+          @Max(ProductQueryRepository.MAX_LIMIT)
+          int limit) {
+    return service.listOfCategory(slug, sort, offset, limit);
+  }
+
+  /**
    * One block of the sitemap: the slug and last update of {@code ACTIVE} products, in the order of
    * their ids (SHOP-32). {@code user} reads every block for its {@code sitemap.xml} (AC28). An
    * invalid parameter is a 400 {@code INVALID_PARAMETER} that names it (NFR3); an unknown one, such
@@ -148,7 +211,9 @@ public class StoreProductController {
       description =
           "Only an ACTIVE product. A slug that never existed, a hidden product and a deleted one"
               + " are the same 404 PRODUCT_NOT_FOUND, apart from instance, timestamp and"
-              + " correlationId. A status parameter is ignored.")
+              + " correlationId. A status parameter is ignored. category is the name and slug of"
+              + " its category when that category is VISIBLE, and null when the product has no"
+              + " category or its category is hidden.")
   @ApiResponse(
       responseCode = "200",
       description = "OK",

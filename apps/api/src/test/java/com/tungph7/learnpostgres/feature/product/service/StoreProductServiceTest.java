@@ -24,6 +24,7 @@ import com.tungph7.learnpostgres.common.error.BadRequestException;
 import com.tungph7.learnpostgres.common.error.BusinessException;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.error.NotFoundException;
+import com.tungph7.learnpostgres.feature.category.repository.CategoryRepository;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
@@ -34,6 +35,7 @@ import com.tungph7.learnpostgres.feature.product.dto.StoreProduct;
 import com.tungph7.learnpostgres.feature.product.dto.StoreProductSummary;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Criteria;
+import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.DetailRow;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Result;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Row;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.SitemapResult;
@@ -45,28 +47,33 @@ import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
  * hidden product is the same 404 as a slug that never existed (NFR9). The list asks the query
  * repository for {@code ACTIVE} products only, newest first (SHOP-26); with a keyword, its folded
  * words, most relevant first unless {@code sort} names another order, and {@code RELEVANCE} with no
- * keyword is a 400 naming {@code sort} (SHOP-29).
+ * keyword is a 400 naming {@code sort} (SHOP-29). The products of a category are those of its
+ * {@code VISIBLE} category only, with no {@code RELEVANCE} (SHOP-82), and the detail carries the
+ * category of its row.
  */
 class StoreProductServiceTest {
 
   private static final UUID ID = UUID.fromString("019a8f2e-5b7c-7d10-9e3f-1a2b3c4d5e6f");
   private static final UUID OTHER_ID = UUID.fromString("019a8f2e-5b7c-7d10-9e3f-1a2b3c4d5e70");
+  private static final UUID CATEGORY_ID = UUID.fromString("019a9c41-2b3d-7e10-8f2a-3c4d5e6f7a8b");
 
   private ProductRepository repository;
   private ProductQueryRepository queryRepository;
+  private CategoryRepository categoryRepository;
   private StoreProductService service;
 
   @BeforeEach
   void setUp() {
     repository = mock(ProductRepository.class);
     queryRepository = mock(ProductQueryRepository.class);
-    service = new StoreProductService(repository, queryRepository);
+    categoryRepository = mock(CategoryRepository.class);
+    service = new StoreProductService(repository, queryRepository, categoryRepository);
   }
 
   @Test
   void get_anActiveProduct_returnsItsStoreFields() {
-    Product product = product(ProductStatus.ACTIVE, Instant.parse("2026-11-16T02:15:30.123456Z"));
-    when(repository.findBySlugIgnoringCase("ao-thun-co-tron")).thenReturn(Optional.of(product));
+    when(queryRepository.findActiveDetail("ao-thun-co-tron"))
+        .thenReturn(Optional.of(detailRow(null, null)));
 
     StoreProduct found = service.get("ao-thun-co-tron");
 
@@ -80,24 +87,22 @@ class StoreProductServiceTest {
                 250_000L,
                 ProductAvailability.IN_STOCK,
                 "Áo thun cotton 100%.\nCổ tròn, tay ngắn.",
-                Instant.parse("2026-11-16T02:15:30.123Z")));
+                Instant.parse("2026-11-16T02:15:30.123Z"),
+                null));
   }
 
   @Test
-  void get_aHiddenProduct_throwsProductNotFound() {
-    when(repository.findBySlugIgnoringCase("ao-thun-co-tron"))
-        .thenReturn(Optional.of(product(ProductStatus.HIDDEN, Instant.now())));
+  void get_aProductOfAVisibleCategory_returnsTheNameAndSlugOfTheCategory() {
+    when(queryRepository.findActiveDetail("ao-thun-co-tron"))
+        .thenReturn(Optional.of(detailRow("Áo", "ao")));
 
-    assertThatThrownBy(() -> service.get("ao-thun-co-tron"))
-        .isInstanceOf(NotFoundException.class)
-        .hasMessage("Product not found.")
-        .extracting(e -> ((BusinessException) e).getCode())
-        .isEqualTo(ErrorCode.PRODUCT_NOT_FOUND);
+    assertThat(service.get("ao-thun-co-tron").category())
+        .isEqualTo(new StoreProduct.CategoryLink("Áo", "ao"));
   }
 
   @Test
-  void get_aSlugWithNoProduct_throwsProductNotFound() {
-    when(repository.findBySlugIgnoringCase("khong-co")).thenReturn(Optional.empty());
+  void get_aSlugWithNoActiveProduct_throwsProductNotFound() {
+    when(queryRepository.findActiveDetail("khong-co")).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.get("khong-co"))
         .isInstanceOf(NotFoundException.class)
@@ -107,9 +112,8 @@ class StoreProductServiceTest {
   }
 
   @Test
-  void get_aHiddenProduct_carriesNoPropertyThatTellsItApartFromAMissingOne() {
-    when(repository.findBySlugIgnoringCase("an"))
-        .thenReturn(Optional.of(product(ProductStatus.HIDDEN, null)));
+  void get_aSlugWithNoActiveProduct_carriesNoPropertyThatTellsAHiddenOneApart() {
+    when(queryRepository.findActiveDetail("an")).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.get("an"))
         .extracting(e -> ((BusinessException) e).getProperties())
@@ -279,6 +283,91 @@ class StoreProductServiceTest {
   }
 
   // ============================================================
+  // listOfCategory (SHOP-82)
+  // ============================================================
+
+  @Test
+  void listOfCategory_asksForTheActiveProductsOfTheVisibleCategory_newestFirst() {
+    when(categoryRepository.findVisibleIdBySlug("AO")).thenReturn(Optional.of(CATEGORY_ID));
+    when(queryRepository.findPage(any())).thenReturn(new Result(List.of(), 0));
+
+    service.listOfCategory("AO", null, 48, 24);
+
+    ArgumentCaptor<Criteria> criteria = ArgumentCaptor.forClass(Criteria.class);
+    verify(queryRepository).findPage(criteria.capture());
+    assertThat(criteria.getValue())
+        .isEqualTo(
+            new Criteria(
+                null, Set.of(ProductStatus.ACTIVE), ProductSort.NEWEST, 48, 24, CATEGORY_ID));
+  }
+
+  @Test
+  void listOfCategory_keepsTheSortOfTheRequest() {
+    when(categoryRepository.findVisibleIdBySlug("ao")).thenReturn(Optional.of(CATEGORY_ID));
+    when(queryRepository.findPage(any())).thenReturn(new Result(List.of(), 0));
+
+    service.listOfCategory("ao", ProductSort.PRICE_ASC, 0, 24);
+
+    ArgumentCaptor<Criteria> criteria = ArgumentCaptor.forClass(Criteria.class);
+    verify(queryRepository).findPage(criteria.capture());
+    assertThat(criteria.getValue().sort()).isEqualTo(ProductSort.PRICE_ASC);
+  }
+
+  @Test
+  void listOfCategory_returnsTheStoreFieldsAndTheTotalOfTheRepository() {
+    when(categoryRepository.findVisibleIdBySlug("ao")).thenReturn(Optional.of(CATEGORY_ID));
+    when(queryRepository.findPage(any()))
+        .thenReturn(
+            new Result(List.of(row(ID, "Áo thun cổ tròn", "ao-thun-co-tron", 200_000L, null)), 30));
+
+    ProductPage<StoreProductSummary> page = service.listOfCategory("ao", null, 24, 24);
+
+    assertThat(page)
+        .isEqualTo(
+            new ProductPage<>(
+                List.of(
+                    new StoreProductSummary(
+                        ID,
+                        "Áo thun cổ tròn",
+                        "ao-thun-co-tron",
+                        200_000L,
+                        null,
+                        ProductAvailability.OUT_OF_STOCK)),
+                30,
+                24,
+                24));
+  }
+
+  @Test
+  void listOfCategory_withRelevance_throwsInvalidParameterNamingSort_beforeAnyQuery() {
+    assertThatThrownBy(() -> service.listOfCategory("ao", ProductSort.RELEVANCE, 0, 24))
+        .isInstanceOf(BadRequestException.class)
+        .satisfies(
+            e -> {
+              BusinessException error = (BusinessException) e;
+              assertThat(error.getCode()).isEqualTo(ErrorCode.INVALID_PARAMETER);
+              assertThat(error.getProperties()).isEqualTo(Map.of("parameter", "sort"));
+            });
+    verifyNoInteractions(categoryRepository, queryRepository);
+  }
+
+  @Test
+  void listOfCategory_ofACategoryAShopperCannotSee_throwsCategoryNotFound_withNoProductQuery() {
+    when(categoryRepository.findVisibleIdBySlug("an-di")).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> service.listOfCategory("an-di", null, 0, 24))
+        .isInstanceOf(NotFoundException.class)
+        .hasMessage("Category not found.")
+        .satisfies(
+            e -> {
+              BusinessException error = (BusinessException) e;
+              assertThat(error.getCode()).isEqualTo(ErrorCode.CATEGORY_NOT_FOUND);
+              assertThat(error.getProperties()).isEqualTo(Map.of());
+            });
+    verifyNoInteractions(queryRepository);
+  }
+
+  // ============================================================
   // sitemap (SHOP-32)
   // ============================================================
 
@@ -333,6 +422,20 @@ class StoreProductServiceTest {
         ProductAvailability.OUT_OF_STOCK,
         at,
         at);
+  }
+
+  private static DetailRow detailRow(String categoryName, String categorySlug) {
+    return new DetailRow(
+        ID,
+        "Áo thun cổ tròn",
+        "ao-thun-co-tron",
+        200_000L,
+        250_000L,
+        ProductAvailability.IN_STOCK,
+        "Áo thun cotton 100%.\nCổ tròn, tay ngắn.",
+        Instant.parse("2026-11-16T02:15:30.123456Z"),
+        categoryName,
+        categorySlug);
   }
 
   private static Product product(ProductStatus status, Instant updatedAt) {

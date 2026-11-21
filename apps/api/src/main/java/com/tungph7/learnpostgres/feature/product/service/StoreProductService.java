@@ -2,6 +2,7 @@ package com.tungph7.learnpostgres.feature.product.service;
 
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -9,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.tungph7.learnpostgres.common.error.BadRequestException;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.error.NotFoundException;
+import com.tungph7.learnpostgres.feature.category.repository.CategoryRepository;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 import com.tungph7.learnpostgres.feature.product.domain.ProductSort;
@@ -40,12 +42,28 @@ public class StoreProductService {
   static final String RELEVANCE_NEEDS_A_KEYWORD =
       "Parameter 'sort' can be RELEVANCE only with a keyword in 'q'.";
 
+  /**
+   * The detail of the 404 of a category a shopper cannot see: the same as {@code
+   * StoreCategoryService}, so the products of a hidden, deleted or unknown category answer as the
+   * category does (NFR8).
+   */
+  static final String CATEGORY_NOT_FOUND = "Category not found.";
+
+  /** The detail of the 400 of {@code sort=RELEVANCE} on the products of a category (NFR3). */
+  static final String NO_RELEVANCE_IN_A_CATEGORY =
+      "Parameter 'sort' cannot be RELEVANCE for the products of a category.";
+
   private final ProductRepository repository;
   private final ProductQueryRepository queryRepository;
+  private final CategoryRepository categoryRepository;
 
-  public StoreProductService(ProductRepository repository, ProductQueryRepository queryRepository) {
+  public StoreProductService(
+      ProductRepository repository,
+      ProductQueryRepository queryRepository,
+      CategoryRepository categoryRepository) {
     this.repository = repository;
     this.queryRepository = queryRepository;
+    this.categoryRepository = categoryRepository;
   }
 
   /**
@@ -85,6 +103,49 @@ public class StoreProductService {
   }
 
   /**
+   * One page of the {@code ACTIVE} products of the {@code VISIBLE} category with this slug,
+   * compared ignoring case, in the order of {@code sort} with {@code id DESC} as the last key
+   * (NFR17), and their total (AC12–AC14). Three statements: the category, then the page and the
+   * total of {@link ProductQueryRepository} (NFR2). There is no keyword, so no {@link
+   * ProductSort#RELEVANCE}.
+   *
+   * @param slug the slug of the category, as sent
+   * @param sort the order, or {@code null} for {@link ProductSort#NEWEST}
+   * @param offset the products to skip, 0 or more
+   * @param limit the products of the page, 1 to {@value ProductQueryRepository#MAX_LIMIT}
+   * @throws BadRequestException {@code INVALID_PARAMETER} naming {@code sort} for {@link
+   *     ProductSort#RELEVANCE}
+   * @throws NotFoundException {@code CATEGORY_NOT_FOUND} when no category has this slug or it is
+   *     hidden, the 404 of the category itself (NFR8)
+   */
+  public ProductPage<StoreProductSummary> listOfCategory(
+      String slug, ProductSort sort, int offset, int limit) {
+    if (sort == ProductSort.RELEVANCE) {
+      throw new BadRequestException(ErrorCode.INVALID_PARAMETER, NO_RELEVANCE_IN_A_CATEGORY)
+          .putProperty("parameter", "sort");
+    }
+    UUID categoryId =
+        categoryRepository
+            .findVisibleIdBySlug(slug)
+            .orElseThrow(
+                () -> new NotFoundException(ErrorCode.CATEGORY_NOT_FOUND, CATEGORY_NOT_FOUND));
+    Result result =
+        queryRepository.findPage(
+            new Criteria(
+                null,
+                Set.of(ProductStatus.ACTIVE),
+                sort != null ? sort : ProductSort.NEWEST,
+                offset,
+                limit,
+                categoryId));
+    return new ProductPage<>(
+        result.items().stream().map(StoreProductSummary::from).toList(),
+        result.totalItems(),
+        offset,
+        limit);
+  }
+
+  /**
    * One block of the sitemap: the slug and last update of {@code ACTIVE} products, in the order of
    * their ids, and their total (SHOP-32). Only {@code ACTIVE} products, whatever the request asks
    * (NFR9).
@@ -109,7 +170,8 @@ public class StoreProductService {
    */
   @Transactional(readOnly = true)
   public StoreProduct get(String slug) {
-    return findActive(slug)
+    return queryRepository
+        .findActiveDetail(slug)
         .map(StoreProduct::from)
         .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, NOT_FOUND));
   }
