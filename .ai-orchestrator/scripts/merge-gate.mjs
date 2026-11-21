@@ -29,6 +29,7 @@ import { createGitHubClient, originRepo, readGitHubToken } from '../lib/tracker/
 import { bearerAuth, createJiraClient } from '../lib/tracker/jira-client.mjs';
 import { readMapping } from '../lib/tracker/mapping.mjs';
 import { itemLevel } from '../lib/workflow/levels.mjs';
+import { waitForQa } from '../lib/workflow/qa-signal.mjs';
 
 const kit = fileURLToPath(new URL('..', import.meta.url));
 const projectDir = process.env.GITHUB_WORKSPACE ?? process.cwd();
@@ -65,7 +66,12 @@ try {
   const docs = jira ? { jira, passage: gatePassage(readContract(join(kit, 'contract')), mapping, gates.docs_pull_requests.gate), space, levelOf: itemLevel(jira, mapping) } : undefined;
   const notify = { jira, mapping, space };
   const github = createGitHubClient({ repo, token });
+  // ao/qa on the head of the base, which ao-step sets with your gh login while qa tests it (C2 spec section 9): merge-gate
+  // waits in this run, reading it again every minute, and trusts only a login of AO_APPROVERS.
+  const qaWait = waitForQa({ readStatuses: (sha) => github.get(`/commits/${sha}/statuses`, { per_page: 100 }), approvers, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), log: (line) => console.log(line) });
+  const waitQa = async (pr) => qaWait((await github.get(`/git/ref/heads/${pr.base.ref}`)).object.sha);
   const { failures } = await runMergeGate({
+    waitQa,
     github,
     mergeClient,
     docs,

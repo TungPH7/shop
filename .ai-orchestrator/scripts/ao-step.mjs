@@ -8,7 +8,7 @@
 // Jira is read with ATLASSIAN_AGENT_TOKEN, GitHub with a read-only token of the ao-review App. Run it from the project
 // root; the kit is in AO_KIT_DIR when set.
 import { spawn, spawnSync } from 'node:child_process';
-import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, copyFileSync, cpSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { freemem, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -51,15 +51,24 @@ import { CHANGES, appRolesOf, decideStep, dockerGate } from '../lib/workflow/ste
 import { restoreWip, saveWip } from '../lib/workflow/wip.mjs';
 import { copyRunFiles, laneKeeper, removeNodeModules, runsSettings } from '../lib/workflow/lanes.mjs';
 import { installLane, pullsOfBranch, qaWatcher, runPlacer } from '../lib/workflow/lane-runs.mjs';
-import { checkoutBranch, laneDir, laneRoot } from '../lib/workflow/places.mjs';
+import { checkoutBranch, laneDir } from '../lib/workflow/places.mjs';
 import { admitAgent, claimRole, claimsRole, jiraWipStop, liveLocks, releaseAgent, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
 import { wipHolders } from '../lib/tracker/facts.mjs';
 import { runsAtOnce } from '../lib/workflow/ports.mjs';
 import { hookKitDrift, hookKitNote } from '../lib/workflow/hook-kit.mjs';
+import { planRound, runDispatcher, scopeOf } from '../lib/workflow/dispatch.mjs';
+import { DISPATCHER_FILE, dispatcherEffects, spentSince } from '../lib/workflow/run-command.mjs';
 import { seoChange } from '../lib/workflow/seo-commit.mjs';
+import { QA_CONTEXT, qaSignal } from '../lib/workflow/qa-signal.mjs';
 
 const COMMANDS = ['status', 'intake', 'preview', 'spec', 'plan', 'request', 'build', 'review', 'fix', 'qa', 'release', 'ship', 'rollback'];
-const USAGE = 'usage: node .ai-orchestrator/scripts/ao-step.mjs <status|intake|preview|spec|plan|request|build|review|fix|qa|release|ship|rollback> [<KEY>|<PR>|<vX.Y.0> <sha>|<vX.Y.Z>|<environment> [<sha>]] [--go] [--answers <file>] [--note <file>] [--change <word>] [--stop] [--retest]';
+const USAGE = 'usage: node .ai-orchestrator/scripts/ao-step.mjs <status|intake|preview|spec|plan|request|build|review|fix|qa|release|ship|rollback> [<KEY>|<PR>|<vX.Y.0> <sha>|<vX.Y.Z>|<environment> [<sha>]] [--go] [--answers <file>] [--note <file>] [--change <word>] [--stop] [--retest]; or run <EPIC>|<KEY>… [--go] [--budget <USD>], or run --stop';
+// --json (the dry run of the dispatcher /ao-run, C2 spec 5.2) prints the decision as one line of JSON and nothing else;
+// --result <file>, with --go (its real run), writes the last decision there.
+export function decisionJson(decision) {
+  const runs = (decision.runs ?? []).map(({ role, purpose, action, qa }) => ({ role: role ?? null, purpose: purpose ?? null, action: action ?? null, ...(qa?.environment && { qa: { environment: qa.environment } }) }));
+  return JSON.stringify({ go: Boolean(decision.go), reason: decision.reason ?? null, next: decision.next ?? null, waits: decision.waits ?? null, then: decision.then ?? null, runs });
+}
 const ENVIRONMENTS = ['development', 'staging', 'production'];
 // The commands that read deployments with your gh login (release-workflow T12).
 const RELEASE_COMMANDS = ['qa', 'release', 'ship', 'rollback', 'status'];
@@ -92,8 +101,15 @@ const preview = previewRunner({
   execPath: process.execPath,
   cliOf: (tool) => (tool === 'pnpm' ? pnpmCli() : npmCli()),
   cleared: CLEARED_ENV,
-  // The lock of this very process, taken for --go, is not another run.
-  agentRunning: () => liveLocks(activeDir, { fs: lockFs, alive }).find(({ pid }) => pid !== process.pid) ?? null,
+  // The lock of this very process, taken for --go, is not another run; in a lane, only a run on the item counts.
+  agentRunning: (key) => liveLocks(activeDir, { fs: lockFs, alive }).find((lock) => lock.pid !== process.pid && lock.command !== 'preview' && (key === undefined || lock.key === key)) ?? null,
+  // A preview in a lane holds its item while its first app runs (C2 spec section 8): the lock dies with that app.
+  gitAt: gitIn,
+  hold: ({ pid, key }) => {
+    mkdirSync(activeDir, { recursive: true });
+    writeFileSync(join(activeDir, `${key}+preview.json`), `${JSON.stringify({ pid, command: 'preview', arg: key, key, agent: false, slot: -1, startedAt: new Date().toISOString() }, null, 2)}\n`);
+  },
+  drop: (key) => rmSync(join(activeDir, `${key}+preview.json`), { force: true }),
 });
 const previewActive = preview.paths.active;
 
@@ -171,20 +187,42 @@ export function runsFile(projectDir, file) {
 
 
 async function main() {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { go: { type: 'boolean', default: false }, answers: { type: 'string' }, note: { type: 'string' }, change: { type: 'string' }, stop: { type: 'boolean', default: false }, retest: { type: 'boolean', default: false }, 'light-report': { type: 'string' }, full: { type: 'boolean', default: false } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { go: { type: 'boolean', default: false }, answers: { type: 'string' }, note: { type: 'string' }, change: { type: 'string' }, stop: { type: 'boolean', default: false }, retest: { type: 'boolean', default: false }, 'light-report': { type: 'string' }, full: { type: 'boolean', default: false }, 'seo-ok': { type: 'boolean', default: false }, json: { type: 'boolean', default: false }, result: { type: 'string' }, budget: { type: 'string' } } });
   const [command, arg, extra] = positionals;
+  if (command === 'run') {
+    await runCommand(positionals.slice(1), values);
+    return;
+  }
   const settings = projectSettings(projectDir);
   const space = setting('AO_JIRA_SPACE', settings);
-  const wrong = checkArgument(command, arg, space, extra) ?? checkChange(command, values.change, Boolean(values.note)) ?? (values.stop && command !== 'preview' ? '--stop goes with /ao-preview only' : null) ?? (values['light-report'] && command !== 'qa' ? '--light-report goes with /ao-qa only' : null) ?? (values.full && command !== 'review' ? '--full goes with /ao-review only' : null);
+  // The last decision of a run the dispatcher started (--result), and a STOP before any decision, in the shape --json
+  // prints.
+  const writeResult = (decision) => {
+    if (!values.result) return;
+    const file = runsFile(projectDir, values.result);
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `${decisionJson(decision)}\n`);
+  };
+  const early = (reason, waits = 'fix') => {
+    const decision = { go: false, reason, next: null, waits };
+    if (values.json) console.log(decisionJson(decision));
+    else console.log(`STOP: ${reason}`);
+    writeResult(decision);
+  };
+  const wrong = checkArgument(command, arg, space, extra) ?? checkChange(command, values.change, Boolean(values.note)) ?? (values.stop && command !== 'preview' ? '--stop goes with /ao-preview and /ao-run only' : null) ?? (values['light-report'] && command !== 'qa' ? '--light-report goes with /ao-qa only' : null) ?? (values.full && command !== 'review' ? '--full goes with /ao-review only' : null) ?? (values['seo-ok'] && command !== 'build' ? '--seo-ok goes with /ao-build only' : null) ?? (values.budget ? '--budget goes with /ao-run only' : null) ?? (values.result && !values.go ? '--result goes with --go' : null) ?? (values.json && values.go ? '--json is a dry run: it does not go with --go' : null);
   if (wrong) {
-    console.log(`STOP: ${wrong}`);
+    early(wrong);
     return;
   }
   // A preview runs the PR's code from this folder, on its branch: a command that runs agents stops it first, puts the
-  // folder back on develop, and runs again from there, so the approved kit decides (human-loop spec 4.3).
-  const first = previewFirst(command, existsSync(previewActive), Boolean(process.env.AO_PREVIEW_STOPPED));
+  // folder back on develop, and runs again from there, so the approved kit decides (human-loop spec 4.3). The dry run of
+  // the dispatcher (--json) runs no agent, and leaves your preview alone.
+  // A preview in a lane leaves the project folder on develop: only a command on its item stops it, below, once the item
+  // is known (C2 spec section 8).
+  const previewRecord = readJson(previewActive);
+  const first = values.json || previewRecord?.lane ? null : previewFirst(command, existsSync(previewActive), Boolean(process.env.AO_PREVIEW_STOPPED));
   if (first === 'refuse') {
-    console.log(`STOP: the preview still runs after ao-step stopped it (${relative(projectDir, previewActive)}): run /ao-preview <KEY> --stop, then /ao-${command} again`);
+    early(`the preview still runs after ao-step stopped it (${relative(projectDir, previewActive)}): run /ao-preview <KEY> --stop, then /ao-${command} again`, 'you');
     return;
   }
   if (first === 'stop') {
@@ -211,7 +249,7 @@ async function main() {
   const onBranch = () => git('branch', '--show-current').stdout?.trim() ?? '';
   const wrongCheckout = checkoutStop(command, onBranch(), gates.protected_branches);
   if (wrongCheckout) {
-    console.log(`STOP: ${wrongCheckout}`);
+    early(wrongCheckout);
     return;
   }
   const localFile = join(kitDir, 'roster.local.yaml');
@@ -246,13 +284,6 @@ async function main() {
     // A lane another command runs on is not pruned (review round 2 of shop PR #21).
     busy: (k) => liveLocks(activeDir, { fs: lockFs, alive }).some((lock) => lock.key === k && lock.pid !== process.pid),
   });
-  if (command === 'preview' && runs.worktrees) {
-    // The dev agents wrote the preview in the lane of the item (review of shop PR #21).
-    const lanePreview = arg && /^[A-Z][A-Z0-9_]*-\d+$/.test(arg) ? join(laneDir(projectDir, arg), '.ai', 'runs', arg, 'preview') : join(laneRoot(projectDir), '<KEY>', '.ai', 'runs', '<KEY>', 'preview');
-    console.log('STOP: /ao-preview runs the apps from the project folder on the PR branch, and with runs.worktrees on that branch is checked out in the lane of the item');
-    console.log(`Next: read the screenshots and API samples in ${lanePreview}, then /ao-review <PR>; or open the lane in your editor`);
-    return;
-  }
   const files = {
     ledger: (key) => keeper.ledgerExists(key),
     runState: readRunState,
@@ -272,7 +303,7 @@ async function main() {
   // A kit copy is compared with a head of another project, which your gh login reads (kit-copy-review spec 2.5).
   const peers = (setting('AO_KIT_PEERS', settings) ?? '').split(',').map((name) => name.trim()).filter(Boolean);
   const kitCopy = (pr) => readKitCopy({ pr, github, peer: (name) => createGitHubClient({ repo: name, token: readGitHubToken() }), peers, gates, apps, approvers, render: (sha, paths) => renderCheck(pr.number, sha, paths) });
-  const gatherAll = () => gatherFacts({ command, arg, extra, jira, github, deploys, history: developHistory, local: files, contract, mapping, roster, gates, apps, approvers, space, kitCopy });
+  const gatherAll = () => gatherFacts({ command, arg, extra, jira, github, deploys, history: developHistory, local: files, contract, mapping, roster, gates, apps, approvers, space, kitCopy, agentsPerRole: runs.agentsPerRole });
   // /ao-preview also reads this machine: project.yaml, the preview that runs, the folder and the ports (spec 4.3).
   const gather = async () => {
     const gathered = await gatherAll();
@@ -280,7 +311,9 @@ async function main() {
     const itemKey = gathered.item?.key;
     const facts = runs.worktrees && itemKey ? { ...gathered, previewDir: `${join(laneDir(projectDir, itemKey), '.ai', 'runs', itemKey, 'preview').replaceAll('\\', '/')}/` } : gathered;
     if (command === 'status') return { ...facts, previewRunning: readJson(previewActive) };
-    return command === 'preview' ? { ...facts, preview: await preview.facts(values.stop, facts.pr) } : facts;
+    // With lanes on, the preview runs from the lane of the item (C2 spec section 8).
+    const lane = runs.worktrees && itemKey ? { key: itemKey, dir: existsSync(laneDir(projectDir, itemKey)) ? laneDir(projectDir, itemKey) : null } : null;
+    return command === 'preview' ? { ...facts, preview: await preview.facts(values.stop, facts.pr, lane) } : facts;
   };
   const read = (file) => readFileSync(runsFile(projectDir, file), 'utf8');
   // The dev agent of each app by its profile: /ao-fix gives a blocking finding to the side of its app (kit followups,
@@ -289,9 +322,22 @@ async function main() {
   const appRoles = appRolesOf(projectApps);
   // The apps whose screens seo writes the SEO of (C1 spec 6.1).
   const seoApps = Object.entries(projectApps).filter(([, app]) => app?.seo === true).map(([name]) => name);
-  const options = { roster, contract, gates, mapping, appRoles, seoApps, ...(values.answers && { answers: read(values.answers) }), ...(values.note && { note: read(values.note) }), ...(values.change && { change: values.change }), ...(values.retest && { retest: true }), ...(values['light-report'] && { lightReport: read(values['light-report']) }), ...(values.full && { full: true }) };
+  // Their hosts in every environment: the addresses seo's text may name besides schema.org (second review of shop PR #79).
+  const seoHosts = seoApps.flatMap((name) => Object.values(projectApps[name]?.hosts ?? {})).filter((host) => typeof host === 'string');
+  const options = { roster, contract, gates, mapping, appRoles, seoApps, seoHosts, ...(values['seo-ok'] && { seoOk: true }), ...(values.answers && { answers: read(values.answers) }), ...(values.note && { note: read(values.note) }), ...(values.change && { change: values.change }), ...(values.retest && { retest: true }), ...(values['light-report'] && { lightReport: read(values['light-report']) }), ...(values.full && { full: true }) };
 
   const facts = await gather();
+  // A command that runs on the item of a preview in a lane stops it first, with --go: an agent may change its code. A
+  // command of another item leaves it alone (C2 spec section 8).
+  if (previewRecord?.lane && PREVIEW_STOPS.includes(command) && previewRecord.key === facts.item?.key) {
+    if (values.go && !values.json) console.log((await preview.stop()).notes.join('\n'));
+    else if (!values.json) console.log(`The preview of ${previewRecord.key} runs from its lane: --go stops it first.`);
+  }
+  // The board of the dispatcher (C2 spec 5.2): the items of the space in the order of the board, and the open PRs.
+  if (values.json && command === 'status') {
+    console.log(JSON.stringify({ items: facts.items ?? [], pulls: facts.pulls ?? [] }));
+    return;
+  }
   // A Java app needs Docker for the tests be-dev and qa run (project-scaffold part 3, spec 2.2).
   const projectFile = join(projectDir, '.ai-orchestrator', 'project.yaml');
   const java = existsSync(projectFile) && Object.values(parse(readFileSync(projectFile, 'utf8'))?.apps ?? {}).some((app) => app?.profile === 'spring-boot');
@@ -301,6 +347,10 @@ async function main() {
   // Three seconds before Docker is asked again: the command waits on nothing else meanwhile.
   const pause = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 3000);
   const decision = dockerGate(decideStep(command, { ...facts, qaRunning }, options), { java, dockerRunning, pause });
+  if (values.json) {
+    console.log(decisionJson(decision));
+    return;
+  }
   console.log(formatDecision(decision));
   // Agents run the hooks of the kit in AO_KIT_DIR: one that differs from the kit copy of the project is named (review round
   // 3 of shop PR #21).
@@ -321,12 +371,19 @@ async function main() {
   if (command === 'status') {
     const live = liveLocks(activeDir, { fs: lockFs, alive });
     if (live.length > 0) console.log(`Running: ${live.map(({ command: c, key: k, slot, startedAt }) => `${c} ${k} in slot ${slot}, ${Math.round((Date.now() - Date.parse(startedAt)) / 60000)} min`).join('; ')}`);
-    // Approving a PR now would make its merge deploy and stop the QA (Pilot 3, SHOP-28 and SHOP-69 of shop).
+    // merge-gate waits for it before a merge that deploys there (C2 spec section 9).
     for (const { key: k, environment } of live.filter((lock) => lock.command === 'qa' && lock.environment)) {
-      console.log(`QA in progress: qa is testing ${k} on ${environment}. Approve no PR whose merge deploys ${environment} until it ends: the new deploy would stop it, and it would start again`);
+      console.log(`QA in progress: qa is testing ${k} on ${environment}; merge-gate waits for it to end before a merge that deploys ${environment}`);
     }
+    // The dispatcher /ao-run that runs, if any (C2 spec 5.6).
+    const dispatcher = readJson(join(projectDir, ...DISPATCHER_FILE));
+    if (dispatcher && alive(dispatcher.pid)) console.log(`Dispatcher: /ao-run ${dispatcher.scope} since ${dispatcher.startedAt} (process ${dispatcher.pid}), ${Number(dispatcher.spentUsd ?? 0).toFixed(2)} of ${dispatcher.budgetUsd} USD; running: ${(dispatcher.running ?? []).join(', ') || 'nothing'}`);
   }
-  if (!values.go || !decision.go) return;
+  if (!values.go) return;
+  if (!decision.go) {
+    writeResult(decision);
+    return;
+  }
 
   // A release command has no work item: its runs and report go under the release (.ai/runs/v0.1.0/).
   const key = facts.item?.key ?? facts.runKey;
@@ -334,9 +391,9 @@ async function main() {
   // How many commands may run at once, and this one's place among them (parallel-runs spec 5.1).
   const cap = runsAtOnce(runs.lanesMax, process.env);
   const firstRun = decision.runs?.[0] ?? {};
-  const taken = await takeRunLock(activeDir, { pid: process.pid, command, arg, key, role: firstRun.role, environment: firstRun.qa?.environment, startedAt: new Date().toISOString() }, { fs: lockFs, alive, cap, sleep: (ms) => new Promise((done) => setTimeout(done, ms)) });
+  const taken = await takeRunLock(activeDir, { pid: process.pid, command, arg, key, role: firstRun.role, environment: firstRun.qa?.environment, startedAt: new Date().toISOString() }, { fs: lockFs, alive, cap, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), agentsPerRole: runs.agentsPerRole, lanes: runs.worktrees });
   if (!taken.ok) {
-    console.log(`STOP: ${taken.reason}`);
+    early(taken.reason, 'item');
     return;
   }
   const lock = taken.file;
@@ -358,8 +415,9 @@ async function main() {
       runs,
       apps: projectApps,
       // An agent waits for RAM only while another command has one running (live check of shop, 2026-11-16).
-      admitAgent: async () => {
-        const admitted = await admitAgent(activeDir, lock, { fs: lockFs, alive, sleep, freeBytes: freemem, minGb: runs.minFreeRamGb, onWait: (gb) => console.log(`Waiting for RAM: ${gb} GB free, ${runs.minFreeRamGb} GB needed before another agent starts`) });
+      // The second agent of a review that runs at once holds a lock of its own (C2 spec section 7).
+      admitAgent: async (run) => {
+        const admitted = await admitAgent(activeDir, run?.agentLock ?? lock, { fs: lockFs, alive, sleep, freeBytes: freemem, minGb: runs.minFreeRamGb, onWait: (gb) => console.log(`Waiting for RAM: ${gb} GB free, ${runs.minFreeRamGb} GB needed before another agent starts`) });
         if (!admitted.ok) throw new Error(admitted.reason);
       },
       log: (line) => console.log(line),
@@ -368,6 +426,12 @@ async function main() {
       const place = await keeper.placeOf(run, command);
       return place ? gitIn(place.dir) : git;
     };
+    // The heartbeat of a qa run on GitHub (C2 spec section 9): ao/qa on the commit it tests, set with your gh login, so
+    // merge-gate waits for its end before a merge that would deploy over it.
+    const statuses = command === 'qa' && userToken ? createGitHubClient({ repo, token: userToken, write: true }) : null;
+    const qaBeat = statuses
+      ? qaSignal({ post: ({ sha, state, description }) => statuses.request('POST', `/statuses/${sha}`, {}, { state, context: QA_CONTEXT, description }), log: (line) => console.log(line) })
+      : (run, start) => start(run);
     // A qa run stops at once when another deploy reaches its environment during the run (spec 5.1); the runner decides
     // again, and qa tests the new version, twice at most.
     const watchQa = deploys
@@ -376,12 +440,12 @@ async function main() {
     // Each run of build or fix takes its dev agent on the lock first: one item at a time per agent (review of shop PR #21).
     const claim = async (run) => {
       if (!claimsRole(command) || !run.role) return;
-      const claimed = await claimRole(activeDir, lock, run.role, { fs: lockFs, alive, sleep, onWait: (busy) => console.log(`Waiting for ${run.role}: it is at work on ${busy.key} (process ${busy.pid}), and builds one item at a time`) });
+      const claimed = await claimRole(activeDir, lock, run.role, { fs: lockFs, alive, sleep, limit: runs.agentsPerRole[run.role] ?? 1, onWait: (busy) => console.log(`Waiting for ${run.role}: it is at work on ${busy.key} (process ${busy.pid}), and builds one item at a time`) });
       if (!claimed.ok) throw new Error(claimed.reason);
       // Then its WIP on Jira, read now: a build of the role that ended may have left its item In Progress, and jira-guard
       // would refuse the Start of this one (kit followups, batch 2; SHOP-31 after SHOP-58 in Pilot 3).
       if (command === 'build' && run.purpose === 'build') {
-        const { keys, limit } = await wipHolders(jira, { space, actor: run.role, contract, mapping });
+        const { keys, limit } = await wipHolders(jira, { space, actor: run.role, contract, mapping, agentsPerRole: runs.agentsPerRole });
         const wip = jiraWipStop({ role: run.role, key: run.key, story: run.story, keys, limit });
         if (wip) throw new Error(wip);
       }
@@ -396,10 +460,12 @@ async function main() {
       agent: async (run, { log }) => {
         await claim(run);
         try {
-          return await watchQa(await placed(run.qa?.auth || run.envAuth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run), (ready, onStart) => startAgent(ready, join(runsDir, key, log), onStart));
+          const logFile = join(runsDir, key, log);
+          const logSize = () => (existsSync(logFile) ? statSync(logFile).size : 0);
+          return await watchQa(await placed(run.qa?.auth || run.envAuth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run), (ready, onStart) => qaBeat(ready, (r) => startAgent(r, logFile, onStart), logSize));
         } finally {
           // Its agent no longer holds RAM for the others that wait (admitAgent).
-          if (cap > 1) await releaseAgent(activeDir, lock, { fs: lockFs, alive, sleep });
+          if (cap > 1) await releaseAgent(activeDir, run.agentLock ?? lock, { fs: lockFs, alive, sleep });
         }
       },
       // A defect you reported is checked like a QA run: its evidence goes to the item too (human-loop spec 5.1). seo has
@@ -431,6 +497,15 @@ async function main() {
       dispatch: (action) => dispatchJiraSync(action.key),
       pack: reviewPackWriter({ github, jira }),
       worktree: { add: addWorktree, remove: removeWorktree },
+      // reviewer and security at once (C2 spec section 7): the second agent takes a place of its own under the cap, as
+      // <KEY>+<role>, or runs after the first when there is none.
+      pair: async (run) => {
+        if (cap <= 1) return null;
+        const second = await takeRunLock(activeDir, { pid: process.pid, command, arg, key: `${key}+${run.role}`, startedAt: new Date().toISOString() }, { fs: lockFs, alive, cap, sleep, agentsPerRole: runs.agentsPerRole });
+        if (!second.ok) console.log(`${run.role} runs after the first review: ${second.reason}`);
+        return second.ok ? second.file : null;
+      },
+      unpair: (file) => rmSync(file, { force: true }),
       store: {
         readState: readRunState,
         writeState: (k, state) => writeFileSync(join(runsDir, k, 'state.json'), `${JSON.stringify(state, null, 2)}\n`),
@@ -440,6 +515,7 @@ async function main() {
       log: (line) => console.log(line),
     });
     console.log(`\n${formatDecision(final)}\nReport: .ai/runs/${key}/last.md`);
+    writeResult(final);
     const home = homeBranch(command, last, gates.protected_branches);
     const now = onBranch();
     if (home && now !== home) {
@@ -975,6 +1051,94 @@ function removeWorktree({ name }) {
   }
   git('worktree', 'prune');
   return existsSync(path) ? still(`${path} is still there`) : { ok: true };
+}
+
+// /ao-run <EPIC> | <KEY> <KEY>… (C2 spec section 5): the dispatcher. Without --go it prints one round: what it would
+// start now and what waits. With --go it runs until the scope is done or waits for you idle_hours, or until the budget,
+// the usage limit or /ao-run --stop ends it once its commands have ended.
+const END = {
+  done: (scope) => `every item of ${scope} is done, or waits only for Complete`,
+  idle: (scope, { idleHours }) => `nothing of ${scope} could start for ${idleHours} hours`,
+  budget: (scope, { budget, spent }) => `the runs it started cost ${spent.toFixed(2)} USD, and its budget is ${budget} USD`,
+  usage: () => 'an agent hit the usage limit: run /ao-run again after it resets',
+  stop: () => '/ao-run --stop asked it to end',
+};
+
+async function runCommand(keys, values) {
+  const settings = projectSettings(projectDir);
+  const space = setting('AO_JIRA_SPACE', settings);
+  const effects = dispatcherEffects({ kitDir, projectDir, spawn, fs: { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, appendFileSync, rmSync }, alive });
+  const other = ['answers', 'note', 'change', 'light-report', 'result'].find((name) => values[name] !== undefined) ?? ['retest', 'full', 'seo-ok', 'json'].find((name) => values[name]);
+  if (other) return console.log(`STOP: --${other} does not go with /ao-run`);
+  if (values.stop) {
+    if (keys.length > 0 || values.go) return console.log('STOP: /ao-run --stop takes no key and no --go');
+    const held = effects.running();
+    if (!held) return console.log('STOP: no /ao-run runs in this project');
+    effects.askStop();
+    return console.log(`/ao-run ${held.scope} (process ${held.pid}) starts no command more; the ones that run go on to their end, then it ends`);
+  }
+  if (keys.length === 0) return console.log(`STOP: /ao-run takes an Epic, or the items to run, such as ${space ?? 'DEMO'}-12`);
+  const bad = keys.find((key) => !/^[A-Z][A-Z0-9]*-\d{1,7}$/.test(key) || (space && !key.startsWith(`${space}-`)));
+  if (bad) return console.log(`STOP: ${bad} is not a Jira key of the space ${space}`);
+  const projectYaml = join(projectDir, '.ai-orchestrator', 'project.yaml');
+  const runs = runsSettings(existsSync(projectYaml) ? parse(readFileSync(projectYaml, 'utf8')) : {});
+  const budget = values.budget === undefined ? runs.budgetUsd : Number(values.budget);
+  if (!(budget > 0) || budget > 1000) return console.log(`STOP: --budget is ${values.budget}: a number of USD above 0, at most 1000`);
+  const cap = runsAtOnce(runs.lanesMax, process.env);
+  const readLocks = () => liveLocks(activeDir, { fs: lockFs, alive });
+  const board = await effects.readBoard();
+  // One key of an Epic is the Epic and its items; any other key, or several, are those items.
+  const scope = keys.length === 1 && board.items.find(({ key }) => key === keys[0])?.workType === 'epic' ? { epic: keys[0] } : { keys };
+  const label = scope.epic ?? keys.join(' ');
+
+  if (!values.go) {
+    const round = await planRound({ ...board, scope, live: readLocks(), cap, decide: effects.decide, agentsPerRole: runs.agentsPerRole });
+    console.log(`/ao-run ${label}, ${cap} at once, budget ${budget} USD`);
+    console.log(round.done ? `Every item of ${label} is done, or waits only for Complete` : `Would start now: ${round.start.map(({ command, arg }) => `/ao-${command} ${arg}`).join(', ') || 'nothing'}`);
+    const yours = round.waiting.filter(({ waits }) => waits === 'you');
+    const others = round.waiting.filter(({ waits }) => waits !== 'you');
+    if (yours.length > 0) console.log(['Waiting for you:', ...yours.map(({ key, text }) => `  ${key}: ${text}`)].join('\n'));
+    if (others.length > 0) console.log(['Waiting:', ...others.map(({ key, waits, text }) => `  ${key} (${waits}): ${text}`)].join('\n'));
+    if (!round.done) console.log(`Next: /ao-run ${keys.join(' ')} --go`);
+    return;
+  }
+
+  const since = Date.now();
+  const record = { pid: process.pid, scope: label, startedAt: new Date(since).toISOString(), budgetUsd: budget, spentUsd: 0, running: [] };
+  const locked = effects.lock(record);
+  if (!locked.ok) return console.log(`STOP: ${locked.reason}`);
+  // The items of the scope as it grows (the plan adds them), for what their runs cost.
+  const seen = new Set(scopeOf(board.items, scope).map(({ key }) => key));
+  const readBoard = async () => {
+    const now = await effects.readBoard();
+    for (const { key } of scopeOf(now.items, scope)) seen.add(key);
+    return now;
+  };
+  const spent = () => spentSince([...seen], since, effects.readState);
+  try {
+    effects.log(`/ao-run ${label}: ${cap} at once, budget ${budget} USD, ends after ${runs.idleHours} hours with nothing to start`);
+    const end = await runDispatcher({
+      scope,
+      cap,
+      agentsPerRole: runs.agentsPerRole,
+      budgetUsd: budget,
+      idleMs: runs.idleHours * 3600 * 1000,
+      readBoard,
+      readLocks,
+      decide: effects.decide,
+      start: effects.start,
+      spent,
+      stopAsked: effects.stopAsked,
+      now: Date.now,
+      sleep: (ms) => new Promise((done) => setTimeout(done, ms)),
+      log: effects.log,
+      report: ({ running, spent: cost }) => effects.update({ ...record, spentUsd: cost, running }),
+    });
+    effects.log(`/ao-run ${label} ends: ${END[end.reason](label, { idleHours: runs.idleHours, budget, spent: spent() })}. Spent ${spent().toFixed(2)} USD`);
+    if (end.waiting.length > 0) console.log(['Waiting for you:', ...end.waiting.map((line) => `  ${line}`)].join('\n'));
+  } finally {
+    effects.unlock();
+  }
 }
 
 // The second /ao-plan: jira-sync for the Epic, with your gh login, since this is your session, not an agent's.

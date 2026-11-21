@@ -27,14 +27,14 @@ export async function readItem(client, key) {
 
 // The ids among `needed` of the Jira guards that hold for the item, in the order asked. Guards with evidence elsewhere
 // (GitHub, or you) are left out. Pass `item` when it is already read.
-export async function jiraGuards(client, { key, item, actor, needed, contract, mapping }) {
+export async function jiraGuards(client, { key, item, actor, needed, contract, mapping, agentsPerRole = {} }) {
   const current = item ?? (await readItem(client, key));
   // Both QA guards read the same comments, once.
   let qaResult;
   const latestQaResult = () => (qaResult ??= readLatestQaResult(client, current.key));
   const check = {
     'dor-met': () => dorMet(current, contract, mapping),
-    'wip-available': () => wipAvailable(client, current, actor, contract, mapping),
+    'wip-available': () => wipAvailable(client, current, actor, contract, mapping, agentsPerRole),
     'subtasks-done': () => current.subtasks.every(({ done }) => done),
     'qa-report-failed': async () => (await latestQaResult()) === 'FAIL',
     'qa-report-passed': async () => (await latestQaResult()) === 'PASS',
@@ -57,15 +57,16 @@ function dorMet(item, contract, mapping) {
 }
 
 // The agent's in-progress work, counted by Sub-task when a Story has Sub-tasks, else by item (contract wip_limits).
-async function wipAvailable(client, item, actor, contract, mapping) {
-  const { keys, limit } = await wipHolders(client, { space: item.key.slice(0, item.key.lastIndexOf('-')), actor, contract, mapping });
+async function wipAvailable(client, item, actor, contract, mapping, agentsPerRole) {
+  const { keys, limit } = await wipHolders(client, { space: item.key.slice(0, item.key.lastIndexOf('-')), actor, contract, mapping, agentsPerRole });
   return keys.length < limit;
 }
 
 // The items In Progress that hold the WIP of a dev role, and its limit: { keys, limit }. A Story with Sub-tasks does not
 // count; its Sub-task of the role does. ao-step reads it again before each build run, since a process lock that ends
 // does not mean the item left In Progress on Jira (Pilot 3, SHOP-31 after SHOP-58).
-export async function wipHolders(client, { space, actor, contract, mapping }) {
+// agentsPerRole: runs.agents_per_role of the project, which raises the limit of a role (C2 spec section 6).
+export async function wipHolders(client, { space, actor, contract, mapping, agentsPerRole = {} }) {
   const field = contract.work_item_fields.find(({ id }) => id === 'agent');
   const index = field.values.findIndex(({ id }) => id === actor);
   if (index === -1) throw new Error(`No Agent value for role '${actor}'`);
@@ -74,7 +75,7 @@ export async function wipHolders(client, { space, actor, contract, mapping }) {
   const statuses = [...new Set(workflows.map(([id]) => mapping.workflows[id].states['in-progress']?.status).filter(Boolean))];
   const jql = `project = "${space}" AND "${mapping.fields.agent.jira_field}" = "${agent}" AND status in (${statuses.map((s) => `"${s}"`).join(', ')})`;
   const busy = (await client.searchAll(jql, ['subtasks'])).filter(({ fields }) => (fields.subtasks ?? []).length === 0);
-  return { keys: busy.map(({ key }) => key), limit: contract.wip_limits.find(({ id }) => id === 'dev-agent').limit };
+  return { keys: busy.map(({ key }) => key), limit: agentsPerRole[actor] ?? contract.wip_limits.find(({ id }) => id === 'dev-agent').limit };
 }
 
 // An ops Task: the label ao-ops, no commit and no PR (kit followups, batch 4 item 14; SHOP-12 of shop).
@@ -110,8 +111,10 @@ export async function readLatestQaReport(client, key) {
   return newest ? { result: newest.result, at: new Date(newest.at).toISOString(), id: newest.id ?? null, failed: failedCriteria(newest.body) } : null;
 }
 
-// The criteria a QA report failed: the first cell of each table row whose Result cell is FAIL. A Jira table is read by
-// its rows and cells; a Markdown table, or one posted as paragraphs (lib/tracker/adf.mjs), by its lines. Pure.
+// The criteria a QA report failed: the AC<n> codes in the first cell of each table row whose Result cell is FAIL. A
+// Jira table is read by its rows and cells; a Markdown table, or one posted as paragraphs (lib/tracker/adf.mjs), by its
+// lines. Only the codes, never the rest of the cell, reach the prompt of QA again (second review of shop PR #79); a row
+// with no code gives none, so a Task, whose Verification lines have no code, is checked again in full. Pure.
 export function failedCriteria(body) {
   const clean = (cell) => cell.replace(/[*_`]/g, '').replace(/\s+/g, ' ').trim();
   const tableRows = [];
@@ -128,7 +131,7 @@ export function failedCriteria(body) {
     .map((line) => line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(clean));
   const failed = [...tableRows, ...lineRows]
     .filter((cells) => cells.length >= 2 && cells.slice(1).includes('FAIL') && cells[0] && !/^acceptance criterion$/i.test(cells[0]))
-    .map(([criterion]) => criterion);
+    .flatMap(([criterion]) => criterion.match(/\bAC\d+\b/g) ?? []);
   return [...new Set(failed)];
 }
 

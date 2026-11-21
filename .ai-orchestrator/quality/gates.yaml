@@ -101,6 +101,13 @@ protected_paths:
   - { path: "**/.npmrc" }
   - { path: "**/.yarnrc*" }
   - { path: "**/bunfig.toml" }
+  # Where pnpm and Maven read what they install and run (second review of shop PR #79): pnpm-workspace.yaml holds the
+  # catalogs, overrides and allowBuilds of pnpm, so whose install scripts run; a .pnpmfile changes any dependency as pnpm
+  # reads it; .mvn/ holds the extensions and options of Maven and the URL the wrapper downloads Maven from. You change
+  # them; the policy job still checks the catalogs and overrides of pnpm-workspace.yaml.
+  - { path: "**/pnpm-workspace.yaml" }
+  - { path: "**/.pnpmfile.*" }
+  - { path: "**/.mvn/**" }
 
 # Review by risk (C1 spec section 3): the tier of a PR is the highest its files touch, a renamed file by both names
 # (lib/quality/review-tiers.mjs). critical: the protected paths above and critical_paths: reviewer at xhigh, security

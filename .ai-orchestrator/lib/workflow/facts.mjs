@@ -15,7 +15,7 @@ import { adfText, changesRequestedOn, githubGuards, jiraGuards, qaEnvironment, r
 import { latestFlagComment } from '../tracker/flags.mjs';
 import { countRework } from '../tracker/rework.mjs';
 import { recordedLine } from './findings.mjs';
-import { agentsAccount, labelLevel, trustedLabels } from './levels.mjs';
+import { agentsAccount, labelLevel, trustedLevel } from './levels.mjs';
 import { openRequests } from './requests.mjs';
 import { ownChanges } from './security-scope.mjs';
 import { cutPoint } from '../release/cut.mjs';
@@ -24,6 +24,9 @@ import { regressionResult } from '../release/release-pr.mjs';
 import { latestTag, nextPatch, nextRelease } from '../release/versions.mjs';
 
 const GATES = ['spec-approval', 'plan-approval'];
+
+// The level of an item and the lower label left out (lib/workflow/levels.mjs, trustedLevel), as facts of the item.
+const levelFacts = ({ level, ignored }) => ({ level, levelIgnored: ignored });
 
 // role → the value of the Agent field, such as { ba: 'Business Analyst' }.
 export function agentNames(contract, mapping) {
@@ -84,9 +87,9 @@ export async function readWorkItem(jira, key, ctx) {
     summary: fields.summary,
     labels,
     ...workLabels(labels, mapping, roster),
-    // A level the agents' account changed after it created the item does not count: only you lower one (review of shop
-    // PR #79).
-    level: labelLevel(trustedLabels(labels, histories, { agentAccount: agentsAccount(mapping), prefix: mapping.work_labels.level_prefix }), mapping.work_labels.level_prefix),
+    // A level the agents' account lowered after it created the item does not count: only you lower one (reviews of shop
+    // PR #79). levelIgnored: the lower label left out, which /ao-status and the review name.
+    ...levelFacts(trustedLevel(labels, histories, { agentAccount: agentsAccount(mapping), prefix: mapping.work_labels.level_prefix })),
     // An ops Task, and the basic auth you gave devops for it (kit followups, batch 4 item 14).
     ops: labels.includes(mapping.work_labels.ops),
     envAuth: labels.includes(mapping.work_labels.env_auth),
@@ -100,7 +103,19 @@ export async function readWorkItem(jira, key, ctx) {
     gates: workType === 'epic' ? gateTimes(histories, contract, mapping) : {},
     children: workType === 'epic' ? await readChildren(jira, found, ctx) : [],
     requests: openRequests(comments, names, { agentAccount: agentsAccount(mapping) }),
+    // What /ao-build shows you before an item with ao-seo outside an Epic starts (second review of shop PR #79).
+    seoComment: newestSigned(comments, names.seo),
   };
+}
+
+// The text of the newest comment that starts with an Agent value, as agents sign theirs (agents/rules.md), or null.
+function newestSigned(comments, agentName) {
+  if (!agentName) return null;
+  const signed = comments
+    .map(({ body, created }) => ({ text: (typeof body === 'string' ? body : adfText(body)).trim(), at: Date.parse(String(created).replace(/([+-]\d\d)(\d\d)$/, '$1:$2')) }))
+    .filter(({ text }) => text.startsWith(`${agentName}:`))
+    .sort((a, b) => b.at - a.at);
+  return signed[0]?.text ?? null;
 }
 
 // The keys of the items that block this one: the inward side of its "is blocked by" links.
@@ -406,7 +421,7 @@ export async function readIntake({ jira, contract, mapping, space }) {
 }
 
 // Room under the WIP limits: Epics shaping (spec or plan) and each dev agent the item would start.
-async function readWip(jira, item, { contract, mapping }) {
+async function readWip(jira, item, { contract, mapping, agentsPerRole }) {
   const limit = (id) => contract.wip_limits.find((w) => w.id === id).limit;
   const [workflowId] = Object.entries(contract.workflows).find(([, w]) => w.applies_to.includes('epic'));
   const shaping = ['specifying', 'planning'].map((state) => mapping.workflows[workflowId].states[state].status);
@@ -414,7 +429,7 @@ async function readWip(jira, item, { contract, mapping }) {
   const epics = await jira.searchAll(`project = "${space}" AND issuetype = "${epicType(contract)}" AND status in (${shaping.map((s) => `"${s}"`).join(', ')})`, ['status']);
   const devAgent = {};
   for (const role of new Set([item.role, ...item.subtasks.map(({ role }) => role)].filter(Boolean))) {
-    devAgent[role] = (await jiraGuards(jira, { item, actor: role, needed: ['wip-available'], contract, mapping })).includes('wip-available');
+    devAgent[role] = (await jiraGuards(jira, { item, actor: role, needed: ['wip-available'], contract, mapping, agentsPerRole })).includes('wip-available');
   }
   return { epicShaping: { used: epics.length, limit: limit('epic-shaping') }, devAgent };
 }

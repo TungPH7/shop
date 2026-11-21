@@ -53,61 +53,38 @@ export function agentCommand(run, kitDir) {
   };
 }
 
-export async function runGo({ command, arg, options, gather, decide = decideStep, agent, git, dispatch, pack, worktree, after, act, wip, store, sleep, now = Date.now, log = () => {}, limits: given = {} }) {
+// A stop of the runner: what it waits for (WAITS of lib/workflow/steps.mjs, C2 spec section 4) and why.
+const halt = (waits, reason) => ({ waits, reason });
+
+export async function runGo({ command, arg, options, gather, decide = decideStep, agent, git, dispatch, pack, worktree, after, act, wip, pair, unpair, store, sleep, now = Date.now, log = () => {}, limits: given = {} }) {
   const limits = { ...LIMITS, ...given };
   let facts = await gather();
   let decision = decide(command, facts, options);
   // A release command has no work item: its report goes under the release, such as .ai/runs/v0.1.0/.
   const key = facts.item?.key ?? facts.runKey;
   const made = [];
-  let reason = null;
+  let stop = null;
   let previous = null;
-  while (decision.go && !reason) {
-    const [next] = decision.runs;
-    if (made.length >= limits.maxRuns) {
-      reason = `${made.length} runs in one command, the most the runner makes; run the command again to go on`;
-      break;
-    }
-    if (next.action === 'jira-sync') {
-      log(`jira-sync for ${next.key}`);
-      await dispatch(next);
-      made.push({ action: 'jira-sync', key: next.key });
-      ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined, note: undefined, lightReport: undefined }), (d) => !(d.go && d.runs[0]?.action === 'jira-sync'), limits.syncWaitMs, { sleep, now, limits }));
-      if (decision.go && decision.runs[0]?.action === 'jira-sync') reason = `jira-sync ran, but ${next.key} is not done after ${Math.round(limits.syncWaitMs / 60000)} minutes: see the jira-sync and merge-gate runs on GitHub`;
-      // With continue, jira-sync is a first step, as for an item it refines before its build: the command goes on.
-      if (next.continue) continue;
-      break;
-    }
-    if (next.action) {
-      log(`${next.action} ${next.key}`);
-      made.push({ action: next.action, key: next.key, notes: await act(next) });
-      // An action with `continue` is a first step, such as marking a draft PR ready before its review (human-loop spec
-      // 4.6): the command goes on with what is decided after it, once GitHub shows its effect. Any other action is the
-      // one step of its command.
-      if (next.continue) {
-        const again = (d) => d.go && d.runs[0]?.action === next.action;
-        ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined, note: undefined, lightReport: undefined }), (d) => !again(d), limits.syncWaitMs, { sleep, now, limits }));
-        if (again(decision)) reason = `${next.action} ran on ${next.key}, but the facts still ask for it after ${Math.round(limits.syncWaitMs / 60000)} minutes: run the command again`;
-        continue;
-      }
-      facts = await gather();
-      decision = decide(command, facts, { ...options, answers: undefined, note: undefined, lightReport: undefined });
-      break;
-    }
-    // The same run again right after it ended well means the agent did not do what the facts look for.
-    if (previous && previous.outcome === 'done' && same(previous, next)) {
-      reason = `${next.role} ran ${next.purpose} on ${next.key} and it still has to run: read its answer in .ai/runs/${key}/last.md`;
-      break;
-    }
-    if (next.checkout) {
-      const ready = await git(next.checkout, next);
-      if (!ready.ok) {
-        reason = ready.reason;
-        break;
-      }
-    }
-    let state = store.readState(key) ?? { key, runs: [] };
-    const n = (state.runs.at(-1)?.n ?? 0) + 1;
+
+  // The number of the next run: one more than state.json and than any run this command reserved, so two runs at once
+  // never share one.
+  let reserved = 0;
+  const reserve = () => {
+    reserved = Math.max(store.readState(key)?.runs.at(-1)?.n ?? 0, reserved) + 1;
+    return reserved;
+  };
+  // Writes one record of state.json, its own by number: read, change, write, with nothing awaited between, so two runs
+  // at once never write over each other (C2 spec section 7).
+  const put = (record) => {
+    const state = store.readState(key) ?? { key, runs: [] };
+    const at = state.runs.findIndex(({ n }) => n === record.n);
+    store.writeState(key, { ...state, runs: at === -1 ? [...state.runs, record] : state.runs.map((r, i) => (i === at ? record : r)) });
+  };
+
+  // One run of an agent, on a checkout already in place: { record, read, stop }, or { stop } when it could not start.
+  async function makeRun(next) {
+    const state = store.readState(key) ?? { key, runs: [] };
+    const n = reserve();
     const logName = `${n}-${next.role}.jsonl`;
     const resumed = next.resume ? state.runs.findLast((r) => r.session === next.resume) : undefined;
     // The work the run left uncommitted comes back first, once the checkout is on its branch; or nothing runs.
@@ -115,16 +92,12 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     let wipNotes = [];
     if (resumed?.wip && wip) {
       const back = await wip.restore(resumed.wip, next);
-      if (!back.ok) {
-        reason = back.reason;
-        break;
-      }
+      if (!back.ok) return { stop: halt('fix', back.reason) };
       restored = true;
       wipNotes = back.notes ?? [];
       // Its stash is dropped: off the record at once, so a run that cannot start after this does not name it again
       // (review of ao-sample PR #30).
-      state = { ...state, runs: state.runs.map((r) => (r === resumed ? { ...r, wip: undefined } : r)) };
-      store.writeState(key, state);
+      put({ ...resumed, wip: undefined });
     }
     log(`${n}. ${next.role} ${next.key} ${next.purpose}, effort ${next.effort}${next.resume ? ', resumes its session' : ''}`);
     const startedAt = new Date(now()).toISOString();
@@ -133,10 +106,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     const file = pack && PACKED.includes(next.purpose) ? await pack(next, facts) : null;
     // The worktree of the PR is added just before the run and removed when it ends, whatever way it ends.
     const tree = next.worktree && worktree ? await worktree.add(next.worktree) : null;
-    if (tree && !tree.ok) {
-      reason = tree.reason;
-      break;
-    }
+    if (tree && !tree.ok) return { stop: halt('fix', tree.reason) };
     const treeNote = tree && (next.worktree.kind === 'qa' ? qaWorktreeNote : worktreeNote)(tree.path, next.worktree.sha);
     const notes = [file && packNote(file), treeNote, restored && wipNote].filter(Boolean);
     const run = {
@@ -163,7 +133,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     };
     // On record from its start: a shell killed during the run leaves it unfinished, and the next command goes on in the
     // session of its log (release-workflow T22). What its session cost so far stays, for the run that resumes it.
-    store.writeState(key, { ...state, runs: [...state.runs, { ...run, session: next.resume ?? null, outcome: 'unfinished', turns: 0, durationMs: 0, costUsd: null, ...(resumed?.cumulative && { cumulative: resumed.cumulative }) }] });
+    put({ ...run, session: next.resume ?? null, outcome: 'unfinished', turns: 0, durationMs: 0, costUsd: null, ...(resumed?.cumulative && { cumulative: resumed.cumulative }) });
     let lines;
     let superseded;
     let stopped;
@@ -204,7 +174,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       text: read.text.length > TEXT_MAX ? `${read.text.slice(0, TEXT_MAX)} … [cut at ${TEXT_MAX} characters; the whole answer is in ${logName}]` : read.text,
     };
     // state.json is written before anything else, so a stopped shell can go on from here.
-    store.writeState(key, { ...state, runs: [...state.runs, record] });
+    put(record);
     // A run that stopped before its end may leave work not committed, which keeps the next command from switching the
     // checkout: it goes aside, and its stash on the record (live-run-fixes spec 2.1).
     let aside = '';
@@ -213,37 +183,101 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       if (saved?.error) aside = `. Its work not committed could not be put aside (${saved.error}): put it aside yourself with git stash push --include-untracked before the next command`;
       else if (saved) {
         record.wip = saved;
-        store.writeState(key, { ...state, runs: [...state.runs, record] });
+        put(record);
         aside = `. Its work not committed is in stash ${saved.stash.slice(0, 8)}, and comes back when the run goes on`;
       }
     }
-    // last.md gets the whole answer: it is what Claude reads to tell you what the agent said (Pilot 1, SMP-2).
-    made.push({ ...record, text: read.text });
-    previous = { ...record, purpose: next.purpose };
-    if (read.outcome === 'usage-limit') {
-      reason = `${next.role} hit the usage limit: ${read.text}. Run the same command again after it resets; the run goes on in its session${aside}`;
-      break;
-    }
-    if (read.outcome === 'unfinished') {
-      reason = `${next.role} stopped without a result: run the same command again; the run goes on in its session${aside}`;
-      break;
-    }
+    if (read.outcome === 'usage-limit') return { record, read, stop: halt('usage', `${next.role} hit the usage limit: ${read.text}. Run the same command again after it resets; the run goes on in its session${aside}`) };
+    if (read.outcome === 'unfinished') return { record, read, stop: halt('next', `${next.role} stopped without a result: run the same command again; the run goes on in its session${aside}`) };
     // What ao-step does after the run found something you decide, such as a change of seo outside docs/specs/.
-    if (afterStop) {
-      reason = afterStop;
+    if (afterStop) return { record, read, stop: halt('you', afterStop) };
+    return { record, read, stop: null };
+  }
+
+  while (decision.go && !stop) {
+    const [next] = decision.runs;
+    if (made.length >= limits.maxRuns) {
+      stop = halt('next', `${made.length} runs in one command, the most the runner makes; run the command again to go on`);
       break;
     }
+    if (next.action === 'jira-sync') {
+      log(`jira-sync for ${next.key}`);
+      await dispatch(next);
+      made.push({ action: 'jira-sync', key: next.key });
+      ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined, note: undefined, lightReport: undefined }), (d) => !(d.go && d.runs[0]?.action === 'jira-sync'), limits.syncWaitMs, { sleep, now, limits }));
+      if (decision.go && decision.runs[0]?.action === 'jira-sync') stop = halt('fix', `jira-sync ran, but ${next.key} is not done after ${Math.round(limits.syncWaitMs / 60000)} minutes: see the jira-sync and merge-gate runs on GitHub`);
+      // With continue, jira-sync is a first step, as for an item it refines before its build: the command goes on.
+      if (next.continue) continue;
+      break;
+    }
+    if (next.action) {
+      log(`${next.action} ${next.key}`);
+      made.push({ action: next.action, key: next.key, notes: await act(next) });
+      // An action with `continue` is a first step, such as marking a draft PR ready before its review (human-loop spec
+      // 4.6): the command goes on with what is decided after it, once GitHub shows its effect. Any other action is the
+      // one step of its command.
+      if (next.continue) {
+        const again = (d) => d.go && d.runs[0]?.action === next.action;
+        ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined, note: undefined, lightReport: undefined }), (d) => !again(d), limits.syncWaitMs, { sleep, now, limits }));
+        if (again(decision)) stop = halt('fix', `${next.action} ran on ${next.key}, but the facts still ask for it after ${Math.round(limits.syncWaitMs / 60000)} minutes: run the command again`);
+        continue;
+      }
+      facts = await gather();
+      decision = decide(command, facts, { ...options, answers: undefined, note: undefined, lightReport: undefined });
+      break;
+    }
+    // The same run again right after it ended well means the agent did not do what the facts look for.
+    if (previous && previous.outcome === 'done' && same(previous, next)) {
+      stop = halt('you', `${next.role} ran ${next.purpose} on ${next.key} and it still has to run: read its answer in .ai/runs/${key}/last.md`);
+      break;
+    }
+    // Runs marked together, reviewer and security, run at once when a second agent may start (C2 spec section 7):
+    // pair(run) takes its place and resolves its lock, or null, and they run one after another as before. They share
+    // one checkout: two git commands at once on one folder clash.
+    const [partner] = next.together ? decision.runs.filter((r) => r.together && r !== next) : [];
+    const agentLock = partner && pair && JSON.stringify(partner.checkout) === JSON.stringify(next.checkout) ? await pair(partner) : null;
+    const batch = agentLock ? [next, { ...partner, agentLock }] : [next];
+    if (next.checkout) {
+      const ready = await git(next.checkout, next);
+      if (!ready.ok) {
+        if (agentLock) await unpair?.(agentLock);
+        stop = halt('fix', ready.reason);
+        break;
+      }
+    }
+    const settled = await Promise.allSettled(
+      batch.map(async (run) => {
+        try {
+          return await makeRun(run);
+        } finally {
+          if (run.agentLock) await unpair?.(run.agentLock);
+        }
+      }),
+    );
+    const failure = settled.find(({ status }) => status === 'rejected');
+    if (failure) throw failure.reason;
+    for (const { value } of settled) {
+      if (value.record) {
+        // last.md gets the whole answer: it is what Claude reads to tell you what the agent said (Pilot 1, SMP-2).
+        made.push({ ...value.record, text: value.read.text });
+        previous = value.record;
+      }
+      stop ??= value.stop;
+    }
+    if (stop) break;
     // After a run that may have pushed, wait for CI before deciding again, but not for a CI that never starts.
     const since = now();
     const startMs = Math.min(limits.ciStartMs, limits.ciWaitMs);
     ({ facts, decision } = await waitFor(() => gather(), (f) => decide(command, f, { ...options, answers: undefined }), (_, f) => !ciPending(f) || (ciIdle(f) && (ciIdle(f).conflicts || now() - since >= startMs)), limits.ciWaitMs, { sleep, now, limits }));
     const idle = ciIdle(facts);
     // GitHub runs no workflow of pull_request on a PR it cannot merge (PR #57 of shop, SHOP-31).
-    if (idle?.conflicts) reason = `PR #${idle.number} conflicts with ${idle.base}, and GitHub runs no CI on a PR it cannot merge: merge origin/${idle.base} into its branch, resolve the conflict, push, then run the command again`;
-    else if (idle) reason = `no CI run started on PR #${idle.number} after ${Math.round(startMs / 60000)} minutes: GitHub Actions did not start the workflows. Open the Actions tab of the repo; on a new repo, push a commit that touches .github/workflows/, then run the command again`;
-    else if (ciPending(facts)) reason = `CI is still running after ${Math.round(limits.ciWaitMs / 60000)} minutes: run the command again once it is done`;
+    if (idle?.conflicts) stop = halt('fix', `PR #${idle.number} conflicts with ${idle.base}, and GitHub runs no CI on a PR it cannot merge: merge origin/${idle.base} into its branch, resolve the conflict, push, then run the command again`);
+    else if (idle) stop = halt('fix', `no CI run started on PR #${idle.number} after ${Math.round(startMs / 60000)} minutes: GitHub Actions did not start the workflows. Open the Actions tab of the repo; on a new repo, push a commit that touches .github/workflows/, then run the command again`);
+    else if (ciPending(facts)) stop = halt('ci', `CI is still running after ${Math.round(limits.ciWaitMs / 60000)} minutes: run the command again once it is done`);
   }
-  const final = reason ? { go: false, reason, next: `/ao-${command} ${arg ?? ''}`.trim(), lines: decision.lines ?? [] } : decision;
+  // The runner's own stops say what they wait for too (C2 spec section 4); next runs the same command again.
+  const rerun = stop?.waits === 'next' ? { then: { command, arg } } : {};
+  const final = stop ? { go: false, reason: stop.reason, next: `/ao-${command} ${arg ?? ''}`.trim(), waits: stop.waits, ...rerun, lines: decision.lines ?? [] } : decision;
   if (key) store.writeLast(key, lastReport({ command, key, made, decision: final, state: store.readState(key) }));
   // facts: what the last decision was made on, so ao-step can put the checkout on the base of the PR.
   return { decision: final, made, facts };

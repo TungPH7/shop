@@ -112,3 +112,8 @@ runs:
       COMPOSE_PROJECT_NAME: learn-postgresql-api
       POSTGRES_CONTAINER_NAME: learn-postgres
       COMPOSE_NETWORK_NAME: learn-app-network
+# Paths of shop added to a review tier (Low 9 of the second review of PR #79, SHOP-79): the JSON-LD component is the
+# one place of user that renders with dangerouslySetInnerHTML, so security reviews it.
+review:
+  sensitive_paths:
+    - apps/user/src/components/seo/**

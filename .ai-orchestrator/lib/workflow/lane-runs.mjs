@@ -15,7 +15,7 @@ export function runPlacer({ keeper, command, cap, slot, runs, apps, admitAgent, 
     const place = await keeper.placeOf(run, command);
     for (const line of place?.notes ?? []) log(line);
     // Another agent starts only with enough free RAM while one runs (spec 5.1).
-    if (cap > 1) await admitAgent();
+    if (cap > 1) await admitAgent(run);
     const moved = cap > 1 || Boolean(place);
     const offset = moved ? portOffset(slot, runs.portStep) : 0;
     const env = moved ? laneEnv(runs.laneEnv, slot, offset) : {};

@@ -1,6 +1,8 @@
 // Libraries approved before they are installed (C1 spec section 5): the list `dependencies.approved` of the project's
 // .ai-orchestrator/project.yaml, a protected file the kit copy leaves alone, with the project's own audit exceptions
 // beside it. The policy job, gh-guard and dep-check read it through these. Pure.
+import { parse } from 'yaml';
+import { matchesGlob } from './glob.mjs';
 import { rangeWithin } from './version-range.mjs';
 
 export const ECOSYSTEMS = ['npm', 'maven'];
@@ -33,16 +35,61 @@ export function packageJsonDependencies(text) {
   return [...new Set(NPM_FIELDS.flatMap((field) => Object.keys(json?.[field] ?? {})))].sort();
 }
 
-// The groupId:artifactId of each <dependency> of a pom.xml, those in <dependencyManagement> and <plugins> included, as
-// written: a coordinate that takes a ${property} is kept as it reads.
-export function pomDependencies(text) {
-  const found = new Set();
-  for (const [, block] of String(text ?? '').replace(/<!--[\s\S]*?-->/g, '').matchAll(/<dependency>([\s\S]*?)<\/dependency>/g)) {
-    const group = /<groupId>\s*([^<\s]+)\s*<\/groupId>/.exec(block)?.[1];
-    const artifact = /<artifactId>\s*([^<\s]+)\s*<\/artifactId>/.exec(block)?.[1];
-    if (group && artifact) found.add(`${group}:${artifact}`);
+// The groupId:artifactId of each artifact a pom.xml makes Maven download (second review of shop PR #79): every
+// <dependency>, those in <dependencyManagement> and in a plugin included, every <plugin> (its groupId is
+// org.apache.maven.plugins when it has none), every build <extension>, the <parent> and each <path> of the
+// annotationProcessorPaths of the compiler, however the tag is written.
+// A ${property} is read from the <properties> of the pom and from its own or its parent's groupId; one it does not set
+// is kept as it reads.
+const POM_ARTIFACTS = ['dependency', 'plugin', 'extension', 'parent'];
+// The blocks inside an artifact whose groupId and artifactId are not its own.
+const POM_NESTED = ['exclusions', 'dependencies', 'configuration', 'executions'];
+const pomElements = (text, tag) => [...text.matchAll(new RegExp(`<${tag}(?:\\s[^>]*)?(?<!/)>([\\s\\S]*?)</${tag}\\s*>`, 'g'))].map(([, inner]) => inner);
+const pomField = (text, tag) => new RegExp(`<${tag}(?:\\s[^>]*)?>\\s*([^<]*?)\\s*</${tag}\\s*>`).exec(text)?.[1] || undefined;
+const pomStrip = (text, tags) => tags.reduce((left, tag) => left.replace(new RegExp(`<${tag}(?:\\s[^>]*)?(?<!/)>[\\s\\S]*?</${tag}\\s*>`, 'g'), ''), text);
+const pomText = (text) => String(text ?? '').replace(/<!--[\s\S]*?-->/g, '');
+
+function pomProperties(pom) {
+  const properties = {};
+  for (const block of pomElements(pom, 'properties')) {
+    for (const [, name, value] of block.matchAll(/<([\w.-]+)(?:\s[^>]*)?>\s*([^<]*?)\s*<\/\1\s*>/g)) properties[name] ??= value;
   }
+  const top = pomStrip(pom, ['parent', 'dependencies', 'dependencyManagement', 'build', 'profiles', 'reporting', 'properties', 'repositories', 'pluginRepositories', 'distributionManagement', 'modules']);
+  const parentGroup = pomField(pomElements(pom, 'parent')[0] ?? '', 'groupId');
+  const group = pomField(top, 'groupId') ?? parentGroup;
+  if (group) properties['project.groupId'] ??= group;
+  if (parentGroup) properties['project.parent.groupId'] ??= parentGroup;
+  const artifact = pomField(top, 'artifactId');
+  if (artifact) properties['project.artifactId'] ??= artifact;
+  return properties;
+}
+
+export function pomDependencies(text) {
+  const pom = pomText(text);
+  const properties = pomProperties(pom);
+  const resolve = (value) => {
+    let out = value;
+    for (let i = 0; i < 5 && /\$\{/.test(out); i++) out = out.replace(/\$\{([^}]+)\}/g, (whole, name) => properties[name] ?? whole);
+    return out;
+  };
+  const found = new Set();
+  const add = (inner, defaultGroup) => {
+    const own = pomStrip(inner, POM_NESTED);
+    const group = pomField(own, 'groupId') ?? defaultGroup;
+    const artifact = pomField(own, 'artifactId');
+    if (group && artifact) found.add(`${resolve(group)}:${resolve(artifact)}`);
+  };
+  for (const tag of POM_ARTIFACTS) for (const inner of pomElements(pom, tag)) add(inner, tag === 'plugin' ? 'org.apache.maven.plugins' : undefined);
+  // The annotation processors of the compiler plugin, which Maven downloads as it does a dependency.
+  for (const paths of pomElements(pom, 'annotationProcessorPaths')) for (const inner of pomElements(paths, 'path')) add(inner);
   return [...found].sort();
+}
+
+// The URLs of the <repository> and <pluginRepository> blocks of a pom.xml: where Maven would download from besides
+// Maven Central, which dep-check reads.
+export function pomRepositories(text) {
+  const pom = pomText(text);
+  return [...new Set(['repository', 'pluginRepository'].flatMap((tag) => pomElements(pom, tag).map((inner) => pomField(inner, 'url')).filter(Boolean)))];
 }
 
 // The direct dependencies a change adds: in `after`, not in `before` (the same file at the base, or '' for a new file).
@@ -62,13 +109,65 @@ export function approvalOf(approved, ecosystem, name) {
 }
 
 // Where a spec of a package.json takes a package from (review of shop PR #79): 'registry' for a version, a range or a
-// tag; 'workspace' for workspace: and catalog: of pnpm, the project's own packages and versions; 'other' for anything
-// else, such as an alias npm:evil@1, git, github:x/y, a URL, file:, link: or a path, none of which dep-check checked.
-// A registry spec never holds a colon or a slash; a path starts with a dot.
+// tag; 'workspace' for workspace: of pnpm, the project's own packages; 'catalog' for catalog: of pnpm, a version kept in
+// pnpm-workspace.yaml, which is read there (second review of shop PR #79); 'other' for anything else, such as an alias
+// npm:evil@1, git, github:x/y, a URL, file:, link: or a path, none of which dep-check checked. A registry spec never
+// holds a colon or a slash; a path starts with a dot.
 export function specSource(spec) {
   const text = String(spec ?? '').trim();
-  if (/^(?:workspace|catalog):/.test(text)) return 'workspace';
+  if (/^workspace:/.test(text)) return 'workspace';
+  if (/^catalog:/.test(text)) return 'catalog';
   return /[:/\\]/.test(text) || text.startsWith('.') ? 'other' : 'registry';
+}
+
+// The catalogs of a pnpm-workspace.yaml: { <catalog>: { <name>: spec } }, the one of `catalog` as default; {} for no
+// text, null for a text that is not YAML.
+export function workspaceCatalogs(text) {
+  const workspace = readYaml(text);
+  if (workspace === null) return null;
+  const named = isObject(workspace.catalogs) ? workspace.catalogs : {};
+  return { ...named, default: isObject(workspace.catalog) ? workspace.catalog : isObject(named.default) ? named.default : {} };
+}
+
+const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const readYaml = (text) => {
+  if (String(text ?? '').trim() === '') return {};
+  try {
+    const value = parse(text);
+    return isObject(value) ? value : value == null ? {} : null;
+  } catch {
+    return null;
+  }
+};
+
+// The spec catalog: or catalog:<name> stands for, from the catalogs of pnpm-workspace.yaml, or undefined.
+function catalogSpec(catalogs, spec, name) {
+  const catalog = String(spec).trim().slice('catalog:'.length) || 'default';
+  const value = catalogs?.[catalog]?.[name];
+  return value === undefined || value === null ? undefined : String(value);
+}
+
+// The entries of a pnpm-workspace.yaml that name a package: those of its catalogs, and its overrides, which can point
+// a name at another package: [{ key, name, spec, dependency }], as packageJsonEntries. null for a text that is not YAML.
+function workspaceEntries(text) {
+  const workspace = readYaml(text);
+  if (workspace === null) return null;
+  const catalogs = workspaceCatalogs(text);
+  const entries = Object.entries(catalogs).flatMap(([catalog, packages]) => (isObject(packages) ? Object.entries(packages) : []).map(([name, spec]) => ({ key: `catalog:${catalog}:${name}`, name, spec: String(spec), dependency: true })));
+  if (isObject(workspace.overrides)) entries.push(...Object.entries(workspace.overrides).map(([name, spec]) => ({ key: `overrides:${name}`, name, spec: String(spec), dependency: false })));
+  return entries;
+}
+
+// The packages of the project itself, which a package.json may name without approval (second review of shop PR #79):
+// none with pnpm, which links them only by workspace:, a spec that passes anyway; with npm, which links them by name,
+// the names of the package.json files inside the workspaces of the root package.json. A package.json elsewhere, under
+// any name, is no package of the project. manifests: [{ path, name }] of the package.json files of the repo.
+export function ownPackages({ manager, packageJson, manifests = [] }) {
+  if (manager === 'pnpm') return [];
+  const workspaces = packageJson?.workspaces;
+  const globs = Array.isArray(workspaces) ? workspaces : Array.isArray(workspaces?.packages) ? workspaces.packages : [];
+  const inside = (path) => globs.some((glob) => typeof glob === 'string' && matchesGlob(`${glob.replace(/\/+$/, '')}/package.json`, path));
+  return manifests.filter(({ path, name }) => name && path !== 'package.json' && inside(path)).map(({ name }) => name);
 }
 
 // The specs of a package.json: [{ key, name, spec, dependency }], those of its dependency fields and of the overrides
@@ -91,30 +190,51 @@ function packageJsonEntries(text) {
   return entries;
 }
 
-// The problems of one change of a package.json or a pom.xml, for the policy job and gh-guard (C1 spec section 5):
-// a new direct dependency not on the approved list; a spec that points away from the registry, new or changed; and a
-// new approved npm dependency whose spec is not inside the range dep-check approved (review of shop PR #79). A version
-// change of a dependency already there is not new: audit and osv-scanner check it. own: the names of the project's own
-// packages, which are not libraries.
-export function dependencyProblems({ path, before = '', after = '' }, approved, own = []) {
+// The problems of one change of a package.json, a pnpm-workspace.yaml or a pom.xml, for the policy job and gh-guard
+// (C1 spec section 5): a new direct dependency not on the approved list; a spec that points away from the registry, new
+// or changed; and a new approved npm dependency whose spec is not inside the range dep-check approved (review of shop
+// PR #79). A version change of a dependency already there is not new: audit and osv-scanner check it. own: the names of
+// the project's own packages, which are not libraries (ownPackages). catalogs: those of the pnpm-workspace.yaml of the
+// project, for a spec catalog: (workspaceCatalogs).
+export function dependencyProblems({ path, before = '', after = '' }, approved, own = [], { catalogs = {} } = {}) {
   const notApproved = (ecosystem, name) => `${path}: ${name} (${ecosystem}) is new and not on dependencies.approved of project.yaml: run node .ai-orchestrator/scripts/dep-check.mjs ${ecosystem} ${name}@<version> first`;
   if (/(^|\/)pom\.xml$/.test(path)) {
-    return addedDependencies({ path, before, after })
-      .filter(({ name }) => !/\$\{/.test(name) && !isApproved(approved, 'maven', name))
-      .map(({ name }) => notApproved('maven', name));
+    const problems = addedDependencies({ path, before, after }).flatMap(({ name }) => {
+      if (/\$\{/.test(name)) return [`${path}: ${name} takes a property this pom.xml does not set, so it cannot be checked: write its groupId and artifactId out`];
+      return isApproved(approved, 'maven', name) ? [] : [notApproved('maven', name)];
+    });
+    const had = new Set(pomRepositories(before));
+    for (const url of pomRepositories(after).filter((found) => !had.has(found))) {
+      problems.push(`${path} adds the repository ${url}: libraries come only from Maven Central, the registry dep-check reads (C1 spec section 5)`);
+    }
+    return problems;
   }
-  if (!/(^|\/)package\.json$/.test(path)) return [];
-  const now = packageJsonEntries(after);
-  if (now === null) return [`${path} is no JSON after this change, so its dependencies cannot be read: write it whole, as valid JSON`];
-  const was = packageJsonEntries(before) ?? [];
+  const workspace = /(^|\/)pnpm-workspace\.yaml$/.test(path);
+  if (!workspace && !/(^|\/)package\.json$/.test(path)) return [];
+  const now = workspace ? workspaceEntries(after) : packageJsonEntries(after);
+  if (now === null) {
+    return [workspace ? `${path} is no YAML after this change, so its catalogs and overrides cannot be read: write it whole, as valid YAML` : `${path} is no JSON after this change, so its dependencies cannot be read: write it whole, as valid JSON`];
+  }
+  const was = (workspace ? workspaceEntries(before) : packageJsonEntries(before)) ?? [];
   const wasSpec = new Map(was.map(({ key, spec }) => [key, spec]));
   const wasName = new Set(was.filter(({ dependency }) => dependency).map(({ name }) => name));
   const problems = [];
   for (const { key, name, spec, dependency } of now) {
     if (wasSpec.get(key) === spec) continue;
-    const source = specSource(spec);
+    let source = specSource(spec);
+    let version = spec;
+    // catalog: takes its version from pnpm-workspace.yaml (second review of shop PR #79); there, an entry is a version.
+    if (source === 'catalog' && !workspace) {
+      version = catalogSpec(catalogs, spec, name);
+      if (version === undefined) {
+        problems.push(`${path}: ${name} asks for ${spec}, which pnpm-workspace.yaml has no entry for`);
+        continue;
+      }
+      source = specSource(version) === 'registry' ? 'registry' : 'other';
+    } else if (source === 'catalog' || (workspace && dependency && source === 'workspace')) source = 'other';
+    const asked = version === spec ? spec : `${spec} (${version} in pnpm-workspace.yaml)`;
     if (source === 'other') {
-      problems.push(`${path}: ${name} points to ${spec}, which is no version of the registry: install libraries by name, after dep-check (C1 spec section 5)`);
+      problems.push(`${path}: ${name} points to ${asked}, which is no version of the registry: install libraries by name, after dep-check (C1 spec section 5)`);
       continue;
     }
     if (source === 'workspace' || !dependency || wasName.has(name) || own.includes(name)) continue;
@@ -123,17 +243,17 @@ export function dependencyProblems({ path, before = '', after = '' }, approved, 
       problems.push(notApproved('npm', name));
       continue;
     }
-    const within = rangeWithin(spec, approval.range);
-    if (within === false) problems.push(`${path}: ${name} asks for ${spec}, outside ${approval.range}, the range dep-check approved: ask for a version inside it, or run dep-check on the new one`);
-    else if (within === null) problems.push(`${path}: ${name} asks for ${spec}, which cannot be checked against ${approval.range}, the range dep-check approved: write a version or a range inside it`);
+    const within = rangeWithin(version, approval.range);
+    if (within === false) problems.push(`${path}: ${name} asks for ${asked}, outside ${approval.range}, the range dep-check approved: ask for a version inside it, or run dep-check on the new one`);
+    else if (within === null) problems.push(`${path}: ${name} asks for ${asked}, which cannot be checked against ${approval.range}, the range dep-check approved: write a version or a range inside it`);
   }
   return problems;
 }
 
 // The problems of the policy job for the dependencies a PR changes. changes: [{ path, before, after }] of the
-// package.json and pom.xml files the PR changes.
-export function unapprovedDependencies(changes, approved, own = []) {
-  return changes.flatMap((change) => dependencyProblems(change, approved, own));
+// package.json, pnpm-workspace.yaml and pom.xml files the PR changes; options: { catalogs } (dependencyProblems).
+export function unapprovedDependencies(changes, approved, own = [], options = {}) {
+  return changes.flatMap((change) => dependencyProblems(change, approved, own, options));
 }
 
 // The verdict of dep-check from what it read about one version of a library (C1 spec section 5): { ok, problems,
@@ -174,13 +294,18 @@ export function licenseAllowed(expression, licenses) {
 // dlx of pnpm, yarn and bun download a package the project does not have, and run it (review of shop PR #79).
 // program: the name of the program, such as npm; args: the words after it; env: the VAR=value words before it.
 const INSTALL_VERBS = {
-  npm: ['install', 'i', 'in', 'ins', 'inst', 'insta', 'instal', 'isnt', 'isnta', 'isntal', 'isntall', 'add'],
+  npm: ['install', 'i', 'in', 'ins', 'inst', 'insta', 'instal', 'isnt', 'isnta', 'isntal', 'isntall', 'add', 'install-test', 'it'],
   pnpm: ['add', 'install', 'i'],
   yarn: ['add'],
   bun: ['add', 'install', 'i'],
 };
 const RUN_VERBS = { npm: ['exec', 'x'], pnpm: ['dlx'], yarn: ['dlx'], bun: ['x'] };
-const RUNNERS = ['npx', 'bunx'];
+const RUNNERS = ['npx', 'bunx', 'pnpx'];
+// npm init <initializer> and the create of each package manager download the package create-<initializer> and run it
+// (docs.npmjs.com/cli/commands/npm-init; second review of shop PR #79).
+const CREATE_VERBS = { npm: ['init', 'create', 'innit'], pnpm: ['create'], yarn: ['create'], bun: ['create', 'c'] };
+// corepack <package manager>[@<version>] runs that package manager with the words after it.
+const COREPACK_TOOLS = ['npm', 'npx', 'pnpm', 'pnpx', 'yarn'];
 // Options that take the next word as their value, before or after the verb.
 const VALUE_OPTIONS = ['-F', '--filter', '-C', '--dir', '--prefix', '-w', '--workspace', '--cwd', '--tag'];
 const MAVEN = ['mvn', 'mvnw', 'mvn.cmd', 'mvnw.cmd'];
@@ -188,8 +313,17 @@ const MAVEN = ['mvn', 'mvnw', 'mvn.cmd', 'mvnw.cmd'];
 // project's registry, not one of the same name elsewhere.
 const REGISTRY_OPTION = /^--(?:@[\w.-]+:)?registry(?:=|$)|^-D(?:remoteRepositories|repoUrl)=/;
 const REGISTRY_VARIABLE = /^(?:npm_config_|yarn_|bun_config_)\S*registry\S*=/i;
+const MAVEN_SETTINGS = /^(?:-g?s|--(?:global-)?settings)(?:=|$)/;
 
 export function installTargets(program, args, { env = [] } = {}) {
+  if (program === 'corepack') {
+    const tool = args[0]?.replace(/@[^@]*$/, '');
+    return COREPACK_TOOLS.includes(tool) ? installTargets(tool, args.slice(1), { env }) : null;
+  }
+  // A settings file of Maven can hold a mirror, which serves every artifact from elsewhere, whatever the goal (second
+  // review of shop PR #79).
+  const settings = MAVEN.includes(program) ? args.find((word) => MAVEN_SETTINGS.test(word)) : undefined;
+  if (settings) return [{ refused: settings, registry: true }];
   let targets;
   if (MAVEN.includes(program)) targets = mavenTargets(args);
   else if (RUNNERS.includes(program) || isRunVerb(program, args)) targets = runTargets(program, args);
@@ -226,6 +360,7 @@ function npmTargets(program, args) {
   while (i < args.length && args[i].startsWith('-')) i += VALUE_OPTIONS.includes(args[i]) ? 2 : 1;
   // yarn 1 installs for the whole machine with yarn global add.
   if (program === 'yarn' && args[i] === 'global') i += 1;
+  if (CREATE_VERBS[program]?.includes(args[i])) return createTargets(args.slice(i + 1));
   if (!verbs.includes(args[i])) return undefined;
   const targets = [];
   for (let j = i + 1; j < args.length; j++) {
@@ -237,6 +372,25 @@ function npmTargets(program, args) {
     targets.push(packageOf(word));
   }
   return targets.length > 0 ? targets : null;
+}
+
+// The package npm init <initializer> or a create runs: create-<name> for a name, @scope/create-<name> for a scoped
+// one, @scope/create for a scope alone, with the version given. null when it names none, as npm init -y.
+function createTargets(args) {
+  for (let j = 0; j < args.length; j++) {
+    const word = args[j];
+    if (word.startsWith('-')) {
+      if (VALUE_OPTIONS.includes(word)) j++;
+      continue;
+    }
+    const scope = /^(@[\w.-]+)(?:@(.*))?$/.exec(word);
+    if (scope) return [scope[2] === '' ? { refused: word } : { ecosystem: 'npm', name: `${scope[1]}/create`, ...(scope[2] !== undefined && { version: scope[2] }), run: true }];
+    const target = packageOf(word);
+    if (target.refused) return [target];
+    const [scopePart, rest] = target.name.startsWith('@') ? target.name.split('/') : [null, target.name];
+    return [{ ...target, name: scopePart ? `${scopePart}/create-${rest}` : `create-${rest}`, run: true }];
+  }
+  return null;
 }
 
 // npm exec, npm x and the dlx of a package manager, after its options.
@@ -289,11 +443,16 @@ export function installRefusal(targets, approved, { tools = [] } = {}) {
     const [first] = missing;
     const names = `${missing.map(({ name }) => name).join(', ')} ${missing.length > 1 ? 'are' : 'is'} not on dependencies.approved of project.yaml`;
     const check = `node .ai-orchestrator/scripts/dep-check.mjs ${first.ecosystem} ${first.name}@<version>`;
-    if (first.run) return `${names}, and npx, npm exec or a dlx downloads it when the project does not have it: run what the project has with pnpm exec or npx --no, or run ${check} first (C1 spec section 5)`;
+    if (first.run) return `${names}, and npx, npm exec, a dlx or a create downloads it when the project does not have it: run what the project has with pnpm exec or npx --no, or run ${check} first (C1 spec section 5)`;
     return `${names}: run ${check} first, and install it once it passes (C1 spec section 5)`;
   }
   for (const target of targets) {
     const entry = entryOf(target);
+    // A name alone installs the newest version, which dep-check did not read (second review of shop PR #79). A run of
+    // npx takes the version the project has, when it has one.
+    if (target.version === undefined && entry.range && !target.run) {
+      return `${target.name} alone installs the newest version, which dep-check did not read: give a version inside ${entry.range}, such as ${target.name}@<x.y.z> (C1 spec section 5)`;
+    }
     if (target.version === undefined || !entry.range || target.version === entry.range) continue;
     const within = rangeWithin(target.version, entry.range);
     const spec = `${target.name}@${target.version}`;

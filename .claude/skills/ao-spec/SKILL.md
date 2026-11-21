@@ -1,6 +1,6 @@
 ---
 name: ao-spec
-description: Do stage spec of an Epic in Specifying with ba, ux, seo and sa, up to its docs PR at gate ①; with text after the key, change the SPEC as the human asks before the gate; the word seo or no-seo [reason] turns seo on or off.
+description: Do stage spec of an Epic in Specifying with ba, ux, sa, then seo last on the docs PR, up to gate ①; with text after the key, change the SPEC as the human asks before the gate; the word seo or no-seo [reason] turns seo on or off.
 argument-hint: <EPIC> [change | seo | no-seo [reason]]
 disable-model-invocation: true
 ---

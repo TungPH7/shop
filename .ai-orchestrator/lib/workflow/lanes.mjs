@@ -337,7 +337,27 @@ export function runsSettings(config) {
       throw new Error(`runs.copy of project.yaml has ${JSON.stringify(path)}: each path is relative and stays inside the project`);
     }
   }
-  return { worktrees, lanesMax, minFreeRamGb, portStep, copy, laneEnv: laneEnvSettings(runs.lane_env) };
+  // The dispatcher /ao-run (C2 spec 5.4, 5.5): the budget of one run, and how long it waits for you with nothing to start.
+  const budgetUsd = runs.budget_usd ?? 30;
+  if (typeof budgetUsd !== 'number' || !(budgetUsd > 0) || budgetUsd > 1000) throw new Error(`runs.budget_usd of project.yaml is ${JSON.stringify(runs.budget_usd)}: a number of USD above 0, at most 1000`);
+  const idleHours = runs.idle_hours ?? 8;
+  if (!Number.isInteger(idleHours) || idleHours < 1 || idleHours > 48) throw new Error(`runs.idle_hours of project.yaml is ${JSON.stringify(runs.idle_hours)}: a whole number of hours from 1 to 48`);
+  return { worktrees, lanesMax, minFreeRamGb, portStep, copy, laneEnv: laneEnvSettings(runs.lane_env), budgetUsd, idleHours, agentsPerRole: agentsPerRoleSettings(runs.agents_per_role, lanesMax) };
+}
+
+// The roles that build, and so hold the WIP limit dev-agent of the contract (C2 spec section 6).
+export const BUILDERS = ['be-dev', 'fe-dev', 'devops'];
+
+// runs.agents_per_role: how many agents of a dev role work at once, each on its own item in its own lane, so at most
+// lanes_max. A role it does not name keeps the 1 of the contract.
+function agentsPerRoleSettings(given, lanesMax) {
+  if (given === undefined) return {};
+  if (!given || typeof given !== 'object' || Array.isArray(given)) throw new Error('runs.agents_per_role of project.yaml is not a map of role to number');
+  for (const [role, count] of Object.entries(given)) {
+    if (!BUILDERS.includes(role)) throw new Error(`runs.agents_per_role of project.yaml names ${role}: only ${BUILDERS.slice(0, -1).join(', ')} and ${BUILDERS.at(-1)} build`);
+    if (!Number.isInteger(count) || count < 1 || count > lanesMax) throw new Error(`runs.agents_per_role of project.yaml gives ${role} ${JSON.stringify(count)}: a whole number from 1 to runs.lanes_max (${lanesMax})`);
+  }
+  return { ...given };
 }
 
 // runs.lane_env (review of shop PR #21): ports, variables whose port each lane moves, below 59536 so six lanes 1000

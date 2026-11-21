@@ -20,7 +20,9 @@ import { splitNote } from './notes.mjs';
 import { PROJECT_FILE } from '../scaffold/project-config.mjs';
 import { PREVIEW_SAMPLE, steeringReason, steersPreview } from './preview.mjs';
 import { appUrls } from './qa.mjs';
-import { CONDITIONS, SCREENS, SEO_OFF, SEO_SECTION, pendingRuns, seoScreens, seoWord, stageRoles } from './conditions.mjs';
+import { SCREENS, SEO_OFF, pendingRuns, seoScreens, seoWord, stageRoles, stageRuns } from './conditions.mjs';
+import { seoSection, seoTextProblems } from './seo-check.mjs';
+import { WEB_ROLES } from '../rules/references.mjs';
 import { answersPrompt, promptFor, resumePrompt, seoNote } from './prompts.mjs';
 import { openQuestions } from './runs.mjs';
 import { fullReviewEffort, reviewScope } from './security-scope.mjs';
@@ -34,7 +36,9 @@ const ASKING = ['ba', 'ux', 'sa'];
 // The roles /ao-request runs on a "Cần <role>:" comment (human-loop spec 3.3): those of stage spec and plan, security
 // on a library dep-check found suspicious (C1 spec section 5), and seo on the SEO part of an item (C1 spec 6.6). The dev
 // roles and qa have their own commands.
-const ADVISERS = [...ASKING, 'security', 'seo'];
+export const ADVISERS = [...ASKING, 'security', 'seo'];
+// The roles whose open questions you answer: seo's too, so its questions never go to ba or sa, which have Bash.
+const ANSWERING = [...ASKING, 'seo'];
 // A run that stopped before its end goes on in its session; one that failed counts towards the retry limit.
 const STOPPED = ['unfinished', 'usage-limit'];
 const FAILED = ['error', 'max-turns'];
@@ -70,7 +74,23 @@ ${seoNote(kind, { key: item.key, epic })}` } : run;
   return { ...decision, runs };
 }
 
-const stop = (reason, next, extra = {}) => ({ go: false, reason, next, lines: [], ...extra });
+// What a STOP waits for (C2 spec section 4), so the dispatcher /ao-run reads it and never the words of next:
+//   you     you: a gate, a click, Accept, seo-ok, a flag, questions, a preview, or a choice only you make
+//   ci      CI on the PR
+//   deploy  a deploy to the environment
+//   item    another item: a link Blocks, the WIP of a role, a QA on the environment, a run that holds the folder
+//   usage   the usage limit of the plan
+//   fix     the command does not apply as asked, or something must be fixed first (an argument, the setup)
+//   next    the command `then` names moves the item on now: { command, arg }
+export const WAITS = ['you', 'ci', 'deploy', 'item', 'usage', 'fix', 'next'];
+
+// A STOP. waits comes first, so no stop can leave it out (tests/workflow/waits.test.mjs reads every call); then goes
+// with next only.
+function stop(waits, reason, next, extra = {}) {
+  if (!WAITS.includes(waits)) throw new Error(`a STOP waits for ${JSON.stringify(waits)}, which is none of ${WAITS.join(', ')}`);
+  if ((waits === 'next') !== Boolean(extra.then)) throw new Error(`a STOP that waits for next names its command in then, and only that one: ${reason}`);
+  return { go: false, reason, next, waits, lines: [], ...extra };
+}
 
 // The tests of a Java app start Postgres with Testcontainers (project-scaffold part 3, spec 2.2), and the E2E that qa
 // runs start the api with its Postgres for the @local tests. So a decision that starts be-dev or qa on a project with a
@@ -85,7 +105,7 @@ export function dockerGate(decision, { java, dockerRunning, pause = () => {} }) 
   if (dockerRunning()) return decision;
   pause();
   if (dockerRunning()) return decision;
-  return stop('the project has a Java app, whose tests start Postgres in Docker, and Docker is not running', 'Start Docker Desktop, wait until it says Engine running, then run the command again');
+  return stop('fix', 'the project has a Java app, whose tests start Postgres in Docker, and Docker is not running', 'Start Docker Desktop, wait until it says Engine running, then run the command again');
 }
 const go = (runs, lines = []) => ({ go: true, runs, lines });
 
@@ -103,9 +123,9 @@ function carryOn(command, facts, options, asker) {
   const key = facts.item.key;
   if (options.answers !== undefined) {
     const asked = asker ? runs.filter((r) => r.role === asker).at(-1) : last;
-    if (!asked || !ASKING.includes(asked.role) || !asked.session) return stop(`no run of ba, ux or sa on ${key} asked questions to answer`, `/ao-status ${key}`);
+    if (!asked || !ANSWERING.includes(asked.role) || !asked.session) return stop('fix', `no run of ba, ux, sa or seo on ${key} asked questions to answer`, `/ao-status ${key}`);
     const pr = facts.docs?.pr?.state === 'open' ? facts.docs.pr.number : undefined;
-    return go([{ role: asked.role, key, effort: asked.effort, purpose: asked.purpose, resume: asked.session, prompt: answersPrompt(key, options.answers, { pr }), checkout: asked.checkout }]);
+    return go([{ role: asked.role, key, effort: asked.effort, purpose: asked.purpose, resume: asked.session, prompt: answersPrompt(key, options.answers, { pr, role: asked.role }), checkout: asked.checkout }]);
   }
   if (!last) return null;
   if (STOPPED.includes(last.outcome)) {
@@ -119,7 +139,7 @@ function carryOn(command, facts, options, asker) {
       // head: on a new head, ao-pr would post what it wrote about the old one as the report of the new head.
       const { pr } = facts;
       if (!pr || !last.head || last.head !== pr.headSha || pr.reports?.[last.role]?.onHead) return null;
-      return go([{ ...goOn, checkout: last.checkout, head: last.head, worktree: { name: `pr-${pr.number}`, sha: last.head } }]);
+      return go([{ ...goOn, checkout: last.checkout, head: last.head, worktree: { name: reviewTree(pr.number, last.role), sha: last.head } }]);
     }
     // A build goes on where its agent left the checkout, on the branch it made, as build-again does: the checkout of
     // its first run is develop.
@@ -132,7 +152,7 @@ function carryOn(command, facts, options, asker) {
     failures += 1;
   }
   if (failures >= limit) {
-    return stop(`${last.role} failed ${failures} times in a row on ${key} (${last.outcome}); the contract stops after ${limit}`, `Read .ai/runs/${key}/last.md and the log of run ${last.n}, fix the cause, then run the command again`);
+    return stop('you', `${last.role} failed ${failures} times in a row on ${key} (${last.outcome}); the contract stops after ${limit}`, `Read .ai/runs/${key}/last.md and the log of run ${last.n}, fix the cause, then run the command again`);
   }
   return null;
 }
@@ -141,12 +161,12 @@ function carryOn(command, facts, options, asker) {
 function flaggedStop(item) {
   if (!item.flagged) return null;
   const by = { 'merge-gate': 'merge-gate', audit: 'audit', rework: 'the rework limit' }[item.flag] ?? 'an agent or you';
-  return stop(`${item.key} is flagged Needs you by ${by}`, `Read the newest flag comment on ${item.key}, act on it, then remove the flag and the needs-you label`);
+  return stop('you', `${item.key} is flagged Needs you by ${by}`, `Read the newest flag comment on ${item.key}, act on it, then remove the flag and the needs-you label`);
 }
 
 function notAnEpic(item, command) {
   if (item.workType === 'epic') return null;
-  return stop(`${item.key} is a ${item.type}: /ao-${command} takes an Epic`, item.workType === 'sub-task' ? `/ao-build ${item.parent?.key}` : `/ao-build ${item.key}`);
+  return stop('fix', `${item.key} is a ${item.type}: /ao-${command} takes an Epic`, item.workType === 'sub-task' ? `/ao-build ${item.parent?.key}` : `/ao-build ${item.key}`);
 }
 
 // The run of the oldest open request to ba, ux, sa, security or seo on the item, or null (human-loop spec 3.3). On an Epic in stage spec
@@ -188,11 +208,11 @@ function decideRequest(facts, options) {
   if (next) return go([next], lines);
   const others = (item.requests ?? []).filter(({ to }) => !ADVISERS.includes(to));
   const rest = others.length === 0 ? '' : `; ${others.length} open request${others.length > 1 ? 's go to other roles' : ' goes to another role'} (${[...new Set(others.map(({ to }) => to))].join(', ')})`;
-  return { ...stop(`${item.key} has no open request to ba, ux, sa, security or seo${rest}`, `/ao-status ${item.key}`), lines };
+  return { ...stop('fix', `${item.key} has no open request to ba, ux, sa, security or seo${rest}`, `/ao-status ${item.key}`), lines };
 }
 
 // A change asked for after its gate goes into a new Epic (human-loop spec 3.2; Lượt 111).
-const pastGate = (key, gate, what) => stop(`${key} is past gate ${gate}: its ${what} no longer changes before the gate`, '/ao-intake with the change, for a new Epic');
+const pastGate = (key, gate, what) => stop('you', `${key} is past gate ${gate}: its ${what} no longer changes before the gate`, '/ao-intake with the change, for a new Epic');
 
 // Whether `note` was made already, for /ao-spec and /ao-plan: the newest run of `command` for `purpose` that had a note
 // had this one, and ended done. `moved(run)` adds a condition. /ao-fix counts by dev agent instead (human-loop spec 4.4).
@@ -202,9 +222,10 @@ function noteDone(facts, command, purpose, note, moved = () => true) {
 }
 
 const questionsStop = (key, artifact, questions, asker) =>
-  stop(`${asker} left ${questions.length} open question${questions.length > 1 ? 's' : ''} in docs/specs/${key}/${artifact}`, `Answer them in the chat; Claude writes your answers to .ai/runs/${key}/answers.md and runs the command again with --answers`, { questions, asker });
+  stop('you', `${asker} left ${questions.length} open question${questions.length > 1 ? 's' : ''} in docs/specs/${key}/${artifact}`, `Answer them in the chat; Claude writes your answers to .ai/runs/${key}/answers.md and runs the command again with --answers`, { questions, asker });
 
-// /ao-spec <EPIC>: ba, ux when the SPEC has screens, sa, then ba opens the docs PR; it ends at gate ①.
+// /ao-spec <EPIC>: ba, ux when the SPEC has screens, sa, then ba opens the docs PR, and seo writes last when design.md
+// has screens of an app with seo: true; it ends at gate ①.
 function decideSpec(facts, options) {
   const { item: epic, docs } = facts;
   const key = epic.key;
@@ -212,18 +233,18 @@ function decideSpec(facts, options) {
   const early = notAnEpic(epic, 'spec');
   if (early) return { ...early, lines };
   const byState = {
-    new: () => stop(`Epic ${key} is New: its spec has not started`, `Click Start spec on ${key}, then /ao-spec ${key}`),
-    planning: () => stop(`${key} is past gate ① spec-approval`, `/ao-plan ${key}`),
+    new: () => stop('you', `Epic ${key} is New: its spec has not started`, `Click Start spec on ${key}, then /ao-spec ${key}`),
+    planning: () => stop('next', `${key} is past gate ① spec-approval`, `/ao-plan ${key}`, { then: { command: 'plan', arg: key } }),
   };
   // The word seo or no-seo after the key turns seo on or off (C1 spec 6.1); any other text is a change to the SPEC.
   const word = seoWord(options.note);
   const note = word ? undefined : options.note?.trim() || undefined;
   if ((note || word) && !['new', 'specifying'].includes(epic.state)) return { ...pastGate(key, '① spec-approval', 'SPEC'), lines };
-  if (epic.state !== 'specifying') return { ...(byState[epic.state]?.() ?? stop(`${key} is ${epic.status}: stage spec is over`, `/ao-status ${key}`)), lines };
+  if (epic.state !== 'specifying') return { ...(byState[epic.state]?.() ?? stop('fix', `${key} is ${epic.status}: stage spec is over`, `/ao-status ${key}`)), lines };
   const blocked = flaggedStop(epic);
   if (blocked) return { ...blocked, lines };
   const { used, limit } = facts.wip.epicShaping;
-  if (used > limit) return { ...stop(`${used} Epics are in Specifying or Planning, over the WIP limit epic-shaping of ${limit}`, 'Finish or cancel another Epic first'), lines };
+  if (used > limit) return { ...stop('you', `${used} Epics are in Specifying or Planning, over the WIP limit epic-shaping of ${limit}`, 'Finish or cancel another Epic first'), lines };
   // Open questions come before the docs PR: questions left on an open docs PR still go to you, and to who asked them.
   const pending = specQuestions(facts);
   const carried = carryOn('spec', facts, options, pending?.asker);
@@ -231,7 +252,7 @@ function decideSpec(facts, options) {
   if (pending) return { ...questionsStop(key, pending.artifact, pending.questions, pending.asker), lines };
   // A change you ask for before gate ① (human-loop spec 3.2), unless the same one was made already.
   const revise = note && !noteDone(facts, 'spec', 'spec-revise', note) ? note : undefined;
-  if (revise && !docs.spec) return { ...stop(`${key} has no SPEC yet: a change waits for stage spec to write one`, `/ao-spec ${key}`), lines };
+  if (revise && !docs.spec) return { ...stop('fix', `${key} has no SPEC yet: a change waits for stage spec to write one`, `/ao-spec ${key}`), lines };
   // seo: the apps with seo: true of project.yaml, and your word (C1 spec 6.1). no-seo on a SPEC already written: ba
   // writes the line "SEO: không" in it, once; on a SPEC still to write, ba writes it with the SPEC.
   const seo = { apps: options.seoApps ?? [], word: word?.word };
@@ -252,14 +273,23 @@ function decideSpec(facts, options) {
   const asked = requestRun(facts, options);
   const change = revise ?? turnOff;
   const runs = [...(change ? [run('ba', 'spec-revise', { ...context, pr, note: change }, options, { checkout, note: noteKey(change) })] : []), ...(asked ? [asked] : [])];
+  const pendingList = pendingRuns(options.contract, 'spec', seoFacts);
   if (pr) {
-    // The word seo on an open docs PR: seo writes its section now, and ao-step pushes it to the PR.
-    if (word?.word === 'seo' && CONDITIONS['spec-has-seo-screens'].test(seoFacts) === true && !SEO_SECTION.test(docs.spec ?? '')) runs.push(at('seo', 'seo-write'));
+    // The runs the contract puts after the docs PR, seo's: it writes from web pages, so it writes last and ao-step pushes
+    // its commit to the PR, which you read at gate ① before any agent with Bash reads it (second review of shop PR #79).
+    const stage = stageRuns(options.contract, 'spec');
+    const after = new Set(stage.slice(stage.findIndex(({ purpose }) => purpose === 'docs-pr') + 1).map(({ purpose }) => purpose));
+    runs.push(...pendingList.filter(({ purpose, when }) => after.has(purpose) && !when).map(({ role, purpose }) => at(role, purpose)));
     if (runs.length > 0) return go(runs, lines);
-    return { ...stop(`the docs PR #${pr} of ${key} is open: stage spec is done and waits for you at gate ① spec-approval`, `Read the diff of PR #${pr}, click Approve spec on ${key}, then /ao-plan ${key}`), lines };
+    // A check that needs no model names what has no place in the section ## SEO, before you read it.
+    const issues = seoTextProblems(seoSection(docs.spec), { hosts: options.seoHosts ?? [] });
+    const warning = issues.length > 0 ? `. seo wrote the section ## SEO from web pages, and it holds ${issues.join('; ')}: read it with care before you approve` : '';
+    return { ...stop('you', `the docs PR #${pr} of ${key} is open: stage spec is done and waits for you at gate ① spec-approval${warning}`, `Read the diff of PR #${pr}, click Approve spec on ${key}, then /ao-plan ${key}`), lines };
   }
-  // The rest of the stage, in the order of contract/stages.yaml (C1 spec section 6).
-  const rest = pendingRuns(options.contract, 'spec', seoFacts).map(({ role, purpose, when }) => at(role, purpose, when && { when }));
+  // The rest of the stage, in the order of contract/stages.yaml (C1 spec section 6). ba says in the docs PR that seo
+  // writes after it.
+  const seoAfter = pendingList.some(({ role, when }) => WEB_ROLES.includes(role) && !when);
+  const rest = pendingList.map(({ role, purpose, when }) => (purpose === 'docs-pr' && seoAfter ? run(role, purpose, { ...context, seoAfter }, options, { checkout }) : at(role, purpose, when && { when })));
   return go([...runs, ...rest], lines);
 }
 
@@ -283,7 +313,7 @@ function specQuestions(facts) {
   const { docs } = facts;
   if (!docs.spec) return null;
   const spec = openQuestions(docs.spec);
-  if (spec.length > 0) return { artifact: 'spec.md', questions: spec, asker: lastAsker(facts, 'spec', ['ba', 'sa']) ?? 'ba' };
+  if (spec.length > 0) return { artifact: 'spec.md', questions: spec, asker: lastAsker(facts, 'spec', ['ba', 'sa', 'seo']) ?? 'ba' };
   const design = SCREENS.test(docs.spec) && docs.design ? openQuestions(docs.design) : [];
   return design.length > 0 ? { artifact: 'design.md', questions: design, asker: 'ux' } : null;
 }
@@ -296,20 +326,20 @@ function decidePlan(facts, options) {
   const lines = [epicLine(facts)];
   const early = notAnEpic(epic, 'plan');
   if (early) return { ...early, lines };
-  if (epic.state === 'new') return { ...stop(`Epic ${key} is New: its spec has not started`, `Click Start spec on ${key}, then /ao-spec ${key}`), lines };
+  if (epic.state === 'new') return { ...stop('you', `Epic ${key} is New: its spec has not started`, `Click Start spec on ${key}, then /ao-spec ${key}`), lines };
   if (epic.state === 'specifying') {
     const pr = docs.pr?.state === 'open' ? `Read the diff of the docs PR #${docs.pr.number}, click` : 'Run /ao-spec first; then click';
-    return { ...stop(`${key} waits at gate ① spec-approval`, `${pr} Approve spec on ${key}, then /ao-plan ${key}`), lines };
+    return { ...stop('you', `${key} waits at gate ① spec-approval`, `${pr} Approve spec on ${key}, then /ao-plan ${key}`), lines };
   }
   const note = options.note?.trim() || undefined;
   if (note && ['in-progress', 'done', 'cancelled'].includes(epic.state)) return { ...pastGate(key, '② plan-approval', 'plan'), lines };
   const blocked = flaggedStop(epic);
   if (blocked) return { ...blocked, lines };
   if (epic.state === 'in-progress') return { ...afterPlanGate(facts), lines };
-  if (epic.state !== 'planning') return { ...stop(`${key} is ${epic.status}: stage plan is over`, `/ao-status ${key}`), lines };
+  if (epic.state !== 'planning') return { ...stop('fix', `${key} is ${epic.status}: stage plan is over`, `/ao-status ${key}`), lines };
   const carried = carryOn('plan', facts, options, docs.plan && openQuestions(docs.plan).length > 0 ? 'sa' : undefined);
   if (carried) return { ...carried, lines };
-  if (docs.pr?.state !== 'open') return { ...stop(`${key} has no open docs PR on ${docs.branch}`, `/ao-spec ${key} opens it; if it was closed, reopen it`), lines };
+  if (docs.pr?.state !== 'open') return { ...stop('fix', `${key} has no open docs PR on ${docs.branch}`, `/ao-spec ${key} opens it; if it was closed, reopen it`), lines };
   // The day of gate ① in UTC, as the changelog of the Epic records it: sa writes it in the Status of the SPEC and design.
   const passed = epic.gates?.['spec-approval'];
   const context = { key, branch: docs.branch, pr: docs.pr.number, ...(passed && { approved: new Date(passed).toISOString().slice(0, 10) }) };
@@ -320,7 +350,7 @@ function decidePlan(facts, options) {
   const first = asked ? [asked] : [];
   // A change you ask for before gate ② (human-loop spec 3.2), unless the same one was made already.
   const revise = note && !noteDone(facts, 'plan', 'plan-revise', note) ? note : undefined;
-  if (revise && !docs.plan) return { ...stop(`${key} has no plan yet: a change waits for stage plan to write one`, `/ao-plan ${key}`), lines };
+  if (revise && !docs.plan) return { ...stop('fix', `${key} has no plan yet: a change waits for stage plan to write one`, `/ao-plan ${key}`), lines };
   // The runs of the stage still to make, in the order of contract/stages.yaml (C1 spec section 6).
   const rest = pendingRuns(options.contract, 'plan', facts).map(({ role, purpose }) => at(role, purpose));
   if (!docs.plan) return go([...first, ...rest], lines);
@@ -337,7 +367,7 @@ function decidePlan(facts, options) {
   const libraries = planLibraries(docs.plan);
   const libraryLines = libraries.length > 0 ? [`New libraries of the plan: ${libraries.map(({ ecosystem, spec }) => `${ecosystem} ${spec}`).join(', ')}. Check each before you approve: node .ai-orchestrator/scripts/dep-check.mjs <npm|maven> <name>@<version> --dry-run`] : [];
   return {
-    ...stop(
+    ...stop('you',
       `the plan and the ${items.length} items of ${key} are done; ${effort > 0 ? `${effort} of them have an effort label` : 'none has an effort label'}. They wait for you at gate ② plan-approval`,
       `Read plan.md on the docs PR #${docs.pr.number}, click Approve plan on ${key}, then /ao-plan ${key} again`,
     ),
@@ -366,10 +396,12 @@ function afterPlanGate(facts) {
     const ready = epic.children.filter(({ state }) => state === 'ready');
     const [first] = startable(epic.children);
     const why = `the docs PR #${docs.pr.number} of ${epic.key} is merged and its items are refined`;
-    if (!first && ready.length > 0) return stop(`${why}; every Ready item waits for an item that is not merged yet`, `/ao-status ${epic.key}`);
-    return stop(why, first ? `/ao-build ${first}` : `/ao-status ${epic.key}`);
+    if (!first && ready.length > 0) return stop('item', `${why}; every Ready item waits for an item that is not merged yet`, `/ao-status ${epic.key}`);
+    // Nothing Ready: the items are at work, or wait for you.
+    const waits = first ? 'next' : 'item';
+    return stop(waits, why, first ? `/ao-build ${first}` : `/ao-status ${epic.key}`, first ? { then: { command: 'build', arg: first } } : {});
   }
-  if (!docs.pr) return stop(`${epic.key} is past gate ② but has no docs PR on ${docs.branch}`, `/ao-status ${epic.key}`);
+  if (!docs.pr) return stop('fix', `${epic.key} is past gate ② but has no docs PR on ${docs.branch}`, `/ao-status ${epic.key}`);
   return go([{ action: 'jira-sync', key: epic.key, then: docs.pr.merged ? null : { mergeGate: docs.pr.number } }]);
 }
 
@@ -380,9 +412,11 @@ const runsRequest = ({ to }, key) => (ADVISERS.includes(to) ? ` → /ao-request 
 const previewLine = ({ key, branch, apps = [] }) => `the preview of ${key} runs on ${branch}${apps.length > 0 ? `: ${apps.map(({ name, url }) => `${name} ${url}`).join(', ')}` : ', its apps stopped'} → /ao-preview ${key} --stop`;
 
 // /ao-status: the item and what comes next, or every item of the space.
-function decideStatus(facts) {
+function decideStatus(facts, options) {
   if (!facts.item) return spaceStatus(facts);
   const lines = [facts.item.workType === 'epic' ? epicLine(facts) : itemLine(facts)];
+  // A level label that does not count is said here too (second review of shop PR #79).
+  if (facts.item.levelIgnored) lines.push(levelLine(facts, options));
   const cost = (facts.run?.runs ?? []).reduce((total, r) => total + (r.costUsd ?? 0), 0);
   if (facts.run?.runs?.length) lines.push(`Runs: ${facts.run.runs.length}, ${usd(cost)} in all; the last: ${describeRun(facts.run.runs.at(-1))}`);
   if (facts.previewRunning) lines.unshift(previewLine(facts.previewRunning));
@@ -401,10 +435,12 @@ function spaceStatus(facts) {
   const yours = facts.previewRunning ? [previewLine(facts.previewRunning)] : [];
   for (const item of facts.items.filter(({ workType }) => workType !== 'sub-task')) {
     const pull = prOf.get(item.key);
-    const next = nextFor(item, pull ? { ...pull, state: 'open' } : null);
+    const step = nextCommand(item, pull ? { ...pull, state: 'open' } : null);
+    const next = step.text;
     const cost = costOf.get(item.key);
     lines.push(`${item.key} ${item.type} "${item.summary}": ${item.status}${pull?.draft ? `, draft PR #${pull.number}` : ''}${item.flagged ? ', flagged' : ''}${cost ? `, ${usd(cost)}` : ''} → ${next}`);
-    if (item.flagged || /^Click|^Accept|^\/ao-preview /.test(next)) yours.push(`${item.key}: ${next}`);
+    // What waits for you comes from the step, not from its words (C2 spec section 4).
+    if (step.waits === 'you') yours.push(`${item.key}: ${next}`);
     for (const request of item.requests) lines.push(`  open request to ${request.to}${request.from ? ` from ${request.from}` : ''}: ${request.text}${runsRequest(request, item.key)}`);
   }
   // release-workflow spec 2.2: what runs where, the open release branch, what is Done but not in a release yet, and the
@@ -436,23 +472,47 @@ const closed = ({ state, fixVersions = [] }) => state === 'cancelled' || (state 
 // null. Only an open PR counts: an item In Progress whose PR is merged failed QA, and is built again on a new branch
 // (live-run-fixes spec 2.4).
 export function nextFor(item, pr = null) {
+  return nextCommand(item, pr).text;
+}
+
+// The same as a step (C2 spec section 5.2, plan decision 5): { command, arg, text } for the ao-step command that moves
+// the item on, { waits, text } for what it waits for (WAITS), or { done: true, text } for an item at its end. The
+// dispatcher takes command and arg; /ao-status prints text, and lists the items that wait for you.
+export function nextCommand(item, pr = null) {
   const open = pr?.state === 'open' ? pr : null;
-  if (item.flagged) return `read the flag comment on ${item.key} (Needs you)`;
-  if (item.workType === 'epic' && item.state === 'in-progress' && item.children?.length > 0 && item.children.every(closed)) return `Click Complete on ${item.key}`;
-  const epic = { new: `Click Start spec on ${item.key}`, specifying: `/ao-spec ${item.key}`, planning: `/ao-plan ${item.key}`, 'in-progress': 'its items move on', done: 'done', cancelled: 'cancelled' };
-  if (item.workType === 'epic') return epic[item.state] ?? `/ao-status ${item.key}`;
+  const key = item.key;
+  const command = (name, arg, text = `/ao-${name} ${arg}`) => ({ command: name, arg, text });
+  const waits = (on, text) => ({ waits: on, text });
+  const end = (text) => ({ done: true, text });
+  if (item.flagged) return waits('you', `read the flag comment on ${key} (Needs you)`);
+  if (item.workType === 'epic' && item.state === 'in-progress' && item.children?.length > 0 && item.children.every(closed)) return waits('you', `Click Complete on ${key}`);
+  if (item.workType === 'epic') {
+    const epic = {
+      new: () => waits('you', `Click Start spec on ${key}`),
+      specifying: () => command('spec', key),
+      planning: () => command('plan', key),
+      'in-progress': () => waits('item', 'its items move on'),
+      done: () => end('done'),
+      cancelled: () => end('cancelled'),
+    };
+    return epic[item.state]?.() ?? waits('fix', `/ao-status ${key}`);
+  }
   const work = {
-    new: 'waits to be refined (jira-sync after Approve plan, or you)',
-    ready: `/ao-build ${item.key}`,
+    new: () => waits('item', 'waits to be refined (jira-sync after Approve plan, or you)'),
+    ready: () => command('build', key),
     // A draft PR waits for your preview, which you may skip (human-loop spec 4.2).
-    'in-progress': open ? (open.draft ? `/ao-preview ${item.key} or /ao-review ${open.number}` : `/ao-review ${open.number}`) : `/ao-build ${item.key}`,
-    'in-review': open ? `/ao-review ${open.number} or /ao-fix ${open.number}` : 'its PR is closed: /ao-status',
-    'ready-for-qa': `/ao-qa ${item.key}`,
-    'in-qa': `Accept or QA fail on ${item.key} after the QA report`,
-    done: 'done',
-    cancelled: 'cancelled',
+    'in-progress': () => {
+      if (!open) return command('build', key);
+      return open.draft ? waits('you', `/ao-preview ${key} or /ao-review ${open.number}`) : command('review', open.number);
+    },
+    // /ao-review decides whether the reports ask for /ao-fix (a STOP with then).
+    'in-review': () => (open ? command('review', open.number, `/ao-review ${open.number} or /ao-fix ${open.number}`) : waits('fix', 'its PR is closed: /ao-status')),
+    'ready-for-qa': () => command('qa', key),
+    'in-qa': () => waits('you', `Accept or QA fail on ${key} after the QA report`),
+    done: () => end('done'),
+    cancelled: () => end('cancelled'),
   };
-  return work[item.state] ?? `/ao-status ${item.key}`;
+  return work[item.state]?.() ?? waits('fix', `/ao-status ${key}`);
 }
 
 export const usd = (value) => `${value.toFixed(2)} USD`;
@@ -508,22 +568,25 @@ function decideBuild(facts, options) {
   const lines = [itemLine(facts)];
   const key = item.key;
   const out = (decision) => ({ ...decision, lines: [...lines, ...(decision.lines ?? [])] });
-  if (item.workType === 'epic') return out(stop(`${key} is an Epic: /ao-build takes its Stories and Tasks`, `/ao-plan ${key}`));
-  if (item.workType === 'sub-task') return out(stop(`${key} is a Sub-task: /ao-build takes its Story, which runs every Sub-task in order`, `/ao-build ${item.parent?.key}`));
+  if (item.workType === 'epic') return out(stop('fix', `${key} is an Epic: /ao-build takes its Stories and Tasks`, `/ao-plan ${key}`));
+  if (item.workType === 'sub-task') return out(stop('fix', `${key} is a Sub-task: /ao-build takes its Story, which runs every Sub-task in order`, `/ao-build ${item.parent?.key}`));
   const blocked = flaggedStop(item);
   if (blocked) return out(blocked);
   // A Sub-task still to build that its agent flagged waits for you: jira-guard refuses its moves until the flag is off.
   const held = item.subtasks.find(({ state, flagged }) => state !== 'done' && flagged);
   if (held) {
-    return out(stop(`Sub-task ${held.key} of ${key} is flagged Needs you`, `Read the newest comment on ${held.key} and answer it there, remove the flag and the needs-you label, then /ao-build ${key}`));
+    return out(stop('you', `Sub-task ${held.key} of ${key} is flagged Needs you`, `Read the newest comment on ${held.key} and answer it there, remove the flag and the needs-you label, then /ao-build ${key}`));
   }
   // The draft PR of a build waits for your preview (human-loop spec 4.2); red CI goes to /ao-fix first.
   if (pr?.state === 'open' && pr.draft) {
-    if (pr.ci.failed) return out(stop(`CI is red on the draft PR #${pr.number} of ${key}`, `/ao-fix ${pr.number}`));
+    if (pr.ci.failed) return out(stop('next', `CI is red on the draft PR #${pr.number} of ${key}`, `/ao-fix ${pr.number}`, { then: { command: 'fix', arg: pr.number } }));
     // facts.previewDir: where the preview is when the item has a lane (review of shop PR #21).
-    return out(stop(`the draft PR #${pr.number} of ${key} waits for your preview${pr.ci.pending ? ' (CI still running)' : ''}: the screenshots and API samples of its dev agents are in ${facts.previewDir ?? `.ai/runs/${key}/preview/`}`, `/ao-preview ${key}, or /ao-review ${pr.number} to skip the preview`));
+    return out(stop('you', `the draft PR #${pr.number} of ${key} waits for your preview${pr.ci.pending ? ' (CI still running)' : ''}: the screenshots and API samples of its dev agents are in ${facts.previewDir ?? `.ai/runs/${key}/preview/`}`, `/ao-preview ${key}, or /ao-review ${pr.number} to skip the preview`));
   }
-  if (pr?.state === 'open') return out(stop(`PR #${pr.number} of ${key} is open: the build is done`, pr.ci.failed || pr.changesRequested ? `/ao-fix ${pr.number}` : `/ao-review ${pr.number}`));
+  if (pr?.state === 'open') {
+    const then = { command: pr.ci.failed || pr.changesRequested ? 'fix' : 'review', arg: pr.number };
+    return out(stop('next', `PR #${pr.number} of ${key} is open: the build is done`, `/ao-${then.command} ${pr.number}`, { then }));
+  }
   // A Story split into Sub-tasks goes on through them: their agents keep the ledgers, one per Sub-task. Any other item
   // In Progress goes on from its own ledger.
   const subtaskLedgers = facts.subtaskLedgers ?? [];
@@ -546,35 +609,37 @@ function decideBuild(facts, options) {
   if (item.state === 'new' && facts.refinable) return out(go([{ action: 'jira-sync', key, continue: true }]));
   if (item.state !== 'ready' && !again && !afterQaFail) {
     const why = item.state === 'in-progress' ? `${key} is In Progress but has no ledger in .ai/ledger/: its run did not come from an agent of the kit` : `${key} is ${item.status}, not Ready`;
-    return out(stop(why, nextFor(item, pr)));
+    return out(stop('fix', why, nextFor(item, pr)));
   }
-  if (!facts.dependenciesMerged) return out(stop(`an item ${key} depends on (${item.blockedBy.join(', ')}) is not merged yet`, `/ao-status ${item.blockedBy[0]}`));
+  if (!facts.dependenciesMerged) return out(stop('item', `an item ${key} depends on (${item.blockedBy.join(', ')}) is not merged yet`, `/ao-status ${item.blockedBy[0]}`));
   if (item.parent && docs && !docs.pr?.merged) {
-    return out(stop(`the docs PR of Epic ${item.parent.key} is not merged yet`, `/ao-plan ${item.parent.key} after you approve its plan`));
+    return out(stop('item', `the docs PR of Epic ${item.parent.key} is not merged yet`, `/ao-plan ${item.parent.key} after you approve its plan`));
   }
   const carried = carryOn('build', facts, options);
   if (carried) return out(carried);
   if (afterQaFail) return out(rebuild(facts, options));
+  const seoWait = item.state === 'ready' ? seoOkStop(facts, options) : null;
+  if (seoWait) return out(seoWait);
 
   // Who builds what: the Sub-tasks still to do, in order, or the item itself.
   const todo = item.subtasks.filter(({ state }) => state !== 'done').sort((a, b) => devRoles.indexOf(a.role) - devRoles.indexOf(b.role) || a.key.localeCompare(b.key, undefined, { numeric: true }));
   const unlabelled = item.subtasks.length > 0 ? todo.filter(({ roles }) => roles.length !== 1) : item.roles.length !== 1 ? [item] : [];
   if (unlabelled.length > 0) {
     const which = unlabelled.map(({ key: k, roles }) => `${k} ${roles.length === 0 ? 'has no role label' : `has ${roles.length} role labels`}`).join('; ');
-    return out(stop(`${which}: /ao-build does not guess who builds it`, `Ask ba to label it ${options.mapping?.work_labels?.role_prefix ?? 'ao-'}<role> (be-dev, fe-dev or devops), then /ao-build ${key}`));
+    return out(stop('you', `${which}: /ao-build does not guess who builds it`, `Ask ba to label it ${options.mapping?.work_labels?.role_prefix ?? 'ao-'}<role> (be-dev, fe-dev or devops), then /ao-build ${key}`));
   }
-  if (item.subtasks.length > 0 && todo.length === 0) return out(stop(`every Sub-task of ${key} is done, and it has no open PR`, `/ao-status ${key}`));
+  if (item.subtasks.length > 0 && todo.length === 0) return out(stop('fix', `every Sub-task of ${key} is done, and it has no open PR`, `/ao-status ${key}`));
   const effortOf = (work) => work.effort ?? item.effort ?? options.roster.roles[work.role].effort;
   if (item.state === 'ready') {
     for (const role of new Set((todo.length > 0 ? todo : [item]).map(({ role: r }) => r))) {
-      if (facts.wip.devAgent[role] === false) return out(stop(`${role} is at its WIP limit dev-agent: it has an item In Progress already`, `/ao-status`));
+      if (facts.wip.devAgent[role] === false) return out(stop('item', `${role} is at its WIP limit dev-agent: it has an item In Progress already`, `/ao-status`));
     }
   }
   // An ops Task (label ao-ops; kit followups, batch 4 item 14) is devops's, with no branch: no checkout to make, and
   // the basic auth only under the label ao-env-auth, which only you put (block-atlassian refuses it to agents).
   if (item.ops) {
     const prefix = options.mapping?.work_labels?.role_prefix ?? 'ao-';
-    if (item.role !== 'devops') return out(stop(`${key} is an ops Task, which only devops does, and its role label is ${prefix}${item.role}`, `Ask ba to label it ${prefix}devops, then /ao-build ${key}`));
+    if (item.role !== 'devops') return out(stop('you', `${key} is an ops Task, which only devops does, and its role label is ${prefix}${item.role}`, `Ask ba to label it ${prefix}devops, then /ao-build ${key}`));
     const auth = item.envAuth ? { envAuth: true } : {};
     const prompt = again ? promptFor('build-again', { key, status: item.status }) : promptFor('build-ops', { key, auth: Boolean(item.envAuth) });
     // No lane: an ops Task has no branch, so its lane would never be pruned (review of shop PR #78).
@@ -599,6 +664,23 @@ function decideBuild(facts, options) {
   return out(go(runs));
 }
 
+// The stop of /ao-build before an item with the label ao-seo outside an Epic starts, or null (second review of shop PR
+// #79): its dev agent builds the comment of seo word for word, seo wrote it from web pages, and no gate had you read it,
+// as gate ① has you read the section ## SEO of a SPEC. It waits for seo's answer, then for your seo-ok
+// (options.seoOk), with what a check that needs no model finds in the comment.
+function seoOkStop(facts, options) {
+  const { item } = facts;
+  const epicType = options.contract.work_types.find(({ id }) => id === 'epic').jira_issue_type;
+  if (!item.seo || item.parent?.type === epicType) return null;
+  if ((item.requests ?? []).some(({ to }) => WEB_ROLES.includes(to))) return stop('next', `${item.key} has an open request to seo: its SEO part is not written yet`, `/ao-request ${item.key}`, { then: { command: 'request', arg: item.key } });
+  if (options.seoOk) return null;
+  const issues = seoTextProblems(item.seoComment ?? '', { hosts: options.seoHosts ?? [] });
+  return stop('you',
+    `${item.key} has the label ao-seo and is in no Epic: its dev agent builds the comment of SEO Specialist word for word, and seo wrote it from web pages${issues.length > 0 ? `. It holds ${issues.join('; ')}` : ''}`,
+    `Read the comment of SEO Specialist on ${item.key} (or the section ## SEO its description points to); when it is right, /ao-build ${item.key} seo-ok`,
+  );
+}
+
 // The next branch of an item after QA fail: the same kind, key and slug, with -r2, -r3… (tracker-integration spec 2.5).
 const nextRound = (headRef) => {
   const branch = parseBranch(headRef);
@@ -615,17 +697,17 @@ function rebuild(facts, options) {
   const { item, pr, qaReport } = facts;
   const key = item.key;
   const branch = nextRound(pr.headRef);
-  if (!branch) return stop(`PR #${pr.number} of ${key} is on ${pr.headRef}, not the branch of a work item`, `/ao-status ${key}`);
+  if (!branch) return stop('fix', `PR #${pr.number} of ${key} is on ${pr.headRef}, not the branch of a work item`, `/ao-status ${key}`);
   const runs = facts.run?.runs ?? [];
   const mine = runs.filter((r) => r.command === 'build' && r.rebuild === qaReport.at);
   const done = (role, purpose) => mine.some((r) => r.role === role && r.purpose === purpose && r.outcome === 'done');
   const sides = item.subtasks.length > 0 ? [...new Set(item.subtasks.map(({ role }) => role))] : [item.role].filter(Boolean);
-  if (sides.length === 0) return stop(`${key} has no role label: /ao-build does not guess who fixes it`, `Ask ba to label it ${options.mapping?.work_labels?.role_prefix ?? 'ao-'}<role>, then /ao-build ${key}`);
+  if (sides.length === 0) return stop('you', `${key} has no role label: /ao-build does not guess who fixes it`, `Ask ba to label it ${options.mapping?.work_labels?.role_prefix ?? 'ao-'}<role>, then /ao-build ${key}`);
   const note = options.note?.trim() || undefined;
   let parts = { [sides[0]]: note };
   if (sides.length > 1) {
     const split = note ? splitNote(note) : null;
-    if (!split?.prefixed) return stop(`${key} failed QA and has a BE and an FE Sub-task: say which defects of its QA report go to whom`, `/ao-build ${key} with the defects split by be: and fe:`);
+    if (!split?.prefixed) return stop('you', `${key} failed QA and has a BE and an FE Sub-task: say which defects of its QA report go to whom`, `/ao-build ${key} with the defects split by be: and fe:`);
     parts = split.parts;
   }
   const epic = item.parent && /epic/i.test(item.parent.type) ? item.parent.key : null;
@@ -645,7 +727,7 @@ function rebuild(facts, options) {
     const prompt = promptFor('rebuild', { key, at: qaReport.at, branch, pr: pr.number, part: parts[role], others, next: roles[i + 1] });
     list.push({ role, key, effort, purpose: 'build', prompt, checkout, rebuild: qaReport.at });
   });
-  if (list.length === 0) return stop(`the fix of ${key} after QA fail is built on ${branch}, but no PR of it is open`, `/ao-status ${key}`);
+  if (list.length === 0) return stop('fix', `the fix of ${key} after QA fail is built on ${branch}, but no PR of it is open`, `/ao-status ${key}`);
   return go(list, [`QA fail on ${qaReport.at.slice(0, 16).replace('T', ' ')} UTC: the fix goes on ${branch}, new from develop`]);
 }
 
@@ -667,13 +749,19 @@ function reviewRuns(facts, options) {
   if (waiverOf(facts, options)) return [];
   const { pr, item } = facts;
   // head: kept in state.json, so a stopped review goes on only on the head it was reviewing (carryOn).
-  const place = { checkout: { branch: pr.base, pull: true }, worktree: { name: `pr-${pr.number}`, sha: pr.headSha }, head: pr.headSha };
+  // Each role its own worktree, so reviewer and security may run at once (C2 spec section 7).
+  const place = (role) => ({ checkout: { branch: pr.base, pull: true }, worktree: { name: reviewTree(pr.number, role), sha: pr.headSha }, head: pr.headSha });
   // The roles in the order of stage review of contract/stages.yaml (C1 spec section 6); each knows what it still owes.
-  return stageRoles(options.contract, 'review').flatMap((role) => {
+  const runs = stageRoles(options.contract, 'review').flatMap((role) => {
     if (!options.roster.roles[role]) throw new Error(`stage review of contract/stages.yaml names ${role}, which is not a role of the roster`);
-    return owedReview(role, facts, options, place);
+    return owedReview(role, facts, options, place(role));
   });
+  // Neither reads the other's report, so they may run at once when a second agent may start (C2 spec section 7).
+  return runs.length > 1 ? runs.map((run) => ({ ...run, together: true })) : runs;
 }
+
+// The worktree of a review run of `role` on PR `number`.
+const reviewTree = (number, role) => `pr-${number}-${role}`;
 
 // The effective level of the item of a PR command (C1 spec section 2): its label, raised by a critical path, or by a
 // Critical or High a review found on the PR.
@@ -681,12 +769,21 @@ function levelOf({ item, pr }) {
   return effectiveLevel({ label: item?.level ?? null, tier: pr?.tier ?? null, blockingFound: Boolean(pr?.blockingEver) });
 }
 
-// A line on the level of the item, when it is not plain standard: its label, or why it went up.
-function levelLine(facts) {
+// A line on the level of the item, when it is not plain standard: its label, or why it went up; and the lower label the
+// agents' account put, which does not count (second review of shop PR #79).
+function levelLine(facts, options = {}) {
   const { level, label, reasons } = levelOf(facts);
-  if (!label && reasons.length === 0) return null;
-  return `Level of ${facts.item.key}: ${level}${label ? ` (label ${label}${reasons.length ? `; ${reasons.join(', ')}` : ''})` : ` (${reasons.join(', ')})`}`;
+  const ignored = facts.item?.levelIgnored;
+  if (!label && reasons.length === 0 && !ignored) return null;
+  const base = `Level of ${facts.item.key}: ${level}${label ? ` (label ${label}${reasons.length ? `; ${reasons.join(', ')}` : ''})` : reasons.length ? ` (${reasons.join(', ')})` : ''}`;
+  return ignored ? `${base}. ${ignoredLevelText(ignored, options)}` : base;
 }
+
+const ignoredLevelText = ({ label }, options) => {
+  const prefix = options.mapping?.work_labels?.level_prefix ?? 'ao-level-';
+  const what = label ? `The label ${prefix}${label} was put` : 'Its level label was taken off';
+  return `${what} by the agents' Jira account, which your main session uses too, and lowers the level, so it does not count: lower a level on Jira itself`;
+};
 
 // The review run `role` still owes on the head of the PR: [] when none, or one run (C1 spec sections 2 and 3). A full
 // review runs at the higher of the efforts the level of the item and the tier of the PR ask for, or not at all for
@@ -723,12 +820,12 @@ function owedReview(role, facts, options, place) {
 // Why a PR command cannot run on this PR, or null.
 function prStop(facts, command, { gates }) {
   const { pr } = facts;
-  if (!pr) return stop(`PR #${facts.arg} was not found`, '/ao-status');
-  if (pr.state !== 'open') return stop(`PR #${pr.number} is ${pr.merged ? 'merged' : 'closed'}`, facts.item ? `/ao-status ${facts.item.key}` : '/ao-status');
-  if (pr.docsEpic) return stop(`PR #${pr.number} is the docs PR of ${pr.docsEpic}: merge-gate merges it after gate ②, with no review`, `/ao-plan ${pr.docsEpic}`);
-  if (facts.outside) return stop(`PR #${pr.number} is on ${pr.headRef}, whose item ${facts.outside} is not in ${facts.space}: ao-step works in ${facts.space} only`, '/ao-status');
-  if (!facts.item) return stop(`PR #${pr.number} is on ${pr.headRef}, which is not the branch of a work item`, '/ao-status');
-  return baseStop(pr, gates) ?? flaggedStop(facts.item) ?? (command === 'review' && pr.ci.pending ? stop(`CI is still running on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-review ${pr.number} once CI is done`) : null);
+  if (!pr) return stop('fix', `PR #${facts.arg} was not found`, '/ao-status');
+  if (pr.state !== 'open') return stop('fix', `PR #${pr.number} is ${pr.merged ? 'merged' : 'closed'}`, facts.item ? `/ao-status ${facts.item.key}` : '/ao-status');
+  if (pr.docsEpic) return stop('fix', `PR #${pr.number} is the docs PR of ${pr.docsEpic}: merge-gate merges it after gate ②, with no review`, `/ao-plan ${pr.docsEpic}`);
+  if (facts.outside) return stop('fix', `PR #${pr.number} is on ${pr.headRef}, whose item ${facts.outside} is not in ${facts.space}: ao-step works in ${facts.space} only`, '/ao-status');
+  if (!facts.item) return stop('fix', `PR #${pr.number} is on ${pr.headRef}, which is not the branch of a work item`, '/ao-status');
+  return baseStop(pr, gates) ?? flaggedStop(facts.item) ?? (command === 'review' && pr.ci.pending ? stop('ci', `CI is still running on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-review ${pr.number} once CI is done`) : null);
 }
 
 // The reviews run on a checkout of the PR's base, whose .claude/ and kit steer the agents. Its author chooses the base
@@ -737,10 +834,10 @@ function prStop(facts, command, { gates }) {
 function baseStop(pr, gates) {
   const next = `/ao-review ${pr.number} once its base on GitHub is the branch it was cut from`;
   if (!gates.protected_branches.some((pattern) => matchesGlob(pattern, pr.base))) {
-    return stop(`PR #${pr.number} goes into ${pr.base}, which is not a protected branch (${gates.protected_branches.join(', ')}): its review would run on a branch the PR author controls`, next);
+    return stop('fix', `PR #${pr.number} goes into ${pr.base}, which is not a protected branch (${gates.protected_branches.join(', ')}): its review would run on a branch the PR author controls`, next);
   }
   const branch = checkBranch(pr.headRef, { base: pr.base });
-  return branch.ok ? null : stop(`PR #${pr.number} goes into ${pr.base}, but ${branch.reason.replace(/, not .*$/, '')}`, next);
+  return branch.ok ? null : stop('fix', `PR #${pr.number} goes into ${pr.base}, but ${branch.reason.replace(/, not .*$/, '')}`, next);
 }
 
 // /ao-review <PR>: reviewer, then security; it ends at gate ③ with both reports on the head.
@@ -749,7 +846,7 @@ function decideReview(facts, options) {
   const early = prStop(facts, 'review', options);
   if (early) return { ...early, lines };
   const { pr } = facts;
-  if (pr.ci.failed) return { ...stop(`CI is red on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-fix ${pr.number}`), lines };
+  if (pr.ci.failed) return { ...stop('next', `CI is red on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-fix ${pr.number}`, { then: { command: 'fix', arg: pr.number } }), lines };
   const carried = carryOn('review', facts, options);
   if (carried) return { ...carried, lines };
   // A draft PR is marked ready first, a script as ao-dev with no agent, and the reviews go on in the same command: you
@@ -759,7 +856,7 @@ function decideReview(facts, options) {
   // review with /ao-review <PR> full. merge-gate and audit work the rule out again.
   const waiver = waiverOf(facts, options);
   if (waiver) {
-    if (pr.waiverOnHead === waiver.id) return { ...stop(`PR #${pr.number} needs no review: every file is in the waiver ${waiver.id}, and ${facts.item.key} is at level ${waiver.level}; the waiver is on the head ${pr.headSha.slice(0, 7)}. It waits for you at gate ③ merge-approval`, `Read the diff of PR #${pr.number}, approve it; merge-gate merges it. To review it anyway: /ao-review ${pr.number} full`), lines };
+    if (pr.waiverOnHead === waiver.id) return { ...stop('you', `PR #${pr.number} needs no review: every file is in the waiver ${waiver.id}, and ${facts.item.key} is at level ${waiver.level}; the waiver is on the head ${pr.headSha.slice(0, 7)}. It waits for you at gate ③ merge-approval`, `Read the diff of PR #${pr.number}, approve it; merge-gate merges it. To review it anyway: /ao-review ${pr.number} full`), lines };
     return go([{ action: 'review-waiver', key: facts.item.key, number: pr.number, sha: pr.headSha, waiver: waiver.id, level: waiver.level, files: waiver.files }], lines);
   }
   // A kit another project reviewed in full: ao-step posts the reports, with no agent (kit-copy-review spec 2.1). A report
@@ -774,7 +871,7 @@ function decideReview(facts, options) {
     const roles = options.gates.github_apps.review.roles.filter((role) => !pr.reports[role]?.onHead);
     if (roles.length > 0) return go([{ action: 'kit-copy-reports', key: facts.item.key, number: pr.number, title: pr.title, sha: pr.headSha, roles, reference: kitCopy.reference, compared: kitCopy.compared }], lines);
   }
-  const level = levelLine(facts);
+  const level = levelLine(facts, options);
   if (level) lines.push(level);
   const runs = reviewRuns(facts, options);
   if (runs.length > 0) return go(runs, lines);
@@ -832,16 +929,17 @@ function afterReviews({ pr, qaRunning = [] }) {
   const blocking = open.map(([role, report]) => `${role} ${report.blocking}${report.ids?.length ? `: ${report.ids.join(' ')}` : ''}`);
   // A High may be accepted rather than fixed (Pilot 3, spec 2.9 part 5): say how, with the ids to name.
   const accept = open.some(([, report]) => report.ids?.length) ? `. To accept a High instead of fixing it, approve PR #${pr.number} on its head with one line per finding: Accept risk: <id> until <YYYY-MM-DD>: <why> (docs/quality-gates.md)` : '';
-  if (blocking.length > 0 || pr.changesRequested) return stop(`the reports on the head of PR #${pr.number} ask for changes${blocking.length ? ` (Critical or High: ${blocking.join(', ')})` : ''}${accept}`, `/ao-fix ${pr.number}`);
+  if (blocking.length > 0 || pr.changesRequested) return stop('next', `the reports on the head of PR #${pr.number} ask for changes${blocking.length ? ` (Critical or High: ${blocking.join(', ')})` : ''}${accept}`, `/ao-fix ${pr.number}`, { then: { command: 'fix', arg: pr.number } });
   const yours = pr.protectedPaths.length > 0 ? `, then Squash and merge it yourself: it changes ${pr.protectedPaths.join(', ')}` : '; merge-gate merges it';
   const environment = mergeEnvironment(pr);
   const testing = environment ? qaRunning.find((lock) => lock.environment === environment) : null;
-  const wait = testing ? `. Wait: qa is testing ${testing.key} on ${environment} now (process ${testing.pid}). Approve after it ends: the merge deploys ${environment}, and the new deploy stops that QA, which then starts again` : '';
+  // merge-gate waits while that QA marks the commit with ao/qa (C2 spec section 9): you approve when you like.
+  const wait = testing ? `. qa is testing ${testing.key} on ${environment} now (process ${testing.pid}): merge-gate merges after it ends, so the deploy does not cut it` : '';
   const read = `ead the reports and the diff of PR #${pr.number}, approve it${yours}`;
   // A PR of tier normal or docs needs the reviewer only (C1 spec 3.1): say why security did not run.
   const roles = pr.requiredRoles ?? Object.keys(pr.reports);
   const which = roles.length === 1 ? `the ${roles[0]} report is on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}, which needs no other (tier ${pr.tier ?? 'normal'}: no sensitive or critical path)` : `both reports are on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`;
-  return stop(`${which}: it waits for you at gate ③ merge-approval${wait}`, testing ? `Once qa ends on ${environment}, r${read}` : `R${read}`);
+  return stop('you', `${which}: it waits for you at gate ③ merge-approval${wait}`, `R${read}`);
 }
 
 // /ao-fix <PR> [what to fix]: the dev agent of the item, then the reviews again.
@@ -866,7 +964,7 @@ function decideFix(facts, options) {
   const subRoles = new Set(item.subtasks.map(({ role }) => role));
   const twoSided = subRoles.has('be-dev') && subRoles.has('fe-dev');
   if (twoSided && !asked && pr.ci.failed) {
-    return { ...stop(`CI is red on PR #${pr.number}, and ${item.key} has a BE and an FE Sub-task: /ao-fix does not guess which side broke it`, `Read the failed job (gh run view --log-failed), then /ao-fix ${pr.number} be: … or fe: …, with what to fix`), lines };
+    return { ...stop('you', `CI is red on PR #${pr.number}, and ${item.key} has a BE and an FE Sub-task: /ao-fix does not guess which side broke it`, `Read the failed job (gh run view --log-failed), then /ao-fix ${pr.number} be: … or fe: …, with what to fix`), lines };
   }
   const blockingWhere = Object.values(pr.reports).filter((report) => report?.onHead && report.blocking > 0).flatMap((report) => (report.open ?? []).map(({ where }) => where));
   const bySide = twoSided ? [...new Set(blockingWhere.map((where) => appRoleOf(where, options.appRoles)).filter(Boolean))] : [];
@@ -879,7 +977,7 @@ function decideFix(facts, options) {
     const split = splitNote(asked);
     const sides = new Set(item.subtasks.length > 0 ? item.subtasks.map(({ role }) => role) : [item.role]);
     if (!split.prefixed && sides.has('be-dev') && sides.has('fe-dev')) {
-      return { ...stop(`your request has no be: or fe:, and ${item.key} has a BE and an FE Sub-task: /ao-fix does not guess who does it`, `Start each part of your request with be: or fe:, then /ao-fix ${pr.number} again`), lines };
+      return { ...stop('you', `your request has no be: or fe:, and ${item.key} has a BE and an FE Sub-task: /ao-fix does not guess who does it`, `Start each part of your request with be: or fe:, then /ao-fix ${pr.number} again`), lines };
     }
     parts = split.prefixed ? split.parts : own ? { [own]: split.text } : {};
   }
@@ -896,9 +994,9 @@ function decideFix(facts, options) {
   // What the request changes, as you answered (human-loop spec 4.5): ba or sa change the documents first, on the PR.
   const change = asked ? (options.change ?? 'none') : 'none';
   const epic = item.parent && /epic/i.test(item.parent.type) ? item.parent.key : null;
-  if (change === 'story' && item.workType !== 'task') return { ...stop(`${item.key} is a ${item.type}: only a Task becomes a Story`, `/ao-fix ${pr.number} with what your request really changes`), lines };
-  if (change === 'story' && !epic) return { ...stop(`Task ${item.key} has no Epic, and a Story needs one with an approved plan`, '/ao-intake with your request, for a small Epic'), lines };
-  if (['api', 'epic'].includes(change) && !epic) return { ...stop(`${item.key} has no Epic, so no plan or SPEC to change`, `/ao-fix ${pr.number} with --change none, or /ao-intake with your request`), lines };
+  if (change === 'story' && item.workType !== 'task') return { ...stop('you', `${item.key} is a ${item.type}: only a Task becomes a Story`, `/ao-fix ${pr.number} with what your request really changes`), lines };
+  if (change === 'story' && !epic) return { ...stop('you', `Task ${item.key} has no Epic, and a Story needs one with an approved plan`, '/ao-intake with your request, for a small Epic'), lines };
+  if (['api', 'epic'].includes(change) && !epic) return { ...stop('you', `${item.key} has no Epic, so no plan or SPEC to change`, `/ao-fix ${pr.number} with --change none, or /ao-intake with your request`), lines };
   const [changer, purpose] = Object.entries(CHANGE_RUNS).map(([p, { role, change: c }]) => (c === change ? [role, p] : null)).find(Boolean) ?? [];
   const first = changer && !done.has(`${changer} ${purpose}`)
     ? [{ role: changer, key: item.key, effort: options.roster.roles[changer].effort, purpose, prompt: promptFor(purpose, { pr: pr.number, key: item.key, branch: pr.headRef, epic, note: asked }), checkout: { branch: pr.headRef, pull: true }, head: pr.headSha, note: noteKey(asked) }]
@@ -909,15 +1007,15 @@ function decideFix(facts, options) {
   const roles = devRoles.filter((role) => todo[role] !== undefined || (reasons.length > 0 && fixers.includes(role)));
   if (roles.length === 0 && follow.length > 0) return go(follow, lines);
   if (roles.length === 0) {
-    if (reasons.length > 0 && fixers.length === 0) return { ...stop(`${item.key} has no dev agent: no Agent value of a dev role, and no role label`, `Ask ba to label ${item.key}, then /ao-fix ${pr.number}`), lines };
-    if (pr.ci.pending) return { ...stop(`CI is still running on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-fix ${pr.number} once CI is done`), lines };
+    if (reasons.length > 0 && fixers.length === 0) return { ...stop('you', `${item.key} has no dev agent: no Agent value of a dev role, and no role label`, `Ask ba to label ${item.key}, then /ao-fix ${pr.number}`), lines };
+    if (pr.ci.pending) return { ...stop('ci', `CI is still running on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-fix ${pr.number} once CI is done`), lines };
     // A draft PR has no review yet: you look at it again, or review it (human-loop spec 4.4).
-    if (pr.draft) return { ...stop(`the draft PR #${pr.number} of ${item.key} has nothing left to fix${asked ? ': your request is pushed' : ''}`, `/ao-preview ${item.key} to look at it again, or /ao-review ${pr.number}`), lines };
+    if (pr.draft) return { ...stop('you', `the draft PR #${pr.number} of ${item.key} has nothing left to fix${asked ? ': your request is pushed' : ''}`, `/ao-preview ${item.key} to look at it again, or /ao-review ${pr.number}`), lines };
     const runs = reviewRuns(facts, options);
     if (runs.length > 0) return go(runs, lines);
     // The stop rule of the fix loop (C1 spec 4.4): with no Critical or High open, Medium and Low wait.
     const quiet = findingsLine(pr);
-    return { ...stop(`nothing blocks the merge of PR #${pr.number}: no request for changes, no red CI, no Critical or High finding`, afterReviews(facts).next), lines: quiet ? [...lines, quiet] : lines };
+    return { ...stop('you', `nothing blocks the merge of PR #${pr.number}: no request for changes, no red CI, no Critical or High finding`, afterReviews(facts).next), lines: quiet ? [...lines, quiet] : lines };
   }
   const devs = roles.map((role) => {
     let effort = item.effort ?? options.roster.roles[role].effort;
@@ -982,13 +1080,13 @@ function qaLight(facts, options, { env, where, lines }) {
   if (report !== undefined) {
     const result = qaReportResult(report);
     const again = `Write it from .ai-orchestrator/templates/qa-report.md, then /ao-qa ${key} --light-report <file> again`;
-    if (!result) return stop('the light report has no "# QA report" heading, or no PASS, FAIL or NOT TESTED under "## Result"', again, { lines });
-    if (!new RegExp(`^#\\s*QA report:\\s*${key}\\b`, 'm').test(report)) return stop(`the light report is not about ${key}: its heading must read "# QA report: ${key} …"`, again, { lines });
+    if (!result) return stop('fix', 'the light report has no "# QA report" heading, or no PASS, FAIL or NOT TESTED under "## Result"', again, { lines });
+    if (!new RegExp(`^#\\s*QA report:\\s*${key}\\b`, 'm').test(report)) return stop('fix', `the light report is not about ${key}: its heading must read "# QA report: ${key} …"`, again, { lines });
     return go([{ action: 'qa-light-report', key, result, body: report }], lines);
   }
-  if (qaReport?.result === 'PASS') return stop(`the PASS report of ${key} is on Jira: it waits for you`, `Read it, then click Accept on ${key}`, { lines });
+  if (qaReport?.result === 'PASS') return stop('you', `the PASS report of ${key} is on Jira: it waits for you`, `Read it, then click Accept on ${key}`, { lines });
   const checks = lightChecks(facts.description, item.workType);
-  return stop(
+  return stop('you',
     `${key} is at level light: no qa run. Check each line below on ${env}, then write a short report from templates/qa-report.md`,
     `Check ${key} on ${where}, write .ai/runs/${key}/light-report.md, then /ao-qa ${key} --light-report .ai/runs/${key}/light-report.md`,
     { lines: [...lines, ...(checks.length > 0 ? ['To check:', ...checks] : [`To check: the description of ${key} has no section to check; read it on Jira`])] },
@@ -1000,7 +1098,7 @@ function qaLight(facts, options, { env, where, lines }) {
 // runs, writes its report and moves the item; Accept stays yours. facts.qa: { environment, running, contains }.
 function decideQa(facts, options) {
   const { item, pr, qa } = facts;
-  if (item.workType === 'epic') return stop(`${item.key} is an Epic: /ao-qa takes a Story, Task or Bug`, `/ao-status ${item.key}`);
+  if (item.workType === 'epic') return stop('fix', `${item.key} is an Epic: /ao-qa takes a Story, Task or Bug`, `/ao-status ${item.key}`);
   const flagged = flaggedStop(item);
   if (flagged) return flagged;
   // A qa run the usage limit stopped may have picked the item up already: it goes on from In QA too.
@@ -1018,14 +1116,14 @@ function decideQa(facts, options) {
   const retest = Boolean(options.retest);
   if (retest && !(item.state === 'in-qa' && facts.qaReport?.result === 'NOT TESTED')) {
     const newest = facts.qaReport ? `its newest QA report is ${facts.qaReport.result}` : 'it has no QA report';
-    return stop(`--retest runs QA again only for an item In QA whose newest QA report is NOT TESTED: ${item.key} is ${item.status}, and ${newest}`, nextFor(item, pr));
+    return stop('fix', `--retest runs QA again only for an item In QA whose newest QA report is NOT TESTED: ${item.key} is ${item.status}, and ${newest}`, nextFor(item, pr));
   }
   // An item of level light has no qa run: the main session checks it, and the command runs again with its report while
   // the item is In QA (C1 spec section 2). An ops Task keeps its own road.
   const { level } = levelOf(facts);
   const light = !item.ops && !defect && !retest && level === 'light';
   const states = stopped || superseded || defect || retest || light ? ['ready-for-qa', 'in-qa'] : ['ready-for-qa'];
-  if (!states.includes(item.state)) return stop(`${item.key} is ${item.status}, not Ready for QA`, nextFor(item, pr));
+  if (!states.includes(item.state)) return stop('fix', `${item.key} is ${item.status}, not Ready for QA`, nextFor(item, pr));
   // An ops Task (kit followups, batch 4 item 14) has no PR and no deploy: qa checks its Verification where it names, from
   // the evidence of devops, with the basic auth and no worktree. No sha: nothing to watch for a new deploy.
   if (item.ops) {
@@ -1033,19 +1131,19 @@ function decideQa(facts, options) {
     if (stopped) return go([{ ...opsRun, effort: stopped.effort ?? opsRun.effort, resume: stopped.session, prompt: resumePrompt(item.key, opsRun.role) }]);
     return go([opsRun]);
   }
-  if (!pr?.merged || !pr.mergeCommit) return stop(`PR #${pr?.number ?? '?'} of ${item.key} is not merged`, `/ao-status ${item.key}`);
+  if (!pr?.merged || !pr.mergeCommit) return stop('fix', `PR #${pr?.number ?? '?'} of ${item.key} is not merged`, `/ao-status ${item.key}`);
   // The Medium and Low its review left go to the findings Task of the Epic first (C1 spec section 2).
   const record = findingsStep(facts);
   if (record) return go([record]);
   const env = title(qa.environment);
-  if (!qa.running) return stop(`${env} runs no release yet`, 'Wait for the deployer to run one; its deployments are on GitHub');
+  if (!qa.running) return stop('deploy', `${env} runs no release yet`, 'Wait for the deployer to run one; its deployments are on GitHub');
   if (!qa.contains) {
-    return stop(`${env} runs ${eight(qa.running.sha)}, which does not hold the merge of PR #${pr.number} (${eight(pr.mergeCommit)}) yet`, `Wait a minute for the deployer, then run /ao-qa ${item.key} again; if its deployment failed, read why on GitHub`);
+    return stop('deploy', `${env} runs ${eight(qa.running.sha)}, which does not hold the merge of PR #${pr.number} (${eight(pr.mergeCommit)}) yet`, `Wait a minute for the deployer, then run /ao-qa ${item.key} again; if its deployment failed, read why on GitHub`);
   }
-  if (!qa.running.url) return stop(noUrl(qa.running.sha, env), `/ao-status ${item.key}`);
+  if (!qa.running.url) return stop('fix', noUrl(qa.running.sha, env), `/ao-status ${item.key}`);
   // Each public app on its own host (project-scaffold part 2, spec 2.4): its URL for Playwright, from project.yaml.
   const apps = appUrls({ projectText: qa.running.projectText, environment: qa.environment, url: qa.running.url });
-  if (apps.problem) return stop(apps.problem, `Make the hosts of ${PROJECT_FILE} and of /etc/ao/deployer.yaml the same, then /ao-qa ${item.key}`);
+  if (apps.problem) return stop('fix', apps.problem, `Make the hosts of ${PROJECT_FILE} and of /etc/ao/deployer.yaml the same, then /ao-qa ${item.key}`);
   if (light) {
     const where = Object.keys(apps.apps).length > 0 ? Object.entries(apps.apps).map(([app, url]) => `${app} ${url}`).join(', ') : qa.running.url;
     return qaLight(facts, options, { env, where, lines: [`${env} runs ${eight(qa.running.sha)}, which holds the merge of PR #${pr.number}`] });
@@ -1083,15 +1181,15 @@ function decideRelease(facts) {
   const r = facts.release;
   const [open] = r.releaseBranches;
   if (open) {
-    if (facts.arg && open.name === `release/${facts.arg}`) return stop(`${open.name} is open at ${eight(open.sha)}: the deployer puts it on Staging within a minute or two`, `/ao-ship v${open.version}`);
-    return stop(`${r.releaseBranches.map(({ name }) => name).join(' and ')} ${r.releaseBranches.length > 1 ? 'are' : 'is'} open: ship it before you cut the next release`, `/ao-ship v${open.version}`);
+    if (facts.arg && open.name === `release/${facts.arg}`) return stop('you', `${open.name} is open at ${eight(open.sha)}: the deployer puts it on Staging within a minute or two`, `/ao-ship v${open.version}`);
+    return stop('you', `${r.releaseBranches.map(({ name }) => name).join(' and ')} ${r.releaseBranches.length > 1 ? 'are' : 'is'} open: ship it before you cut the next release`, `/ao-ship v${open.version}`);
   }
   const since = r.latestTag ?? 'its start';
-  if (r.commits === 0) return stop(`no commit on develop since ${since}`, '/ao-status');
+  if (r.commits === 0) return stop('fix', `no commit on develop since ${since}`, '/ao-status');
   if (!r.cut) {
     const holder = r.after.find(({ state }) => state !== 'done');
     const why = holder ? `${holder.key} (${holder.status}) is not Done, and the items after it wait for it` : 'no item of the space is Done';
-    return stop(`no cut point on develop since ${since}: ${why}`, '/ao-status');
+    return stop('you', `no cut point on develop since ${since}: ${why}`, '/ao-status');
   }
   const version = facts.arg ?? r.version;
   const nextVersion = nextMinor(version);
@@ -1109,13 +1207,13 @@ function decideRelease(facts) {
     `Fix Versions on Jira: ${[version, nextVersion].map((name) => `${name} (${!known(name) ? 'missing' : known(name).released ? 'released' : 'unreleased'})`).join(', ')}`,
   ];
   const lacking = [version, nextVersion].filter((name) => !known(name) || known(name).released);
-  if (facts.arg && facts.arg !== r.version && !isNewMajor(facts.arg, r.version)) return stop(`${facts.arg} is not the next release: that is ${r.version}, or a new major`, `/ao-release ${r.version} ${short}`, { lines });
-  if (facts.arg && !(facts.extra?.length >= 7 && r.cut.sha.startsWith(facts.extra))) return stop(`${facts.extra} is not the cut point ${short}: read the list again`, `/ao-release ${version} ${short}`, { lines });
+  if (facts.arg && facts.arg !== r.version && !isNewMajor(facts.arg, r.version)) return stop('fix', `${facts.arg} is not the next release: that is ${r.version}, or a new major`, `/ao-release ${r.version} ${short}`, { lines });
+  if (facts.arg && !(facts.extra?.length >= 7 && r.cut.sha.startsWith(facts.extra))) return stop('fix', `${facts.extra} is not the cut point ${short}: read the list again`, `/ao-release ${version} ${short}`, { lines });
   if (lacking.length > 0) {
     const released = lacking.some((name) => known(name)) ? ', unreleased' : '';
-    return stop(`gate ④ waits for the Fix Version${lacking.length > 1 ? 's' : ''} ${lacking.join(' and ')} on Jira${released}`, `Create ${lacking.join(' and ')} in Jira (Releases, then Create version), then run /ao-release again`, { lines });
+    return stop('you', `gate ④ waits for the Fix Version${lacking.length > 1 ? 's' : ''} ${lacking.join(' and ')} on Jira${released}`, `Create ${lacking.join(' and ')} in Jira (Releases, then Create version), then run /ao-release again`, { lines });
   }
-  if (!facts.arg) return stop(`gate ④. Read the list, then run /ao-release ${version} ${short}`, `/ao-release ${version} ${short}`, { lines });
+  if (!facts.arg) return stop('you', `gate ④. Read the list, then run /ao-release ${version} ${short}`, `/ao-release ${version} ${short}`, { lines });
   return go([{ action: 'release-cut', key: version, version, nextVersion, sha: r.cut.sha, included: r.included, after: r.after, ...(cancelled.length > 0 && { cancelled }) }], lines);
 }
 
@@ -1128,9 +1226,9 @@ function decideShip(facts, options) {
   if (facts.hotfix) return decideHotfix(facts);
   const s = facts.ship;
   const v = s.version;
-  if (!s.branch) return stop(`release/${v} is not open`, '/ao-release');
+  if (!s.branch) return stop('fix', `release/${v} is not open`, '/ao-release');
   if (s.bugs.length > 0) {
-    return stop(`${s.bugs.length} Bug${s.bugs.length > 1 ? 's' : ''} Critical or High ${s.bugs.length > 1 ? 'are' : 'is'} open with Fix Version ${v}: ${s.bugs.map(({ key, severity }) => `${key} (${severity})`).join(', ')}`, `Fix them on bugfix/<BUG> branches into ${s.branch.name}, through review and gate ③, then run /ao-ship ${v} again`);
+    return stop('you', `${s.bugs.length} Bug${s.bugs.length > 1 ? 's' : ''} Critical or High ${s.bugs.length > 1 ? 'are' : 'is'} open with Fix Version ${v}: ${s.bugs.map(({ key, severity }) => `${key} (${severity})`).join(', ')}`, `Fix them on bugfix/<BUG> branches into ${s.branch.name}, through review and gate ③, then run /ao-ship ${v} again`);
   }
   const allowed = [`docs/releases/${v}.md`, 'CHANGELOG.md'];
   const beyond = (s.changedSinceRegression ?? []).filter((file) => !allowed.includes(file));
@@ -1139,15 +1237,15 @@ function decideShip(facts, options) {
   // head of a branch whose PR is open still needs its report, notes and CHANGELOG committed (T21).
   const reported = (s.changedSinceRegression ?? []).includes(`docs/releases/${v}.md`);
   if (s.pr && holds && reported && s.notes) {
-    return stop(`gate ⑤: PR #${s.pr.number} of ${s.branch.name} waits for your approval on its head ${eight(s.pr.headSha)}`, `Approve PR #${s.pr.number} on GitHub, without merging it: merge-gate merges it with a merge commit, tags ${v} and merges main back into develop`);
+    return stop('you', `gate ⑤: PR #${s.pr.number} of ${s.branch.name} waits for your approval on its head ${eight(s.pr.headSha)}`, `Approve PR #${s.pr.number} on GitHub, without merging it: merge-gate merges it with a merge commit, tags ${v} and merges main back into develop`);
   }
-  if (!s.staging) return stop('Staging runs no release yet: wait for the deployer', `/ao-ship ${v}`);
-  if (s.staging.sha !== s.branch.sha) return stop(`Staging runs ${eight(s.staging.sha)}, not the head ${eight(s.branch.sha)} of ${s.branch.name}: wait for the deployer`, `/ao-ship ${v}`);
-  if (!s.staging.url) return stop(noUrl(s.staging.sha, 'Staging'), '/ao-status');
+  if (!s.staging) return stop('deploy', 'Staging runs no release yet: wait for the deployer', `/ao-ship ${v}`);
+  if (s.staging.sha !== s.branch.sha) return stop('deploy', `Staging runs ${eight(s.staging.sha)}, not the head ${eight(s.branch.sha)} of ${s.branch.name}: wait for the deployer`, `/ao-ship ${v}`);
+  if (!s.staging.url) return stop('fix', noUrl(s.staging.sha, 'Staging'), '/ao-status');
   const apps = appUrls({ projectText: s.staging.projectText, environment: 'staging', url: s.staging.url });
-  if (apps.problem) return stop(apps.problem, `Make the hosts of ${PROJECT_FILE} and of /etc/ao/deployer.yaml the same, then /ao-ship ${v}`);
+  if (apps.problem) return stop('fix', apps.problem, `Make the hosts of ${PROJECT_FILE} and of /etc/ao/deployer.yaml the same, then /ao-ship ${v}`);
   if (s.regression?.result === 'FAIL' && s.regression.sha === s.staging.sha) {
-    return stop(`the regression of ${v} failed on ${eight(s.regression.sha)}`, `Read the draft Bugs in .ai/runs/${v}/regression-report.md, triage and create the Bugs; once they are fixed on ${s.branch.name}, run /ao-ship ${v} again`);
+    return stop('you', `the regression of ${v} failed on ${eight(s.regression.sha)}`, `Read the draft Bugs in .ai/runs/${v}/regression-report.md, triage and create the Bugs; once they are fixed on ${s.branch.name}, run /ao-ship ${v} again`);
   }
   const context = { version: v, sha: s.staging.sha, url: s.staging.url, branch: s.branch.name, ...(Object.keys(apps.apps).length > 0 && { apps: apps.apps }) };
   const notes = run('devops', 'release-notes', { key: v, ...context }, options);
@@ -1172,18 +1270,18 @@ function decideShip(facts, options) {
 function decideHotfix(facts) {
   const h = facts.hotfix;
   const v = h.version;
-  if (!h.production) return stop('Production runs no tagged release, so there is nothing to patch', '/ao-status');
+  if (!h.production) return stop('fix', 'Production runs no tagged release, so there is nothing to patch', '/ao-status');
   // Production runs the newest commit of main: the hotfix, once it went live; right after a release, its merge, no hotfix.
-  if (h.production.sha === h.main.sha && h.main.pull?.head?.startsWith('hotfix/')) return stop(`Production runs ${h.production.version} (${eight(h.main.sha)}), the hotfix: nothing is left to ship`, '/ao-status');
+  if (h.production.sha === h.main.sha && h.main.pull?.head?.startsWith('hotfix/')) return stop('fix', `Production runs ${h.production.version} (${eight(h.main.sha)}), the hotfix: nothing is left to ship`, '/ao-status');
   // Its own tag moved the next patch on, so the request comes first (T22).
-  if (h.tag?.sha === h.main.sha && h.request?.sha === h.main.sha) return stop(`${v} is tagged and deployment request #${h.request.id} asks for it on Production: the deployer takes it within a minute or two`, '/ao-status');
-  if (v !== h.expected) return stop(`${v} is not the next patch of ${h.production.version} on Production: that is ${h.expected}`, `/ao-ship ${h.expected}`);
+  if (h.tag?.sha === h.main.sha && h.request?.sha === h.main.sha) return stop('deploy', `${v} is tagged and deployment request #${h.request.id} asks for it on Production: the deployer takes it within a minute or two`, '/ao-status');
+  if (v !== h.expected) return stop('fix', `${v} is not the next patch of ${h.production.version} on Production: that is ${h.expected}`, `/ao-ship ${h.expected}`);
   const { pull } = h.main;
-  if (!pull?.key || !pull.head.startsWith('hotfix/')) return stop(`main ends with ${eight(h.main.sha)}, ${pull ? `the merge of PR #${pull.number} from ${pull.head}` : 'a commit without a PR'}, not of a hotfix`, '/ao-status');
-  if (!h.bug || h.bug.state !== 'done') return stop(`${pull.key} is ${h.bug?.status ?? 'not on Jira'}, not Done: QA it on Staging with /ao-qa ${pull.key}, then Accept it`, `/ao-qa ${pull.key}`);
-  if (!h.bug.fixVersions.includes(v)) return stop(`${pull.key} does not carry the Fix Version ${v}`, `Set the Fix Version of ${pull.key} to ${v} in Jira, then run /ao-ship ${v} again`);
-  if (h.tag && h.tag.sha !== h.main.sha) return stop(`the tag ${v} is at ${eight(h.tag.sha)}, not at the hotfix ${eight(h.main.sha)}`, '/ao-status');
-  if (h.staging?.sha !== h.main.sha) return stop(`Staging runs ${h.staging ? eight(h.staging.sha) : 'nothing'}, not the hotfix ${eight(h.main.sha)}: wait for the deployer`, `/ao-ship ${v}`);
+  if (!pull?.key || !pull.head.startsWith('hotfix/')) return stop('fix', `main ends with ${eight(h.main.sha)}, ${pull ? `the merge of PR #${pull.number} from ${pull.head}` : 'a commit without a PR'}, not of a hotfix`, '/ao-status');
+  if (!h.bug || h.bug.state !== 'done') return stop('you', `${pull.key} is ${h.bug?.status ?? 'not on Jira'}, not Done: QA it on Staging with /ao-qa ${pull.key}, then Accept it`, `/ao-qa ${pull.key}`);
+  if (!h.bug.fixVersions.includes(v)) return stop('you', `${pull.key} does not carry the Fix Version ${v}`, `Set the Fix Version of ${pull.key} to ${v} in Jira, then run /ao-ship ${v} again`);
+  if (h.tag && h.tag.sha !== h.main.sha) return stop('fix', `the tag ${v} is at ${eight(h.tag.sha)}, not at the hotfix ${eight(h.main.sha)}`, '/ao-status');
+  if (h.staging?.sha !== h.main.sha) return stop('deploy', `Staging runs ${h.staging ? eight(h.staging.sha) : 'nothing'}, not the hotfix ${eight(h.main.sha)}: wait for the deployer`, `/ao-ship ${v}`);
   return go(
     [{ action: 'hotfix-ship', key: v, version: v, sha: h.main.sha, backMerges: ['develop', ...h.releaseBranches.map(({ name }) => name)] }],
     [`Production runs ${h.production.version}; ${v} is the hotfix of ${pull.key}, merged as ${eight(h.main.sha)} by PR #${pull.number}, which Staging runs`],
@@ -1199,9 +1297,9 @@ function decideRollback(facts) {
   const env = title(r.environment);
   const given = facts.extra !== undefined;
   const target = given ? r.target : r.earlier[0];
-  if (!target) return stop(given ? `${facts.extra} is not a commit of the repository` : `${env} has no earlier release that ran there`, '/ao-status');
-  if (r.running?.sha === target.sha) return stop(`${env} runs ${eight(target.sha)} already`, '/ao-status');
-  if (r.requested?.sha === target.sha) return stop(`deployment request #${r.requested.id} asks for ${eight(target.sha)} on ${env}: the deployer takes it within a minute or two`, '/ao-status');
+  if (!target) return stop('fix', given ? `${facts.extra} is not a commit of the repository` : `${env} has no earlier release that ran there`, '/ao-status');
+  if (r.running?.sha === target.sha) return stop('fix', `${env} runs ${eight(target.sha)} already`, '/ao-status');
+  if (r.requested?.sha === target.sha) return stop('deploy', `deployment request #${r.requested.id} asks for ${eight(target.sha)} on ${env}: the deployer takes it within a minute or two`, '/ao-status');
   const what = given ? 'the commit you named. The deployer takes the history up to it as read by you' : `the release that ran there before`;
   return go(
     [{ action: 'deploy-request', key: facts.runKey, environment: r.environment, sha: target.sha, rollback: !given }],
@@ -1223,36 +1321,41 @@ function decidePreview(facts, options = {}) {
   const lines = [itemLine(facts)];
   const key = item.key;
   const out = (decision) => ({ ...decision, lines: [...lines, ...(decision.lines ?? [])] });
-  if (item.workType === 'epic' || item.workType === 'sub-task') return out(stop(`${key} is ${item.workType === 'epic' ? 'an Epic' : 'a Sub-task'}: /ao-preview takes the item of a PR`, '/ao-status'));
+  if (item.workType === 'epic' || item.workType === 'sub-task') return out(stop('fix', `${key} is ${item.workType === 'epic' ? 'an Epic' : 'a Sub-task'}: /ao-preview takes the item of a PR`, '/ao-status'));
   if (p.active?.key === key) {
     return { status: true, lines: [...lines, `The preview of ${key} runs on ${p.active.branch}: ${urls(p.active.apps)}`], next: `/ao-preview ${key} --stop, when you are done with it` };
   }
-  if (p.active) return out(stop(`the preview of ${p.active.key} runs`, `/ao-preview ${p.active.key} --stop, when you are done with it`));
-  if (pr?.state !== 'open') return out(stop(`${key} has no open PR to preview`, nextFor(item, pr)));
+  if (p.active) return out(stop('you', `the preview of ${p.active.key} runs`, `/ao-preview ${p.active.key} --stop, when you are done with it`));
+  if (pr?.state !== 'open') return out(stop('fix', `${key} has no open PR to preview`, nextFor(item, pr)));
+  // With lanes on, the apps run from the lane of the item (C2 spec section 8).
+  if (p.lane && !p.lane.dir) return out(stop('fix', `${key} has no lane: with runs.worktrees on, /ao-preview runs the apps of a PR from the lane of its item, and ${key} was built without one`, `/ao-review ${pr.number}`));
   // Protected paths, and what steers a session at any depth (CLAUDE.md, AGENTS.md, a nested .claude/, .mcp.json…), which
   // Claude Code would load from the folder during the preview (review of ao-sample PR #21; live-run-fixes spec 2.7).
   // A protected path in another case counts too: Windows writes .Claude/ into .claude/ (review of ao-sample PR #21).
   const globs = (options.gates?.protected_paths ?? []).map(({ path }) => path);
   const steering = [...new Set([...pr.protectedPaths, ...(pr.files ?? []).filter((path) => steersPreview(path, globs))])];
-  if (steering.length > 0) return out(stop(steeringReason(pr.number, steering), `/ao-review ${pr.number}`));
+  if (steering.length > 0) return out(stop('you', steeringReason(pr.number, steering), `/ao-review ${pr.number}`));
   // GitHub lists at most 3000 files of a PR: a file past them would not be checked (live-run-fixes spec 2.7).
   if (pr.changedFiles != null && (pr.filesRead ?? 0) < pr.changedFiles) {
-    return out(stop(`GitHub lists ${pr.filesRead ?? 0} of the ${pr.changedFiles} files of PR #${pr.number}, so /ao-preview cannot check each one for a file that steers the agents`, `/ao-review ${pr.number}`));
+    return out(stop('you', `GitHub lists ${pr.filesRead ?? 0} of the ${pr.changedFiles} files of PR #${pr.number}, so /ao-preview cannot check each one for a file that steers the agents`, `/ao-review ${pr.number}`));
   }
   // Only a branch of this repository, and only once CI (secrets, sast, policy, tests) passed on its head (review of PR #21).
-  if (pr.fromFork) return out(stop(`PR #${pr.number} comes from another repository: /ao-preview runs only a branch of this one`, `/ao-review ${pr.number}`));
-  if (!pr.ci.green) return out(stop(pr.ci.failed ? `CI is red on the head of PR #${pr.number}` : `CI is still running on the head of PR #${pr.number}`, pr.ci.failed ? `/ao-fix ${pr.number}` : `/ao-preview ${key} once CI is done`));
-  if (p.agentRunning) return out(stop(`ao-step is running ${p.agentRunning.command} ${p.agentRunning.arg}: the project folder is busy`, `Wait for it to end, then /ao-preview ${key}`));
-  if (p.dirty > 0) return out(stop(`the project folder has changes not committed (${p.dirty} files)`, `Commit them, or put them aside with git stash, then /ao-preview ${key}`));
-  if (p.configError) return out(stop(p.configError, `Fix ${PROJECT_FILE}, then /ao-preview ${key}`));
+  if (pr.fromFork) return out(stop('you', `PR #${pr.number} comes from another repository: /ao-preview runs only a branch of this one`, `/ao-review ${pr.number}`));
+  if (pr.ci.failed) return out(stop('next', `CI is red on the head of PR #${pr.number}`, `/ao-fix ${pr.number}`, { then: { command: 'fix', arg: pr.number } }));
+  if (!pr.ci.green) return out(stop('ci', `CI is still running on the head of PR #${pr.number}`, `/ao-preview ${key} once CI is done`));
+  // In a lane, only a run on this item holds it back; the lane's own changes count, not the folder's.
+  const where = p.lane ? `the lane of ${key}` : 'the project folder';
+  if (p.agentRunning) return out(stop('item', `ao-step is running ${p.agentRunning.command} ${p.agentRunning.arg}${p.lane ? ` on ${key}: its lane is busy` : ': the project folder is busy'}`, `Wait for it to end, then /ao-preview ${key}`));
+  if (p.dirty > 0) return out(stop('you', `${where} has changes not committed (${p.dirty} files)`, `Commit them, or put them aside with git stash, then /ao-preview ${key}`));
+  if (p.configError) return out(stop('fix', p.configError, `Fix ${PROJECT_FILE}, then /ao-preview ${key}`));
   // A kit copy brings it: ao-kit sync makes it from the preview.yaml the project had (project-scaffold spec 2.1).
-  if (!p.config) return out(stop(`the project has no ${PROJECT_FILE}, which says the apps to start`, `Copy the kit again with ao-kit sync, which writes it, or write it as below and in SPEC-project-scaffold.md 2.1; then /ao-preview ${key}`, { lines: PREVIEW_SAMPLE.split('\n') }));
-  if (p.busy.length > 0) return out(stop(`port ${p.busy.join(', ')} is in use: a server runs there already`, `Stop it, then /ao-preview ${key}`));
+  if (!p.config) return out(stop('fix', `the project has no ${PROJECT_FILE}, which says the apps to start`, `Copy the kit again with ao-kit sync, which writes it, or write it as below and in SPEC-project-scaffold.md 2.1; then /ao-preview ${key}`, { lines: PREVIEW_SAMPLE.split('\n') }));
+  if (p.busy.length > 0) return out(stop('you', `port ${p.busy.join(', ')} is in use: a server runs there already`, `Stop it, then /ao-preview ${key}`));
   // npm or pnpm, as project.yaml says (project-scaffold part 2, spec 2.1).
   const manager = p.manager ?? 'npm';
-  const install = p.install ? `${manager === 'npm' ? 'npm ci' : 'pnpm install'} first, since ${lockfileOf(manager)} differs from the one installed` : 'the packages installed are those of the head';
+  const install = p.lane ? 'the packages of its lane' : p.install ? `${manager === 'npm' ? 'npm ci' : 'pnpm install'} first, since ${lockfileOf(manager)} differs from the one installed` : 'the packages installed are those of the head';
   // The protected paths go with the step: ao-step checks them again on the list of files git gives (spec 2.7).
-  return out(go([{ action: 'preview-start', key, number: pr.number, branch: pr.headRef, head: pr.headSha, install: p.install, protected: globs }], [`Preview of PR #${pr.number}${pr.draft ? ' (draft)' : ''}: ${pr.headRef} at ${eight(pr.headSha)}; ${install}; apps ${urls(p.config)}`]));
+  return out(go([{ action: 'preview-start', key, number: pr.number, branch: pr.headRef, head: pr.headSha, install: p.install, protected: globs, ...(p.lane && { lane: p.lane.dir }) }], [`Preview of PR #${pr.number}${pr.draft ? ' (draft)' : ''}: ${pr.headRef} at ${eight(pr.headSha)}; ${install}; apps ${urls(p.config)}`]));
 }
 
 // /ao-intake (human-loop spec 3.1): no run. The main session interviews you and creates the item itself; the check gives

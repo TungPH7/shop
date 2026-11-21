@@ -10,7 +10,8 @@ const WARN_DAYS = 14;
 // Snapshot: {
 //   space, issueTypes: [name], scheme: { name, defaultWorkflow, issueTypes: { type: workflow } } | null,
 //   workflows: [{ name, statuses: [{ name, category }],
-//     transitions: [{ name, type, from: [status], to, restrict: [group] | null, screen: { id, fields } | null, setsResolution }] }],
+//     transitions: [{ name, type, from: [status], to, restrict: [group] | null, restrictRules, screen: { id, fields } | null,
+//       setsResolution }] }],
 //   groups: { name: { members: [display name] | undefined } }, resolutions: [name],
 //   fields: { name: { options: [name] | undefined } }, board: { filter, columns: [{ name, statuses, max }] } | null }
 export async function readJiraConfig(client, { space, mapping }) {
@@ -52,6 +53,8 @@ export async function readJiraConfig(client, { space, mapping }) {
         from: (t.links ?? []).map((link) => statusName(link.fromStatusReference)),
         to: statusName(t.toStatusReference),
         restrict: restrictRules.length > 0 ? await Promise.all(groupIds.map((id) => groupName(id))) : null,
+        // How many Restrict rules hold those groups: more than one is a drift of its own (checkRules).
+        restrictRules: restrictRules.length,
         screen: screenId ? { id: screenId, fields: screens.get(screenId) } : null,
         setsResolution: update ? (resolutionName.get(update.parameters.value) ?? update.parameters.value) : null,
       });
@@ -253,6 +256,9 @@ export function findDrift(snapshot, { contract, mapping }) {
 // The rules of a Jira transition that matches the mapping: who may make it, and how it handles Resolution.
 function checkRules(jira, expected, add) {
   if (!jira.restrict) add('restrict-missing', `has no Restrict rule, expected groups ${quote(expected.groups)}`);
+  // Groups in separate rules: Jira asks a user to pass every rule, so to be in every group (QA of SHOP-78, Phiên 33 ·
+  // Lượt 98). Read as one list, they looked right.
+  else if (jira.restrictRules > 1) add('restrict-split', `has ${jira.restrictRules} Restrict rules: Jira asks a user to pass every one, so to be in every group. Put ${quote(expected.groups)} in one rule`);
   else if (!sameSet(jira.restrict, expected.groups)) add('restrict-groups', `is restricted to ${quote(jira.restrict)}, expected ${quote(expected.groups)}`);
   if (expected.asksResolution) {
     if (!jira.screen) add('resolution-screen', 'does not ask for a Resolution');

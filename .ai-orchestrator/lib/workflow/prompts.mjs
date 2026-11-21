@@ -35,7 +35,8 @@ export const PURPOSES = {
   'seo-write': ({ key, branch, again }) =>
     `Epic ${key} is in Specifying, and its SPEC and design.md are on the branch ${branch}, which is checked out. Write the section ## SEO of docs/specs/${key}/spec.md for its screens of an app with seo: true.${again ? ' The SPEC has a line "SEO: không" from an earlier run: the human now asks for SEO, so remove that line.' : ''} You have no git: ao-step commits your change after your run.`,
   'spec-nfr': ({ key, branch }) => `Epic ${key} is in Specifying, and its SPEC is committed on the branch ${branch}, which is checked out. Do your part of stage spec and commit it on that branch. Do not push.`,
-  'docs-pr': ({ key, branch }) => `Stage spec of Epic ${key} is committed on the branch ${branch}, which is checked out. Push the branch and open the docs PR of the Epic into develop.`,
+  // seoAfter: seo writes last, after the docs PR (contract/stages.yaml; second review of shop PR #79).
+  'docs-pr': ({ key, branch, seoAfter }) => `Stage spec of Epic ${key} is committed on the branch ${branch}, which is checked out. Push the branch and open the docs PR of the Epic into develop.${seoAfter ? ' seo writes the section ## SEO of the SPEC after you, and ao-step pushes it to the PR: say so in the PR body.' : ''}`,
   'plan-write': ({ key, branch, pr, approved }) =>
     `Epic ${key} is in Planning: do stage plan. Its SPEC is approved, the branch ${branch} is checked out, and its docs PR #${pr} is open. In your first commit, set the Status line of docs/specs/${key}/spec.md and design.md, where there is one, to Approved ${approved ?? '<the day the Epic passed gate ①>'}. Commit the plan on that branch and push it.`,
   'plan-items': ({ key, branch }) => `The plan of Epic ${key} is committed on the branch ${branch}, which is checked out, and waits for the human at gate ②. Do stage plan: create its items.`,
@@ -149,7 +150,9 @@ export function promptFor(purpose, context) {
 
 // The ledger of `role` on item `key`. A role that reads web pages keeps its own, the one file of .ai/ it may write
 // (agents/roster.yaml): the ledger of the item is what the agents with Bash read and go on from (review of shop PR #79).
-export const ledgerPath = (key, role) => (WEB_ROLES.includes(role) ? `.ai/ledger/${key}.${role}.md` : `.ai/ledger/${key}.md`);
+// reviewer and security keep one each too: they may run at once on one PR (C2 spec section 7).
+const OWN_LEDGER = [...WEB_ROLES, 'reviewer', 'security'];
+export const ledgerPath = (key, role) => (OWN_LEDGER.includes(role) ? `.ai/ledger/${key}.${role}.md` : `.ai/ledger/${key}.md`);
 
 // A run that stopped before its end (the process was stopped, or the usage limit), resumed in its session.
 export const resumePrompt = (key, role) => `Your run stopped before it ended. Read ${ledgerPath(key, role)} and go on from where you stopped.`;
@@ -158,10 +161,13 @@ export const resumePrompt = (key, role) => `Your run stopped before it ended. Re
 export const wipNote = 'When your run stopped, ao-step put aside what you had not committed yet, and has put it back in the checkout: run git status and read the diff before you go on.';
 
 // The human's answers to the open questions an agent left, given to the run that asked them. Once the docs PR is open
-// (`pr`), the answer is pushed so the PR shows it.
-export function answersPrompt(key, answers, { pr } = {}) {
+// (`pr`), the answer is pushed so the PR shows it. seo has no git (C1 spec 6.4): ao-step commits and pushes its change.
+export function answersPrompt(key, answers, { pr, role } = {}) {
   const text = answers.replace(/\r\n?/g, '\n').trim();
   if (text === '') throw new Error('the answers file is empty');
+  if (WEB_ROLES.includes(role)) {
+    return `The human answered your open questions:\n\n${text}\n\nTurn each answer into a decision where it belongs, and remove the answered questions from Open Questions. You have no git: ao-step commits your change after your run${pr ? `, and pushes it to the docs PR #${pr}` : ''}.`;
+  }
   const push = pr ? `\n\nThe docs PR #${pr} is open: push the branch after you commit, so the PR shows your change.` : '';
   return `The human answered your open questions:\n\n${text}\n\nTurn each answer into a decision where it belongs, remove the answered questions from Open Questions, and commit. If you commented the questions on ${key}, edit that comment to say they are answered.${push}`;
 }

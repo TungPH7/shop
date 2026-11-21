@@ -30,7 +30,9 @@ const writers = (apps) => [apps.merge, apps.dev].filter(Boolean).map(botLogin);
 // you merge yourself is also said on the PR and on its item (dev-workflow spec 2.7). `auditMain(pr)` audits the commits
 // a merge back brings from main (lib/quality/audit.mjs, auditBroughtBack); without it a merge back waits. `now` dates
 // the Highs you accept (Pilot 3, spec 2.9 part 5).
-export async function runMergeGate({ github, mergeClient, docs, notify, gates, apps, approvers, auditMain, now = () => new Date(), dryRun = false, log = console.log }) {
+// `waitQa(pr)` waits while qa tests the commit the merge builds on, and resolves null once free, or the reason it gave
+// up (lib/workflow/qa-signal.mjs, C2 spec section 9); the PR then waits for the next run. A dry run waits for nothing.
+export async function runMergeGate({ github, mergeClient, docs, notify, gates, apps, approvers, auditMain, waitQa, now = () => new Date(), dryRun = false, log = console.log }) {
   const today = now().toISOString().slice(0, 10);
   const failures = [];
   const open = await github.getAll('/pulls', OPEN_PRS);
@@ -55,6 +57,14 @@ export async function runMergeGate({ github, mergeClient, docs, notify, gates, a
         const then = decision.release ? `, then tag ${decision.release.tag} and merge main back into ${decision.release.backMerge}` : '';
         log(`Would merge #${number}: ${what}${then}`);
         continue;
+      }
+      // A QA that tests the base: its deploy would stop it, and its run would be lost (Pilot 3, SHOP-28 and SHOP-69).
+      if (waitQa) {
+        const held = await waitQa(facts.pr);
+        if (held) {
+          log(`Waiting #${number}: ${held}`);
+          continue;
+        }
       }
       // The merge call pins the head, not the base: read the PR again right before it, and leave a PR whose base or head
       // moved since the facts were read to the next run (review round 2 of shop PR #13, Pilot 3 spec 2.9). The token is

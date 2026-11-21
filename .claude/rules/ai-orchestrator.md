@@ -83,7 +83,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 
 ## Ledger
 
-When you work on an item, write `.ai/ledger/<KEY>.md` from the ledger template after each step, so the next session picks up where you stopped. `.ai/` is never committed. seo, which reads web pages, writes `.ai/ledger/<KEY>.seo.md` instead, and no other agent reads that one.
+When you work on an item, write `.ai/ledger/<KEY>.md` from the ledger template after each step, so the next session picks up where you stopped. `.ai/` is never committed. seo, which reads web pages, writes `.ai/ledger/<KEY>.seo.md` instead, and no other agent reads that one. reviewer and security, which may review one PR at the same time, write `.ai/ledger/<KEY>.reviewer.md` and `.ai/ledger/<KEY>.security.md`.
 
 ## Hooks
 
@@ -126,6 +126,9 @@ Your run ends with your answer, and nothing wakes it after that. A command still
   - `**/.npmrc`: no agent
   - `**/.yarnrc*`: no agent
   - `**/bunfig.toml`: no agent
+  - `**/pnpm-workspace.yaml`: no agent
+  - `**/.pnpmfile.*`: no agent
+  - `**/.mvn/**`: no agent
 
 - Never put a token or a key in a file, a commit, a log or a message.
 - Never copy or delete a folder tree that holds `node_modules`, or the whole `apps` folder. To try a check on a copy, take only the files it needs, as in `git archive HEAD <paths> | tar -x -C <temp folder>`.

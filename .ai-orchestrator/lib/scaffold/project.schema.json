@@ -133,6 +133,18 @@
         "lanes_max": { "type": "integer", "minimum": 1, "maximum": 6, "description": "How many items have a lane at once, and how many agents run at once; from 2 it needs worktrees" },
         "min_free_ram_gb": { "type": "number", "minimum": 0, "maximum": 64, "description": "Free RAM another agent needs to start; 0 turns the check off" },
         "port_step": { "type": "integer", "minimum": 10, "maximum": 1000, "description": "How far the ports of each lane move from the defaults" },
+        "budget_usd": { "type": "number", "exclusiveMinimum": 0, "maximum": 1000, "description": "The budget of one /ao-run: once the runs it started cost this much, it starts no command more (C2 spec 5.5)" },
+        "idle_hours": { "type": "integer", "minimum": 1, "maximum": 48, "description": "How long /ao-run waits for you when nothing can start, before it ends (C2 spec 5.4)" },
+        "agents_per_role": {
+          "description": "How many agents of a dev role work at once, each on its own item in its own lane: at most lanes_max. A role not named keeps 1 (C2 spec section 6)",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "be-dev": { "type": "integer", "minimum": 1, "maximum": 6 },
+            "fe-dev": { "type": "integer", "minimum": 1, "maximum": 6 },
+            "devops": { "type": "integer", "minimum": 1, "maximum": 6 }
+          }
+        },
         "copy": {
           "type": "array",
           "items": { "type": "string", "minLength": 1, "pattern": "^(?![\\\\/])(?![A-Za-z]:)(?!(.*[\\\\/])?\\.\\.([\\\\/]|$)).+$" }
