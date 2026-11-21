@@ -16,6 +16,27 @@ public final class ConstraintViolations {
   /** The UNIQUE constraint on {@code app.products.slug} (V3). */
   public static final String PRODUCT_SLUG_UNIQUE = "products_slug_unique";
 
+  /** The UNIQUE constraint on {@code app.categories.name}, collation {@code app.vi_ci} (V7). */
+  public static final String CATEGORY_NAME_UNIQUE = "categories_name_unique";
+
+  /** The UNIQUE constraint on {@code app.categories.slug} (V7). */
+  public static final String CATEGORY_SLUG_UNIQUE = "categories_slug_unique";
+
+  /**
+   * The foreign key of {@code app.products.category_id} (V7, ADR-0004): a product written with a
+   * category that is gone, such as one deleted in another tab (AC10).
+   */
+  public static final String PRODUCT_CATEGORY_FK = "products_category_fk";
+
+  /** The field of the request a violation of {@link #PRODUCT_CATEGORY_FK} is reported on. */
+  public static final String CATEGORY_ID_FIELD = "categoryId";
+
+  /**
+   * The message of a {@code categoryId} that names no category: the same for the check before the
+   * write and for {@link #PRODUCT_CATEGORY_FK} (plan of SHOP-81, API Contract).
+   */
+  public static final String NOT_AN_EXISTING_CATEGORY = "must be an existing category";
+
   private ConstraintViolations() {}
 
   /**
