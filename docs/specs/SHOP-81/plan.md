@@ -390,7 +390,7 @@ Mỗi item ghi các mục sau:
 
 ### Phase 1: Nền
 
-- [ ] SHOP-82 T1: api: schema V7 và API của danh mục · be-dev · level heavy: V7 nâng database Production đang có sản phẩm, xóa danh mục đổi các sản phẩm đang có, và API của khách không được lộ danh mục Ẩn · effort xhigh: migration trên dữ liệu Production phải để `v0.3.0` chạy được sau rollback, và lần xóa danh mục chạy cùng lúc với lần gán sản phẩm (NFR15, NFR16)
+- [ ] Task 1: api: schema V7 và API của danh mục (SHOP-82) · be-dev · level heavy: V7 nâng database Production đang có sản phẩm, xóa danh mục đổi các sản phẩm đang có, và API của khách không được lộ danh mục Ẩn · effort xhigh: migration trên dữ liệu Production phải để `v0.3.0` chạy được sau rollback, và lần xóa danh mục chạy cùng lúc với lần gán sản phẩm (NFR15, NFR16)
   - TW1, TW2; phía `api` của AC1–AC10 và AC12–AC21. NFR2, NFR3, NFR7–NFR9, NFR11, NFR12, NFR14–NFR19, NFR22.
   - **Bước 1, migration:** V7 và các test ở mục Database Changes, kể cả lần chạy test sản phẩm không sửa trên V7. File: `apps/api/src/main/resources/db/migration/V7__create_categories.sql` (mới).
   - **Bước 2, slug dùng chung:** `Slugs` theo Tech Stack của SPEC, gồm bỏ dấu, `đ` thành `d`, cắt 100 ký tự, kiểm định dạng và hậu tố. `ProductSlugs` gọi nó, và `ProductSlugsTest` chạy không sửa. Unit test của `Slugs` có các ví dụ của Category Rules, kể cả `Áo khoác nữ` thành `ao-khoac-nu` và chữ dự phòng `danh-muc`. File: `common/text/Slugs.java` (mới), `feature/product/domain/ProductSlugs.java`.
@@ -421,7 +421,7 @@ Mỗi item ghi các mục sau:
 
 ### Phase 2: Quản trị và trang khách, song song
 
-- [ ] SHOP-83 ADM: Quản trị viên quản lý danh mục và chọn danh mục cho sản phẩm · fe-dev · level standard
+- [ ] Story 1: Quản trị viên quản lý danh mục và chọn danh mục cho sản phẩm (SHOP-83) · fe-dev · level standard
   - Phạm vi:
     - AC1–AC4 và AC10;
     - phần ở `admin` của AC5–AC9: phần ở trang khách thuộc USR (Architecture Decisions 3);
@@ -466,7 +466,7 @@ Mỗi item ghi các mục sau:
 
     Chỉ có file test.
   - Phụ thuộc: T1.
-- [ ] SHOP-84 USR: Khách xem trang danh mục và danh mục của sản phẩm · fe-dev · level standard · seo: S5, S6, S7, S8
+- [ ] Story 2: Khách xem trang danh mục và danh mục của sản phẩm (SHOP-84) · fe-dev · level standard · seo: S5, S6, S7, S8
   - Phạm vi:
     - AC12–AC21;
     - phần ở trang khách của AC5–AC9: H1 mới, đường dẫn mới, 404, liên kết, breadcrumb và sitemap, trong vòng 60 s, sau khi thao tác qua API quản trị.
