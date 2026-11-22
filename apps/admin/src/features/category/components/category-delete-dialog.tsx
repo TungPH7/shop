@@ -82,10 +82,11 @@ export function CategoryDeleteDialog({ category, onCancel, onDeleted }: Category
     >
       <p>{t('delete.cannotUndo')}</p>
       {productCount > 0 ? (
-        <div className="banner banner--warn">
+        // A paragraph like the lines around it, so it keeps their spacing.
+        <p className="banner banner--warn">
           <WarningIcon />
-          <p>{t('delete.products', { count: productCount })}</p>
-        </div>
+          <span>{t('delete.products', { count: productCount })}</span>
+        </p>
       ) : null}
       <p>{t('delete.hideHint')}</p>
     </Dialog>
