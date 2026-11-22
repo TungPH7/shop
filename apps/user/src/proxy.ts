@@ -6,8 +6,8 @@ import vi from '../messages/vi.json';
 
 import { env } from '~/config/env/server';
 import { isLocale, type Locale } from '~/config/i18n';
-import { isStoreSlug } from '~/features/product/model/product';
 import { routing } from '~/i18n/routing';
+import { isStoreSlug } from '~/lib/validation/store-slug';
 
 /**
  * Proxy: Next 16 renamed `middleware.ts` to `proxy.ts` (next-intl supports it: "proxy.ts was called middleware.ts up

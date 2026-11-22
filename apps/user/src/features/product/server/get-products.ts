@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { cacheLife } from 'next/cache';
+import type * as z from 'zod';
 
 import {
   pageSchema,
@@ -9,18 +10,24 @@ import {
 } from '~/features/product/model/product';
 import {
   apiSortOf,
+  CATALOG,
   foldKeyword,
   PAGE_SIZE,
   type ProductQuery,
   type ProductSort,
+  type ProductSource,
 } from '~/features/product/model/product-query';
+import { isApiError } from '~/lib/http/api-error';
 import { httpGet } from '~/lib/http/client';
 import { captureError } from '~/lib/monitoring/capture-error';
+import { isStoreSlug } from '~/lib/validation/store-slug';
 
 /** Products of each request to the api: under its limit of 100 (NFR3), and 4 loads of 24. */
 const BLOCK_SIZE = 96;
 
 const storeProductPageSchema = pageSchema(storeProductSummarySchema);
+
+type StoreProductPage = z.infer<typeof storeProductPageSchema>;
 
 export type StoreProductList = {
   /** The first `page × 24` products on sale that match the search, in the order of the query, each once. */
@@ -59,6 +66,23 @@ async function getStoreProductBlock(terms: string, sort: ProductSort, offset: nu
 }
 
 /**
+ * One block of 96 products on sale of the visible category at `slug` from `offset`:
+ * `GET /api/categories/{slug}/products` (plan of SHOP-81, API Contract), in the order `sort`, never relevance (AC13).
+ * Cached as a block of the catalog is, under the stored slug of the category (Architecture Decisions 10). A throw, the
+ * 404 of a category hidden or deleted included, is not cached.
+ */
+async function getCategoryProductBlock(slug: string, sort: ProductSort, offset: number) {
+  'use cache';
+  cacheLife('catalog');
+
+  const params = new URLSearchParams();
+  params.set('sort', apiSortOf(sort));
+  params.set('offset', String(offset));
+  params.set('limit', String(BLOCK_SIZE));
+  return httpGet(`/api/categories/${slug}/products?${params.toString()}`, storeProductPageSchema);
+}
+
+/**
  * The words the api is asked for `q` in the order `sort`: the folded words (`foldKeyword`), as typed for relevance,
  * which ranks a name that holds them as a phrase first, and sorted for another order, which matches each word wherever
  * it is and so does not depend on their order.
@@ -94,22 +118,67 @@ function termsFor(q: string, sort: ProductSort): string {
  * rate limit on `?q=` at the proxy would. Reading the blocks after the first in parallel, a few at a time, is the change
  * to make if the catalog grows that large.
  */
-export async function getStoreProducts(query: ProductQuery): Promise<StoreProductList> {
+export async function getStoreProducts(query: ProductQuery): Promise<StoreProductList>;
+/**
+ * The products of S5 of SHOP-81 for `query`, when `source` is a category: `page × 24` products on sale of that category,
+ * in the order of the query, read in blocks of 96 as for S4, with no keyword, since a category page has no search
+ * (AC13). `null` when the api answers 404 for the first block, as for a category hidden or deleted since the page read
+ * its name, and for a slug the api cannot hold, without a request (NFR9): the page then calls `notFound()`.
+ */
+export async function getStoreProducts(
+  query: ProductQuery,
+  source: ProductSource,
+): Promise<StoreProductList | null>;
+export async function getStoreProducts(
+  query: ProductQuery,
+  source: ProductSource = CATALOG,
+): Promise<StoreProductList | null> {
+  if (source.kind === 'category') {
+    const { slug } = source;
+    if (!isStoreSlug(slug)) return null;
+    try {
+      return await readProducts(
+        (offset) => getCategoryProductBlock(slug, query.sort, offset),
+        query.page,
+        'category-products',
+      );
+    } catch (error) {
+      if (isApiError(error) && error.kind === 'http' && error.status === 404) return null;
+      throw error;
+    }
+  }
+
   const terms = termsFor(query.q, query.sort);
   if (query.q !== '' && terms === '') return { items: [], totalItems: 0, complete: true };
+  return readProducts(
+    (offset) => getStoreProductBlock(terms, query.sort, offset),
+    query.page,
+    'product-list',
+  );
+}
 
-  const wanted = query.page * PAGE_SIZE;
+/**
+ * `page × 24` products from the blocks `readBlock` gives, read one after another as getStoreProducts tells, each product
+ * once. The error of the first block is thrown; the error of a later one is reported under `feature`, and the whole
+ * loads of 24 read before it are kept, with `complete: false`.
+ */
+async function readProducts(
+  readBlock: (offset: number) => Promise<StoreProductPage>,
+  page: number,
+  feature: string,
+): Promise<StoreProductList> {
+  const wanted = page * PAGE_SIZE;
   const items: StoreProductSummary[] = [];
   const seen = new Set<string>();
   let totalItems = 0;
 
   for (let offset = 0; ; offset += BLOCK_SIZE) {
-    let block: Awaited<ReturnType<typeof getStoreProductBlock>>;
+    let block: StoreProductPage;
     try {
-      block = await getStoreProductBlock(terms, query.sort, offset);
+      block = await readBlock(offset);
     } catch (error) {
       if (offset === 0) throw error;
-      captureError(error, { feature: 'product-list', offset });
+      captureError(error, { feature, offset });
       const whole = Math.floor(items.length / PAGE_SIZE) * PAGE_SIZE;
       return { items: items.slice(0, whole), totalItems, complete: false };
     }
@@ -121,8 +190,8 @@ export async function getStoreProducts(query: ProductQuery): Promise<StoreProduc
     }
     totalItems = Math.max(block.totalItems, items.length);
 
-    // The whole catalog is read: past a short block, or past the total of the api, there is no product. The total is
-    // then the products read, each once: a larger one, from a block read before the catalog moved, would offer a Load
+    // The whole list is read: past a short block, or past the total of the api, there is no product. The total is
+    // then the products read, each once: a larger one, from a block read before the list moved, would offer a Load
     // more that never ends.
     if (block.items.length < BLOCK_SIZE || offset + BLOCK_SIZE >= block.totalItems) {
       return { items: items.slice(0, wanted), totalItems: items.length, complete: true };

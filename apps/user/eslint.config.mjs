@@ -30,7 +30,7 @@ const SHARED_DIRS = [
 
 // Mỗi feature là một ốc đảo: không feature nào import feature khác.
 // Thêm feature mới ⇒ thêm tên vào mảng này (đúng 1 dòng) → tự có zone cấm chéo.
-const FEATURES = ['site', 'caching-demo', 'product', 'auth', 'error-demo'];
+const FEATURES = ['site', 'caching-demo', 'product', 'category', 'auth', 'error-demo'];
 
 const boundaryZones = [
   // (a) shared KHÔNG được import features/app.

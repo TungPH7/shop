@@ -361,3 +361,133 @@ describe('getStoreProducts', () => {
     });
   });
 });
+
+describe('getStoreProducts of a category (SHOP-81)', () => {
+  const CATEGORY_URL = 'https://api.example.test/api/categories/ao/products';
+  const ao = { kind: 'category', slug: 'ao' } as const;
+
+  /** Serves `items` as `GET /api/categories/ao/products` does, and records each request. */
+  function serveCategory(items: ReturnType<typeof product>[], totalItems = items.length) {
+    const asked: { sort: string | null; offset: number; limit: number; q: string | null }[] = [];
+    server.use(
+      http.get(CATEGORY_URL, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        const offset = Number(params.get('offset'));
+        const limit = Number(params.get('limit'));
+        asked.push({ sort: params.get('sort'), offset, limit, q: params.get('q') });
+        return HttpResponse.json({
+          items: items.slice(offset, offset + limit),
+          totalItems,
+          offset,
+          limit,
+        });
+      }),
+    );
+    return asked;
+  }
+
+  test('reads the first 24 products of the category in a block of 96, with the catalog cache profile', async () => {
+    const asked = serveCategory(catalog(30));
+
+    const result = await getStoreProducts({ q: '', sort: 'newest', page: 1 }, ao);
+
+    expect(asked).toEqual([{ sort: 'NEWEST', offset: 0, limit: 96, q: null }]);
+    expect(result).toEqual({ items: catalog(24), totalItems: 30, complete: true });
+    expect(cacheLife).toHaveBeenCalledWith('catalog');
+  });
+
+  test.each([
+    ['price-asc', 'PRICE_ASC'],
+    ['price-desc', 'PRICE_DESC'],
+  ] as const)('asks the api for the order %s as %s (AC13)', async (sort, apiSort) => {
+    const asked = serveCategory(catalog(3));
+
+    await getStoreProducts({ q: '', sort, page: 1 }, ao);
+
+    expect(asked.map((request) => request.sort)).toEqual([apiSort]);
+  });
+
+  test('never sends a keyword, since a category page has no search (AC13)', async () => {
+    const asked = serveCategory(catalog(3));
+
+    await getStoreProducts({ q: 'áo thun', sort: 'newest', page: 1 }, ao);
+
+    expect(asked.map((request) => request.q)).toEqual([null]);
+  });
+
+  test('reads page × 24 products, and stops at the number of products on sale of the category (NFR3)', async () => {
+    const asked = serveCategory(catalog(30));
+
+    const result = await getStoreProducts({ q: '', sort: 'newest', page: 999999 }, ao);
+
+    expect(asked).toHaveLength(1);
+    expect(result).toEqual({ items: catalog(30), totalItems: 30, complete: true });
+  });
+
+  test('reads the next block when the page asks for more than 96 products', async () => {
+    const asked = serveCategory(catalog(150));
+
+    const result = await getStoreProducts({ q: '', sort: 'newest', page: 5 }, ao);
+
+    expect(asked.map((request) => request.offset)).toEqual([0, 96]);
+    expect(result?.items).toHaveLength(120);
+  });
+
+  test('returns no product and a total of 0 for a category with no product on sale (AC15)', async () => {
+    serveCategory([]);
+
+    await expect(getStoreProducts({ q: '', sort: 'newest', page: 1 }, ao)).resolves.toEqual({
+      items: [],
+      totalItems: 0,
+      complete: true,
+    });
+  });
+
+  test('returns null when the api answers 404: the category was hidden or deleted since its name was read', async () => {
+    server.use(
+      http.get(CATEGORY_URL, () =>
+        HttpResponse.json({ status: 404, code: 'CATEGORY_NOT_FOUND' }, { status: 404 }),
+      ),
+    );
+
+    await expect(getStoreProducts({ q: '', sort: 'newest', page: 1 }, ao)).resolves.toBeNull();
+  });
+
+  test.each(['..', '/', '%E0', 'áo', ''])(
+    'returns null for the slug %j without asking the api (NFR9)',
+    async (slug) => {
+      await expect(
+        getStoreProducts({ q: '', sort: 'newest', page: 1 }, { kind: 'category', slug }),
+      ).resolves.toBeNull();
+    },
+  );
+
+  test('throws when the api answers 500, never an empty list (NFR20)', async () => {
+    server.use(http.get(CATEGORY_URL, () => new HttpResponse(null, { status: 500 })));
+
+    await expect(getStoreProducts({ q: '', sort: 'newest', page: 1 }, ao)).rejects.toMatchObject({
+      kind: 'http',
+      status: 500,
+    });
+  });
+
+  test('keeps the products read when a later block fails, and reports it', async () => {
+    const items = catalog(300);
+    server.use(
+      http.get(CATEGORY_URL, ({ request }) => {
+        const offset = Number(new URL(request.url).searchParams.get('offset'));
+        if (offset > 0) return new HttpResponse(null, { status: 404 });
+        return HttpResponse.json({ items: items.slice(0, 96), totalItems: 300, offset, limit: 96 });
+      }),
+    );
+
+    const result = await getStoreProducts({ q: '', sort: 'newest', page: 6 }, ao);
+
+    expect(ids(result?.items ?? [])).toEqual(ids(catalog(96)));
+    expect(result?.complete).toBe(false);
+    expect(captureError).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'http', status: 404 }),
+      { feature: 'category-products', offset: 96 },
+    );
+  });
+});

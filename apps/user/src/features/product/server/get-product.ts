@@ -2,13 +2,10 @@ import 'server-only';
 
 import { cacheLife } from 'next/cache';
 
-import {
-  isStoreSlug,
-  storeProductSchema,
-  type StoreProduct,
-} from '~/features/product/model/product';
+import { storeProductSchema, type StoreProduct } from '~/features/product/model/product';
 import { isApiError } from '~/lib/http/api-error';
 import { httpGet } from '~/lib/http/client';
+import { isStoreSlug } from '~/lib/validation/store-slug';
 
 /**
  * The product of the store at `slug`, for S5 (US6a): `GET /api/products/{slug}`, which finds only products on sale and

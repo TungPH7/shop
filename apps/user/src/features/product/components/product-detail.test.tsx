@@ -27,6 +27,7 @@ const shirt: StoreProduct = {
   availability: 'IN_STOCK',
   description: 'Áo thun cotton 100%.\nCổ tròn, tay ngắn.',
   updatedAt: '2026-11-16T02:15:30.000Z',
+  category: null,
 };
 
 describe('<ProductDetail />', () => {

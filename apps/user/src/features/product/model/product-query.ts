@@ -67,6 +67,15 @@ const productQuerySchema = z
 
 export type ProductQuery = { q: string; sort: ProductSort; page: number };
 
+/**
+ * Where a list of products comes from (plan of SHOP-81, Architecture Decisions 10): the whole catalog of S4
+ * (`/[locale]/products`), or the products on sale of one category of S5 (`/[locale]/categories/{slug}`), at the slug the
+ * api stored, so `/vi/categories/AO` and `/vi/categories/ao` are one list.
+ */
+export type ProductSource = { kind: 'catalog' } | { kind: 'category'; slug: string };
+
+export const CATALOG: ProductSource = { kind: 'catalog' };
+
 export function parseProductQuery(
   raw: Record<string, string | string[] | undefined>,
 ): ProductQuery {
