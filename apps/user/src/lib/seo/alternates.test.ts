@@ -23,10 +23,10 @@ describe('localizedPathnames', () => {
 });
 
 describe('localizedAlternates', () => {
-  test('canonical = current locale; languages include x-default = default locale', () => {
+  test('canonical = current locale; languages include x-default = /vi, the locale of the SPEC', () => {
     expect(localizedAlternates('vi', '/products')).toEqual({
       canonical: '/vi/products',
-      languages: { en: '/en/products', vi: '/vi/products', 'x-default': '/en/products' },
+      languages: { en: '/en/products', vi: '/vi/products', 'x-default': '/vi/products' },
     });
   });
 

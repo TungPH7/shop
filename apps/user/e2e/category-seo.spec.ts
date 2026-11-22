@@ -183,13 +183,13 @@ for (const locale of ['vi', 'en'] as const) {
       expect(description.length).toBeLessThanOrEqual(160);
 
       // 3. The canonical: the page itself in this locale, at the stored slug, with no parameter; hreflang vi, en and
-      // x-default (the default locale of the app).
+      // x-default, which points at /vi (SPEC of SHOP-81, section SEO).
       expect(pathOf(linkHref(html, /rel="canonical"/))).toBe(`/${locale}/categories/${ao.slug}`);
       expect(new URL(linkHref(html, /rel="canonical"/) ?? '').search).toBe('');
       for (const [hreflang, path] of [
         ['vi', `/vi/categories/${ao.slug}`],
         ['en', `/en/categories/${ao.slug}`],
-        ['x-default', `/en/categories/${ao.slug}`],
+        ['x-default', `/vi/categories/${ao.slug}`],
       ] as const) {
         expect(pathOf(linkHref(html, new RegExp(`hrefLang="${hreflang}"`, 'i')))).toBe(path);
       }

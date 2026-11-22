@@ -246,8 +246,8 @@ describe('generateMetadata (AC18)', () => {
       languages: {
         vi: '/vi/categories/ao',
         en: '/en/categories/ao',
-        // The default locale of the app, as on every page (localizedAlternates).
-        'x-default': '/en/categories/ao',
+        // /vi, as on every page (localizedAlternates; SPEC of SHOP-81, section SEO).
+        'x-default': '/vi/categories/ao',
       },
     });
     expect(metadata.robots).toBeUndefined();

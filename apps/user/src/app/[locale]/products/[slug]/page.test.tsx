@@ -247,7 +247,7 @@ describe('generateMetadata', () => {
       languages: {
         en: '/en/products/ao-thun-co-tron',
         vi: '/vi/products/ao-thun-co-tron',
-        'x-default': '/en/products/ao-thun-co-tron',
+        'x-default': '/vi/products/ao-thun-co-tron',
       },
     });
     expect(metadata.robots).toBeUndefined();
