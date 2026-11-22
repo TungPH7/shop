@@ -1,7 +1,6 @@
 package com.tungph7.learnpostgres.feature.product.service;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -24,6 +23,8 @@ import com.tungph7.learnpostgres.common.error.ConstraintViolations;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.error.NotFoundException;
 import com.tungph7.learnpostgres.common.logging.CorrelationContext;
+import com.tungph7.learnpostgres.common.text.SlugFormat;
+import com.tungph7.learnpostgres.common.text.Slugs;
 import com.tungph7.learnpostgres.feature.category.repository.CategoryRepository;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
@@ -41,7 +42,6 @@ import com.tungph7.learnpostgres.feature.product.repository.ProductQueryReposito
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository.Result;
 import com.tungph7.learnpostgres.feature.product.repository.ProductRepository;
 import com.tungph7.learnpostgres.feature.product.repository.ProductSearchTerms;
-import com.tungph7.learnpostgres.feature.product.validation.ValidSlug;
 
 /**
  * The admin API of products (SHOP-7, API Contract of the plan): the add, the list, the read, the
@@ -168,9 +168,9 @@ public class AdminProductService {
    *   <li>equal to the stored one, ignoring case as {@code citext} does: the stored slug is kept as
    *       it is, without checking its format, so a product of before the Epic with a slug out of
    *       the format is saved, and a slug sent in upper case does not replace it;
-   *   <li>otherwise: it must have the format ({@link ProductSlugs#isValid}), and no other product
-   *       may have it. The UNIQUE constraint {@code products_slug_unique} is the last guard against
-   *       an add or an edit at the same time (NFR12).
+   *   <li>otherwise: it must have the format ({@link Slugs#isValid}), and no other product may have
+   *       it. The UNIQUE constraint {@code products_slug_unique} is the last guard against an add
+   *       or an edit at the same time (NFR12).
    * </ul>
    *
    * <p>The version (AC13): a version other than the stored one is a 409. Two edits at once with the
@@ -183,6 +183,11 @@ public class AdminProductService {
    * existing category, hidden too (400 on {@code categoryId}). It is checked after the slug format
    * and before the version, the 400s before the 409s. A category deleted between the check and the
    * write breaks {@code products_category_fk}, which is the same 400 (AC10).
+   *
+   * <p>The product is read with its row locked ({@link ProductRepository#findByIdForUpdate}). A
+   * category delete that empties the product holds that row until it commits, so the edit reads the
+   * product the delete left: an absent {@code categoryId} then keeps no category, and the response
+   * is a 200 without one, never a 400 on a field the request did not send.
    *
    * <p>After the write the product is read again, since the trigger {@code
    * trg_products_set_updated_at} sets {@code updated_at} in the database: the response then shows
@@ -198,14 +203,17 @@ public class AdminProductService {
    */
   @Transactional
   public AdminProduct update(UUID id, UpdateProductRequest request) {
-    Product product = find(id);
+    Product product =
+        repository
+            .findByIdForUpdate(id)
+            .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, NOT_FOUND));
     boolean slugChanged = !sameSlug(request.slug(), product.getSlug());
-    if (slugChanged && !ProductSlugs.isValid(request.slug())) {
+    if (slugChanged && !Slugs.isValid(request.slug())) {
       throw invalidSlug(
           request.slug(),
-          request.slug().length() > ProductSlugs.MAX_LENGTH
-              ? ValidSlug.TOO_LONG
-              : ValidSlug.WRONG_FORMAT);
+          request.slug().length() > Slugs.MAX_LENGTH
+              ? SlugFormat.TOO_LONG
+              : SlugFormat.WRONG_FORMAT);
     }
     UUID categoryId =
         request.categoryId().present()
@@ -252,8 +260,8 @@ public class AdminProductService {
    * field {@code slug}.
    *
    * @param slug the slug sent
-   * @param message what is wrong with it, {@link ValidSlug#WRONG_FORMAT} or {@link
-   *     ValidSlug#TOO_LONG}
+   * @param message what is wrong with it, {@link SlugFormat#WRONG_FORMAT} or {@link
+   *     SlugFormat#TOO_LONG}
    */
   public static BadRequestException invalidSlug(String slug, String message) {
     Map<String, Object> error = new LinkedHashMap<>();
@@ -383,14 +391,14 @@ public class AdminProductService {
    * base-}{@value #MAX_SLUG_NUMBER} that is free. The slugs taken among these candidates are read
    * in one query, then compared here, ignoring case as {@code citext} does.
    *
-   * <p>The query asks for exactly the candidates, each built by {@link ProductSlugs#withSuffix}, so
-   * it reads no other slug that only starts like the base, and it needs no property of how a long
-   * base is cut: each candidate is the slug that would be saved.
+   * <p>The query asks for exactly the candidates, each built by {@link Slugs#candidates}, so it
+   * reads no other slug that only starts like the base, and it needs no property of how a long base
+   * is cut: each candidate is the slug that would be saved.
    *
    * @throws ConflictException {@code PRODUCT_SLUG_DUPLICATED} when every number is taken
    */
   private String firstFreeSlug(String base) {
-    List<String> candidates = slugCandidates(base);
+    List<String> candidates = Slugs.candidates(base, MAX_SLUG_NUMBER);
     Set<String> taken =
         repository.findSlugsAmong(candidates.toArray(String[]::new)).stream()
             .map(slug -> slug.toLowerCase(Locale.ROOT))
@@ -399,19 +407,6 @@ public class AdminProductService {
         .filter(slug -> !taken.contains(slug))
         .findFirst()
         .orElseThrow(() -> slugTaken(null));
-  }
-
-  /**
-   * The slugs an add without slug may take, in the order it tries them: {@code base}, then {@code
-   * base-2} to {@code base-}{@value #MAX_SLUG_NUMBER}.
-   */
-  static List<String> slugCandidates(String base) {
-    List<String> candidates = new ArrayList<>(MAX_SLUG_NUMBER);
-    candidates.add(base);
-    for (int number = 2; number <= MAX_SLUG_NUMBER; number++) {
-      candidates.add(ProductSlugs.withSuffix(base, number));
-    }
-    return candidates;
   }
 
   private static Product newProduct(CreateProductRequest request, String slug, UUID categoryId) {

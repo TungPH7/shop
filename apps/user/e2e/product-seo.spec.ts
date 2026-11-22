@@ -103,6 +103,10 @@ for (const locale of ['vi', 'en'] as const) {
         `/${language}/products/${shirt.slug}`,
       );
     }
+    // x-default points at /vi, as the SEO section of the SPEC of SHOP-81 writes for every page.
+    const xDefault = page.locator('link[rel="alternate"][hreflang="x-default"]');
+    await expect(xDefault).toHaveCount(1);
+    expect(pathOf(await xDefault.getAttribute('href'))).toBe(`/vi/products/${shirt.slug}`);
 
     const lds = await productLdOf(page);
     expect(lds).toHaveLength(1);

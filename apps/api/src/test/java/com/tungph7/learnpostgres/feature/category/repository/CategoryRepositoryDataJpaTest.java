@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Map;
-import java.util.UUID;
 
 import javax.sql.DataSource;
 
@@ -138,32 +137,5 @@ class CategoryRepositoryDataJpaTest extends AbstractContainerBaseTest {
     assertThat(repository.findVisibleIdBySlug("AO")).contains(ao.getId());
     assertThat(repository.findVisibleIdBySlug("phu-kien")).isEmpty();
     assertThat(repository.findVisibleIdBySlug("khong-co")).isEmpty();
-  }
-
-  // ============================================================
-  // The delete
-  // ============================================================
-
-  @Test
-  void deleteCategoryById_deletesInOneStatementAndLeavesItsProductsWithoutCategory() {
-    Category ao = repository.saveAndFlush(new Category("Áo", "ao", CategoryStatus.VISIBLE));
-    UUID product = UUID.randomUUID();
-    jdbc.sql(
-            "INSERT INTO app.products (id, name, slug, price_vnd, category_id)"
-                + " VALUES (?, 'Áo thun', 'ao-thun-xoa', 250000, ?)")
-        .params(product, ao.getId())
-        .update();
-
-    int deleted = repository.deleteCategoryById(ao.getId());
-
-    assertThat(deleted).isEqualTo(1);
-    assertThat(repository.existsById(ao.getId())).isFalse();
-    assertThat(
-            jdbc.sql("SELECT category_id IS NULL FROM app.products WHERE id = ?")
-                .param(product)
-                .query(Boolean.class)
-                .single())
-        .isTrue();
-    assertThat(repository.deleteCategoryById(ao.getId())).as("already gone").isZero();
   }
 }

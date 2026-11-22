@@ -21,7 +21,7 @@ describe('buildPageMetadata', () => {
     expect(md.description).toBe('desc');
     expect(md.alternates).toEqual({
       canonical: '/en/products',
-      languages: { en: '/en/products', vi: '/vi/products', 'x-default': '/en/products' },
+      languages: { en: '/en/products', vi: '/vi/products', 'x-default': '/vi/products' },
     });
     expect(md.robots).toBeUndefined();
   });

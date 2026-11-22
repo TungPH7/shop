@@ -378,7 +378,7 @@ Ví dụ: "Áo khoác" (8 ký tự) → vi `Áo khoác – Xem giá và tình tr
 | 1 (từ khóa chính ở đầu) | `{name}: xem giá, tình trạng còn hàng và chi tiết từng sản phẩm đang bán tại cửa hàng.` | `{name}: see prices, stock status and details for every product currently on sale in the shop.` |
 | 2 (kêu gọi hành động) | `Sắp xếp theo giá hoặc mới nhất, rồi chọn ngay sản phẩm bạn cần.` | `Sort by price or newest, then pick the product you need.` |
 
-Hai câu dài `{name}` + 144 ký tự (cả hai ngôn ngữ), nên vừa 150–160 khi `{name}` có 6–16 ký tự. Tên dài hơn 16 ký tự chỉ có câu 1 (`{name}` + 80 ký tự). Tên ngắn hơn 6 ký tự cho 145–149 ký tự: chấp nhận. Giới hạn cứng là 160. Ví dụ: "Áo khoác" → 152 ký tự, "Jackets" → 151 ký tự. Chữ nói đúng điều trang có: giá và tình trạng còn hàng của từng sản phẩm.
+Hai câu dài `{name}` + 143 ký tự (vi) hay `{name}` + 144 ký tự (en), nên vừa 150–160 khi `{name}` có 7–17 ký tự (vi) hay 6–16 ký tự (en). Tên dài hơn 17 ký tự (vi) hay 16 ký tự (en) chỉ có câu 1 (`{name}` + 79 ký tự ở vi, + 87 ký tự ở en). Tên ngắn hơn cho 144–149 ký tự (vi) hay 145–149 ký tự (en): chấp nhận. Giới hạn cứng là 160. Ví dụ: "Áo khoác" → 151 ký tự, "Jackets" → 151 ký tự. Chữ nói đúng điều trang có: giá và tình trạng còn hàng của từng sản phẩm.
 
 **Chữ của trang:**
 

@@ -1,14 +1,38 @@
+import { type ComponentProps } from 'react';
+
 import { render, screen, within } from '@testing-library/react';
-import { describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 
-import { Breadcrumb } from './breadcrumb';
+// next-intl's createNavigation imports `next/navigation`, which Vitest cannot resolve. The stub stands for the Link of
+// next-intl in the locale of the page, and keeps its other props; the E2E of AC20 checks the real one.
+const { locale } = vi.hoisted(() => ({ locale: { current: 'vi' } }));
+vi.mock('~/i18n/navigation', () => ({
+  Link: ({ href, ...props }: ComponentProps<'a'> & { href: string }) => (
+    <a
+      data-link="next-intl"
+      href={href === '/' ? `/${locale.current}` : `/${locale.current}${href}`}
+      {...props}
+    />
+  ),
+}));
 
-// The crumbs as breadcrumbLd takes them: absolute URLs in the locale of the page (SPEC of SHOP-81, Code Style).
+import { Breadcrumb, BreadcrumbSkeleton } from './breadcrumb';
+
+// The crumbs: absolute URLs in the locale of the page, as breadcrumbLd takes them (SPEC of SHOP-81, Code Style), and the
+// paths without the locale, as the Link of next-intl takes them.
 const threeCrumbs = [
-  { name: 'Trang chủ', url: 'https://site.example.test/vi' },
-  { name: 'Áo', url: 'https://site.example.test/vi/categories/ao' },
-  { name: 'Áo thun cổ tròn', url: 'https://site.example.test/vi/products/ao-thun-co-tron' },
+  { name: 'Trang chủ', url: 'https://site.example.test/vi', href: '/' },
+  { name: 'Áo', url: 'https://site.example.test/vi/categories/ao', href: '/categories/ao' },
+  {
+    name: 'Áo thun cổ tròn',
+    url: 'https://site.example.test/vi/products/ao-thun-co-tron',
+    href: '/products/ao-thun-co-tron',
+  },
 ];
+
+beforeEach(() => {
+  locale.current = 'vi';
+});
 
 describe('<Breadcrumb />', () => {
   test('is a <nav> with its label, holding an <ol> of the crumbs in order (S5.2, S8.2)', () => {
@@ -25,6 +49,15 @@ describe('<Breadcrumb />', () => {
     expect(screen.getByRole('link', { name: 'Trang chủ' })).toHaveAttribute('href', '/vi');
     expect(screen.getByRole('link', { name: 'Áo' })).toHaveAttribute('href', '/vi/categories/ao');
     expect(screen.getAllByRole('link')).toHaveLength(2);
+  });
+
+  test('builds its links with the Link of next-intl, from the path without the locale (SPEC of SHOP-81, S5)', () => {
+    render(<Breadcrumb items={threeCrumbs} label="Đường dẫn trang" />);
+
+    for (const link of screen.getAllByRole('link')) {
+      expect(link).toHaveAttribute('data-link', 'next-intl');
+      expect(link).toHaveClass('breadcrumb__link');
+    }
   });
 
   test('shows the last crumb as text, the current page', () => {
@@ -47,11 +80,12 @@ describe('<Breadcrumb />', () => {
   });
 
   test('has two crumbs for a product with no category, or a category page (AC18, AC21)', () => {
+    locale.current = 'en';
     render(
       <Breadcrumb
         items={[
-          { name: 'Home', url: 'https://site.example.test/en' },
-          { name: 'Áo', url: 'https://site.example.test/en/categories/ao' },
+          { name: 'Home', url: 'https://site.example.test/en', href: '/' },
+          { name: 'Áo', url: 'https://site.example.test/en/categories/ao', href: '/categories/ao' },
         ]}
         label="Breadcrumb"
       />,
@@ -66,8 +100,8 @@ describe('<Breadcrumb />', () => {
     const { container } = render(
       <Breadcrumb
         items={[
-          { name: 'Trang chủ', url: 'https://site.example.test/vi' },
-          { name, url: 'https://site.example.test/vi/categories/ao' },
+          { name: 'Trang chủ', url: 'https://site.example.test/vi', href: '/' },
+          { name, url: 'https://site.example.test/vi/categories/ao', href: '/categories/ao' },
         ]}
         label="Đường dẫn trang"
       />,
@@ -75,5 +109,15 @@ describe('<Breadcrumb />', () => {
 
     expect(screen.getByText(name)).toBeInTheDocument();
     expect(container.querySelector('script')).toBeNull();
+  });
+});
+
+describe('<BreadcrumbSkeleton />', () => {
+  test('holds the place of the breadcrumb, hidden from screen readers', () => {
+    const { container } = render(<BreadcrumbSkeleton />);
+
+    const skeleton = container.firstElementChild;
+    expect(skeleton).toHaveClass('skeleton', 'breadcrumb-skeleton');
+    expect(skeleton).toHaveAttribute('aria-hidden', 'true');
   });
 });

@@ -18,8 +18,9 @@ import jakarta.validation.Payload;
  *
  * <p>The length is checked before the format, so a slug of thousands of characters is one 400 on
  * the field and never reaches the regular expression. The message says which of the two failed. The
- * categories use it (SHOP-81); the products keep their own {@code ValidSlug}, which only their add
- * uses.
+ * add and the edit of a category use it (SHOP-81), and the add of a product (SHOP-85). The edit of
+ * a product does not: it keeps a stored slug out of the format (NFR16), so its service checks a
+ * changed slug with {@link Slugs#isValid} and these messages.
  */
 @Documented
 @Constraint(validatedBy = SlugFormat.SlugFormatValidator.class)

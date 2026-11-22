@@ -11,7 +11,7 @@ import {
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { JsonLd } from '~/components/seo/json-ld';
-import { Breadcrumb } from '~/components/ui/breadcrumb';
+import { Breadcrumb, BreadcrumbSkeleton } from '~/components/ui/breadcrumb';
 import { ProductDetail, ProductDetailSkeleton } from '~/features/product/components/product-detail';
 import type { StoreProduct } from '~/features/product/model/product';
 import { ApiError } from '~/lib/http/api-error';
@@ -122,15 +122,25 @@ test('is a <main> wider than other pages, for the two columns of S5', () => {
   expect(page.props.className).toBe('product-page');
 });
 
+/** The elements the fallback of the boundary renders, in order. */
+function fallbackOf(fallback: ReactNode) {
+  if (!isValidElement(fallback) || typeof fallback.type !== 'function')
+    throw new Error('no fallback');
+  const render = fallback.type as () => ReactElement<{ children: ReactNode }>;
+  return Children.toArray(render().props.children).map((child) =>
+    isValidElement(child) ? child.type : child,
+  );
+}
+
 test('reads params and the product only inside a <Suspense>, with the skeleton as fallback', () => {
   const params = Promise.resolve({ locale: 'vi', slug: 'ao-thun-co-tron' });
 
   const { boundary, view } = boundaryOf(pageOf(params));
 
   expect(boundary.type).toBe(Suspense);
-  expect(isValidElement(boundary.props.fallback) && boundary.props.fallback.type).toBe(
-    ProductDetailSkeleton,
-  );
+  // The place of the breadcrumb, then the card: the card is not pushed down when the breadcrumb comes (SPEC of SHOP-81,
+  // section SEO, S8, Core Web Vitals).
+  expect(fallbackOf(boundary.props.fallback)).toEqual([BreadcrumbSkeleton, ProductDetailSkeleton]);
   expect(view.props.params).toBe(params);
   expect(getStoreProduct).not.toHaveBeenCalled();
 });
@@ -247,7 +257,7 @@ describe('generateMetadata', () => {
       languages: {
         en: '/en/products/ao-thun-co-tron',
         vi: '/vi/products/ao-thun-co-tron',
-        'x-default': '/en/products/ao-thun-co-tron',
+        'x-default': '/vi/products/ao-thun-co-tron',
       },
     });
     expect(metadata.robots).toBeUndefined();
@@ -280,9 +290,13 @@ describe('the breadcrumb S8.2 of SHOP-81', () => {
     expect(breadcrumb.type).toBe(Breadcrumb);
     expect(breadcrumb.props).toEqual({
       items: [
-        { name: 'Trang chủ', url: 'https://site.example.test/vi' },
-        { name: 'Áo', url: 'https://site.example.test/vi/categories/ao' },
-        { name: 'Áo thun cổ tròn', url: 'https://site.example.test/vi/products/ao-thun-co-tron' },
+        { name: 'Trang chủ', url: 'https://site.example.test/vi', href: '/' },
+        { name: 'Áo', url: 'https://site.example.test/vi/categories/ao', href: '/categories/ao' },
+        {
+          name: 'Áo thun cổ tròn',
+          url: 'https://site.example.test/vi/products/ao-thun-co-tron',
+          href: '/products/ao-thun-co-tron',
+        },
       ],
       label: 'Đường dẫn trang',
     });
@@ -334,8 +348,12 @@ describe('the breadcrumb S8.2 of SHOP-81', () => {
     );
 
     const crumbs = [
-      { name: 'Trang chủ', url: 'https://site.example.test/vi' },
-      { name: 'Áo thun cổ tròn', url: 'https://site.example.test/vi/products/ao-thun-co-tron' },
+      { name: 'Trang chủ', url: 'https://site.example.test/vi', href: '/' },
+      {
+        name: 'Áo thun cổ tròn',
+        url: 'https://site.example.test/vi/products/ao-thun-co-tron',
+        href: '/products/ao-thun-co-tron',
+      },
     ];
     expect(breadcrumb.props.items).toEqual(crumbs);
     expect(breadcrumbLd.props.data).toMatchObject({

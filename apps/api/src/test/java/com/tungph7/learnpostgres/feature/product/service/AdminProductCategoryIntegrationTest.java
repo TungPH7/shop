@@ -17,14 +17,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -44,6 +48,7 @@ import com.tungph7.learnpostgres.AbstractContainerBaseTest;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 class AdminProductCategoryIntegrationTest extends AbstractContainerBaseTest {
 
   private static final String URL = "/api/admin/products";
@@ -210,12 +215,48 @@ class AdminProductCategoryIntegrationTest extends AbstractContainerBaseTest {
   }
 
   /**
-   * The assign runs first and holds its transaction: the delete waits for it, then leaves the
-   * product without category.
+   * The delete runs first and holds its transaction, and the edit sends no {@code categoryId}: the
+   * edit waits for the delete, then keeps what the product has by then, no category, as
+   * Architecture Decisions 7 says. It never writes back the category it read before the delete
+   * committed, which would break {@code products_category_fk} on a field the request did not send.
    */
   @Test
-  void delete_ofACategoryAssignedMeanwhile_waitsForTheAssignThenEmptiesTheProduct()
+  void update_withoutCategoryId_whileItsCategoryIsDeleted_waitsThenReturns200WithoutCategory()
       throws Exception {
+    UUID ao = category("Áo", "VISIBLE");
+    UUID product = product(ao);
+    CountDownLatch deleted = new CountDownLatch(1);
+
+    CompletableFuture<Void> delete =
+        CompletableFuture.runAsync(
+            () ->
+                transaction.executeWithoutResult(
+                    tx -> {
+                      jdbc.sql("DELETE FROM app.categories WHERE id = ?").param(ao).update();
+                      deleted.countDown();
+                      sleep(Duration.ofMillis(800));
+                    }));
+    assertThat(deleted.await(10, TimeUnit.SECONDS)).isTrue();
+
+    // A new description, so the edit writes the row; and no categoryId.
+    putJson(product, ",\"description\":\"Áo cotton.\"")
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.description").value("Áo cotton."))
+        .andExpect(jsonPath("$.categoryId").isEmpty())
+        .andExpect(jsonPath("$.version").value(1));
+
+    delete.get(10, TimeUnit.SECONDS);
+    assertThat(categoryOf(product)).isNull();
+    assertThat(versionOf(product)).isEqualTo(1);
+  }
+
+  /**
+   * The assign runs first and holds its transaction: the delete waits for it, then leaves the
+   * product without category, and its log counts the product the assign added (NFR11).
+   */
+  @Test
+  void delete_ofACategoryAssignedMeanwhile_waitsForTheAssignThenEmptiesTheProduct(
+      CapturedOutput output) throws Exception {
     UUID phuKien = category("Phụ kiện", "VISIBLE");
     UUID product = product(null);
     CountDownLatch assigned = new CountDownLatch(1);
@@ -238,6 +279,9 @@ class AdminProductCategoryIntegrationTest extends AbstractContainerBaseTest {
     assign.get(10, TimeUnit.SECONDS);
     assertThat(categoryOf(product)).isNull();
     assertThat(categoryCount()).isZero();
+    assertThat(appLogLine(output, "Category deleted"))
+        .contains("id=" + phuKien)
+        .contains("productCount=1");
   }
 
   /** Both at once, many times: whichever wins, no product points to a deleted category. */
@@ -367,6 +411,16 @@ class AdminProductCategoryIntegrationTest extends AbstractContainerBaseTest {
   private long categoryCount() {
     return transaction.execute(
         tx -> jdbc.sql("SELECT count(*) FROM app.categories").query(Long.class).single());
+  }
+
+  /** The lines of the app log, not of Hibernate, that hold {@code text}. */
+  private static String appLogLine(CapturedOutput output, String text) {
+    return output
+        .getOut()
+        .lines()
+        .filter(line -> !line.contains("\"logger\":\"org.hibernate."))
+        .filter(line -> line.contains(text))
+        .collect(Collectors.joining("\n"));
   }
 
   private static void sleep(Duration duration) {

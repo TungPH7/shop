@@ -13,6 +13,12 @@ export const locales = ['en', 'vi'] as const;
 export type Locale = (typeof locales)[number];
 export const defaultLocale: Locale = 'en';
 
+/**
+ * The locale hreflang `x-default` points at on every page: `/vi`, as the SEO section of the SPEC of SHOP-81 writes.
+ * It is not the locale of the routing (`defaultLocale`), which stays as it is.
+ */
+export const xDefaultLocale: Locale = 'vi';
+
 /** Type guard: thu hẹp `string` → `Locale` (validate param URL / `requestLocale`). */
 export function isLocale(value: string): value is Locale {
   return (locales as readonly string[]).includes(value);

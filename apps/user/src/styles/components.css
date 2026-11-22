@@ -1019,6 +1019,14 @@ a.product-card:hover {
   color: var(--hint);
 }
 
+/* The place of a breadcrumb of one row while its page loads: the 24 of its links, and its margin. */
+.breadcrumb-skeleton {
+  width: 10rem;
+  max-width: 100%;
+  height: 24px;
+  margin-bottom: var(--space-2);
+}
+
 /* --- Category page S5 (src/app/[locale]/categories/[slug]/page.tsx, SHOP-84) ------------------ */
 
 /* S5.3: the h1 of the design system; a name of up to 60 characters wraps instead of overflowing. */

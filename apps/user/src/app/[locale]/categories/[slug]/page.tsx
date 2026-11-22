@@ -5,7 +5,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 
 import { JsonLd } from '~/components/seo/json-ld';
-import { Breadcrumb } from '~/components/ui/breadcrumb';
+import { Breadcrumb, type BreadcrumbItem } from '~/components/ui/breadcrumb';
 import { categoryDescriptionOf, categoryTitleOf } from '~/features/category/model/category-seo';
 import { getStoreCategory } from '~/features/category/server/get-categories';
 import { ProductResults } from '~/features/product/components/product-results';
@@ -106,9 +106,10 @@ async function CategoryView({
     getTranslations({ locale, namespace: 'Breadcrumb' }),
   ]);
 
-  const crumbs = [
-    { name: tSeo('home'), url: localizedUrl(locale, '/') },
-    { name: category.name, url: localizedUrl(locale, `/categories/${category.slug}`) },
+  const href = `/categories/${category.slug}`;
+  const crumbs: BreadcrumbItem[] = [
+    { name: tSeo('home'), url: localizedUrl(locale, '/'), href: '/' },
+    { name: category.name, url: localizedUrl(locale, href), href },
   ];
 
   return (

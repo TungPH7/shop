@@ -33,7 +33,6 @@ import com.tungph7.learnpostgres.feature.category.repository.CategoryRepository;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
-import com.tungph7.learnpostgres.feature.product.domain.ProductSlugs;
 import com.tungph7.learnpostgres.feature.product.dto.CreateProductRequest;
 import com.tungph7.learnpostgres.feature.product.dto.UpdateProductRequest;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
@@ -130,24 +129,6 @@ class AdminProductServiceTest {
   }
 
   @Test
-  void slugCandidates_ofABaseCutForItsSuffix_areTheSlugsWithSuffixBuildsAndKeep100Characters() {
-    String base = "ao-thun-" + "a".repeat(87) + "-bcde";
-
-    List<String> candidates = AdminProductService.slugCandidates(base);
-
-    assertThat(candidates.get(0)).isEqualTo(base);
-    for (int number = 2; number <= AdminProductService.MAX_SLUG_NUMBER; number++) {
-      assertThat(candidates.get(number - 1))
-          .isEqualTo(ProductSlugs.withSuffix(base, number))
-          .endsWith("-" + number);
-    }
-    assertThat(candidates)
-        .hasSize(AdminProductService.MAX_SLUG_NUMBER)
-        .doesNotHaveDuplicates()
-        .allSatisfy(slug -> assertThat(ProductSlugs.isValid(slug)).as(slug).isTrue());
-  }
-
-  @Test
   void create_withoutSlug_whenEveryNumberUpToTheLimitIsTaken_returns409AndSavesNothing() {
     List<String> taken = new ArrayList<>(List.of("ao-thun"));
     for (int number = 2; number <= AdminProductService.MAX_SLUG_NUMBER; number++) {
@@ -186,7 +167,7 @@ class AdminProductServiceTest {
   void update_toASlugTakenMeanwhile_returns409SlugDuplicated() {
     UUID id = UUID.randomUUID();
     Product stored = storedProduct();
-    when(repository.findById(id)).thenReturn(Optional.of(stored));
+    when(repository.findByIdForUpdate(id)).thenReturn(Optional.of(stored));
     when(repository.existsBySlug("ao-thun-basic")).thenReturn(false);
     when(repository.saveAndFlush(any(Product.class))).thenThrow(violation("products_slug_unique"));
 
@@ -201,7 +182,7 @@ class AdminProductServiceTest {
     UUID id = UUID.randomUUID();
     DataIntegrityViolationException other = violation("products_price_vnd_valid");
     Product stored = storedProduct();
-    when(repository.findById(id)).thenReturn(Optional.of(stored));
+    when(repository.findByIdForUpdate(id)).thenReturn(Optional.of(stored));
     when(repository.saveAndFlush(any(Product.class))).thenThrow(other);
 
     assertThatThrownBy(() -> service.update(id, updateRequest("ao-thun"))).isSameAs(other);

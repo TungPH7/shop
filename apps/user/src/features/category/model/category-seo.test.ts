@@ -110,6 +110,22 @@ describe('categoryDescriptionOf (AC18)', () => {
     },
   );
 
+  test('joins both sentences for "Áo khoác" in vi: 151 characters, the example of the SPEC', () => {
+    expect(seoOf('vi', 'Áo khoác').description).toHaveLength(151);
+  });
+
+  // At the limit: both sentences are the name and 143 characters in vi, 144 in en.
+  test.each([
+    ['vi', 17, 'both sentences, 160 characters', 160],
+    ['vi', 18, 'the first sentence only', 18 + 79],
+    ['en', 16, 'both sentences, 160 characters', 160],
+    ['en', 17, 'the first sentence only', 17 + 87],
+  ] as const)('in %s, a name of %i characters takes %s', (locale, length, _, expected) => {
+    const name = 'x'.repeat(length);
+
+    expect(seoOf(locale, name).description).toHaveLength(expected);
+  });
+
   test.each(['vi', 'en'] as const)(
     'in %s, starts with the name and never passes 160 characters',
     (locale) => {
@@ -118,7 +134,7 @@ describe('categoryDescriptionOf (AC18)', () => {
         const { description } = seoOf(locale, name);
 
         expect(description.startsWith(`${name}:`)).toBe(true);
-        if (length <= 16) expect(description.length).toBeLessThanOrEqual(160);
+        expect(description.length).toBeLessThanOrEqual(160);
       }
     },
   );

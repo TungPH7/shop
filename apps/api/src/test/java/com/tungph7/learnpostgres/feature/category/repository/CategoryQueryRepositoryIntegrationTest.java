@@ -18,7 +18,6 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import com.tungph7.learnpostgres.AbstractContainerBaseTest;
 import com.tungph7.learnpostgres.feature.category.domain.Category.CategoryStatus;
 import com.tungph7.learnpostgres.feature.category.repository.CategoryQueryRepository.AdminRow;
-import com.tungph7.learnpostgres.feature.category.repository.CategoryQueryRepository.DeleteRow;
 
 /**
  * The hand-written queries of {@link CategoryQueryRepository} on schema V7 (Testcontainers
@@ -101,22 +100,47 @@ class CategoryQueryRepositoryIntegrationTest extends AbstractContainerBaseTest {
   }
 
   // ============================================================
-  // What the delete logs
+  // The delete, and what it logs
   // ============================================================
 
   @Test
-  void findForDelete_givesTheSlugAndTheNumberOfProducts() {
+  void lockForDelete_givesTheSlug_orNothingForAnUnknownId() {
     UUID ao = category("Áo", "VISIBLE");
+
+    assertThat(repository.lockForDelete(ao)).contains("slug-1");
+    assertThat(repository.lockForDelete(UUID.randomUUID())).isEmpty();
+  }
+
+  @Test
+  void delete_countsTheProductsThenLeavesThemWithoutCategory() {
+    UUID ao = category("Áo", "VISIBLE");
+    UUID other = category("Quần", "VISIBLE");
     product("ACTIVE", ao);
     product("HIDDEN", ao);
+    product("ACTIVE", other);
 
-    assertThat(repository.findForDelete(ao)).contains(new DeleteRow("slug-1", 2L));
-    assertThat(repository.findForDelete(UUID.randomUUID())).isEmpty();
+    assertThat(repository.delete(ao)).contains(2L);
+
+    assertThat(count("SELECT count(*) FROM app.categories WHERE id = ?", ao)).isZero();
+    assertThat(count("SELECT count(*) FROM app.products WHERE category_id IS NULL", null))
+        .isEqualTo(2);
+    assertThat(count("SELECT count(*) FROM app.products WHERE category_id = ?", other))
+        .isEqualTo(1);
+  }
+
+  @Test
+  void delete_ofAnUnknownId_deletesNothing() {
+    assertThat(repository.delete(UUID.randomUUID())).isEmpty();
   }
 
   // ============================================================
   // Helpers
   // ============================================================
+
+  private long count(String sql, UUID id) {
+    var statement = jdbc.sql(sql);
+    return (id == null ? statement : statement.param(id)).query(Long.class).single();
+  }
 
   private UUID category(String name, String status) {
     sequence++;

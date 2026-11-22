@@ -1,6 +1,6 @@
 import { type Metadata } from 'next';
 
-import { defaultLocale, isLocale, locales } from '~/config/i18n';
+import { defaultLocale, isLocale, locales, xDefaultLocale } from '~/config/i18n';
 import { getPathname } from '~/i18n/navigation';
 import { absoluteUrl } from '~/lib/seo/site-url';
 
@@ -21,6 +21,7 @@ export function localizedPathnames(href: string): Record<string, string> {
  * `alternates` cho `generateMetadata` của một trang:
  *  - `canonical` = URL của CHÍNH locale hiện tại (chống nội dung trùng giữa các locale);
  *  - `languages` = mọi locale + `x-default` (Google dùng cho người dùng không khớp ngôn ngữ nào).
+ *    `x-default` points at `xDefaultLocale` (`/vi`, the SEO section of the SPEC of SHOP-81), not at the locale of the routing.
  *
  * Trả PATH TƯƠNG ĐỐI — `metadataBase` (root layout) sẽ ghép thành URL tuyệt đối + emit thẻ
  * `<link rel="canonical">` / `<link rel="alternate" hreflang>`.
@@ -31,7 +32,7 @@ export function localizedAlternates(localeInput: string, href: string): Metadata
     canonical: getPathname({ locale: currentLocale, href }),
     languages: {
       ...localizedPathnames(href),
-      'x-default': getPathname({ locale: defaultLocale, href }),
+      'x-default': getPathname({ locale: xDefaultLocale, href }),
     },
   };
 }

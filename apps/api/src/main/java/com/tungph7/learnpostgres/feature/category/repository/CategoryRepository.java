@@ -5,11 +5,9 @@ import java.util.Optional;
 import java.util.UUID;
 
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Transactional;
 
 import com.tungph7.learnpostgres.feature.category.domain.Category;
 
@@ -65,16 +63,4 @@ public interface CategoryRepository extends JpaRepository<Category, UUID> {
               + " AND status = 'VISIBLE'",
       nativeQuery = true)
   Optional<UUID> findVisibleIdBySlug(@Param("slug") String slug);
-
-  /**
-   * Deletes the category with this id in one statement, without loading it or checking its version.
-   * The foreign key {@code products_category_fk} ({@code ON DELETE SET NULL}) leaves its products
-   * without category in the same statement (NFR15).
-   *
-   * @return 1 when a category was deleted, 0 when none has this id
-   */
-  @Transactional
-  @Modifying(flushAutomatically = true, clearAutomatically = true)
-  @Query("DELETE FROM Category c WHERE c.id = :id")
-  int deleteCategoryById(@Param("id") UUID id);
 }

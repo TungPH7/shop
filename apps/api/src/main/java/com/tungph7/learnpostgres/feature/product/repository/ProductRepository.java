@@ -4,7 +4,10 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import jakarta.persistence.LockModeType;
+
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -68,6 +71,19 @@ public interface ProductRepository extends JpaRepository<Product, UUID> {
    */
   @Query(value = SLUGS_AMONG_SQL, nativeQuery = true)
   List<String> findSlugsAmong(@Param("slugs") String[] slugs);
+
+  /**
+   * The product with this id, its row locked until the transaction ends ({@code FOR NO KEY UPDATE}
+   * or {@code FOR UPDATE}), for the edit (SHOP-85, finding 61aa3b05).
+   *
+   * <p>A category delete that empties this product holds its row until it commits, since the
+   * foreign key {@code products_category_fk} sets {@code category_id} to {@code null} (ADR-0004).
+   * The lock waits for that delete, then reads the row it left. An unlocked read would see the
+   * category the delete is removing, and the edit would write it back.
+   */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("SELECT p FROM Product p WHERE p.id = :id")
+  Optional<Product> findByIdForUpdate(@Param("id") UUID id);
 
   /**
    * Deletes the product with this id in one statement, without loading it or checking its version.

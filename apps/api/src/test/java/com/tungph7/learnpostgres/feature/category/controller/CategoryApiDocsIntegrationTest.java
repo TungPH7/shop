@@ -121,10 +121,18 @@ class CategoryApiDocsIntegrationTest extends AbstractContainerBaseTest {
         .andExpect(
             jsonPath(SCHEMAS + ".UpdateProductRequest.properties.categoryId.description")
                 .value(containsString("Absent")))
+        // A StoreCategory or null (OpenAPI 3.1): a client generated from the document must take the
+        // null of a product without a visible category (SHOP-85, finding 328bd7d8).
         .andExpect(
-            jsonPath(SCHEMAS + ".StoreProduct.properties.category.$ref")
+            jsonPath(SCHEMAS + ".StoreProduct.properties.category.oneOf[0].$ref")
                 .value("#/components/schemas/StoreCategory"))
-        // Next to $ref, a type "null" would say the category is always null (OpenAPI 3.1).
+        .andExpect(
+            jsonPath(SCHEMAS + ".StoreProduct.properties.category.oneOf[1].type").value("null"))
+        .andExpect(
+            jsonPath(SCHEMAS + ".StoreProduct.properties.category.description")
+                .value(containsString("null when the product has none")))
+        // Next to oneOf, a $ref or a type would also have to hold, and a null is no StoreCategory.
+        .andExpect(jsonPath(SCHEMAS + ".StoreProduct.properties.category.$ref").doesNotExist())
         .andExpect(jsonPath(SCHEMAS + ".StoreProduct.properties.category.type").doesNotExist());
   }
 

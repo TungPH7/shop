@@ -1,9 +1,9 @@
 import { type ReactNode } from 'react';
 
-import { QueryClientProvider, type QueryKey } from '@tanstack/react-query';
-import { act, renderHook } from '@testing-library/react';
+import { QueryClientProvider, type QueryKey, useQuery } from '@tanstack/react-query';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { useCreateProduct } from '@/features/product/api/create-product';
 import { useDeleteProduct } from '@/features/product/api/delete-product';
@@ -123,6 +123,49 @@ describe('the writes of a product', () => {
     expect(isInvalidated(categoryList)).toBe(true);
     expect(isInvalidated(categoryDetail)).toBe(true);
     expect(isInvalidated(categoryOptions)).toBe(true);
+  });
+
+  it('settles without waiting for the categories in use to load anew', async () => {
+    // The field Category of the form keeps ['categories', 'options'] in use: its new
+    // GET may be slow or retried, yet the product is already saved, so the toast and
+    // the move to the list do not wait for it.
+    server.use(http.put('*/admin/products/:id', () => HttpResponse.json(product)));
+    const { Wrapper, queryClient } = setUp();
+    const loads = vi.fn<() => Promise<unknown>>();
+    loads.mockResolvedValueOnce([]).mockReturnValue(new Promise(() => undefined));
+    const { result } = renderHook(
+      () => {
+        useQuery({ queryKey: categoryOptions, queryFn: loads });
+        return useUpdateProduct();
+      },
+      { wrapper: Wrapper },
+    );
+    await waitFor(() => expect(loads).toHaveBeenCalledOnce());
+    await waitFor(() =>
+      expect(queryClient.getQueryState(categoryOptions)?.fetchStatus).toBe('idle'),
+    );
+    const settled = vi.fn();
+
+    void result.current
+      .mutateAsync({
+        id,
+        input: {
+          name: product.name,
+          slug: product.slug,
+          description: null,
+          price: product.price,
+          compareAtPrice: null,
+          status: 'ACTIVE',
+          availability: 'IN_STOCK',
+          categoryId: null,
+          version: 0,
+        },
+      })
+      .then(settled);
+
+    await waitFor(() => expect(settled).toHaveBeenCalledOnce());
+    expect(loads).toHaveBeenCalledTimes(2);
+    expect(queryClient.getQueryState(categoryOptions)?.fetchStatus).toBe('fetching');
   });
 
   it('leaves the product of the form alone, which loads anew each time the form opens', async () => {
