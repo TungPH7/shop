@@ -17,10 +17,11 @@ import { isStoreSlug } from '~/lib/validation/store-slug';
  *    `Accept-Language`, redirects a URL without a locale (`/` → `/en`), remembers the choice in a cookie and adds the
  *    alternate links for SEO.
  * 2. The real 404 of the product detail page (AC26, `proxy` below): on each page load of
- *    `/{locale}/products/{slug}`, it sends `HEAD /api/products/{slug}` to the api (at most 5 s) before the render.
+ *    `/{locale}/products/{slug}`, it sends `HEAD /api/products/{slug}` to the api (at most 5 s) before the render. The
+ *    same for the category page of SHOP-81 (AC16): `/{locale}/categories/{slug}`, with `HEAD /api/categories/{slug}`.
  *
  * ⚠️ Not a security boundary (CVE-2025-29927): the real authorization is checked in the DAL (folder 11/15).
- * Node runtime; no database; only one HEAD with a time limit, and only for a page load of a product page.
+ * Node runtime; no database; only one HEAD with a time limit, and only for a page load of a product or category page.
  */
 const intl = createMiddleware(routing);
 
@@ -30,11 +31,30 @@ const CHECK_TIMEOUT_MS = 5000;
 /** The request header next-intl sets on every request it forwards (`HEADER_LOCALE_NAME`, not exported). */
 const LOCALE_HEADER = 'X-NEXT-INTL-LOCALE';
 
-/** `/{locale}/products/{slug}`, the product detail page S5; one segment after products, no more. */
-const PRODUCT_PATH = /^\/([^/]+)\/products\/([^/]+)\/?$/;
+/**
+ * The pages whose slug the api checks before the render, each with the path of the api that checks it and the route that
+ * shows its S6 with 404: the product detail page S5 of SHOP-7 (`/{locale}/products/{slug}`) and the category page S5
+ * of SHOP-81 (`/{locale}/categories/{slug}`, plan of SHOP-81, Architecture Decisions 10). One segment after the
+ * section, no more.
+ */
+const CHECKED_PAGES = [
+  {
+    path: /^\/([^/]+)\/products\/([^/]+)\/?$/,
+    api: '/api/products',
+    notFound: 'product-not-found',
+  },
+  {
+    path: /^\/([^/]+)\/categories\/([^/]+)\/?$/,
+    api: '/api/categories',
+    notFound: 'category-not-found',
+  },
+] as const;
+
+type CheckedPage = (typeof CHECKED_PAGES)[number];
 
 /**
- * The real 404 of the product detail page (AC26; plan of SHOP-7, Architecture Decisions 9). With Cache Components the
+ * The real 404 of the product detail page (AC26; plan of SHOP-7, Architecture Decisions 9), and of the category page
+ * (AC16 of SHOP-81, with `HEAD /api/categories/{slug}` and `/{locale}/category-not-found`). With Cache Components the
  * page sends its shell with 200 before it reads the product, so a `notFound()` there can no longer change the status.
  * So on a page load the Proxy asks the api first, with `HEAD /api/products/{slug}`:
  *
@@ -51,30 +71,37 @@ const PRODUCT_PATH = /^\/([^/]+)\/products\/([^/]+)\/?$/;
  * with no Fetch Metadata, as from a crawler or curl, is checked like a page load.
  */
 export default async function proxy(request: NextRequest): Promise<NextResponse> {
-  const product = productOf(request);
-  if (!product) return intl(request);
+  const checked = checkedPageOf(request);
+  if (!checked) return intl(request);
 
-  const { locale, slug } = product;
-  const status = isStoreSlug(slug) ? await checkProduct(slug) : 404;
+  const { page, locale, slug } = checked;
+  const status = isStoreSlug(slug) ? await checkSlug(page, slug) : 404;
   if (status === 200) return intl(request);
   if (status === 404) {
     // As next-intl forwards every request: the not-found tree reads the locale from this header, not from the layout.
     const headers = new Headers(request.headers);
     headers.set(LOCALE_HEADER, locale);
-    return NextResponse.rewrite(new URL(`/${locale}/product-not-found`, request.url), {
+    return NextResponse.rewrite(new URL(`/${locale}/${page.notFound}`, request.url), {
       request: { headers },
     });
   }
   return unavailable(locale);
 }
 
-/** The locale and the slug of a page load of the product detail page, or null for any other request. */
-function productOf(request: NextRequest): { locale: Locale; slug: string } | null {
+/**
+ * The checked page, the locale and the slug of a page load of a product or a category page, or null for any other
+ * request.
+ */
+function checkedPageOf(
+  request: NextRequest,
+): { page: CheckedPage; locale: Locale; slug: string } | null {
   const dest = request.headers.get('sec-fetch-dest');
   if (dest !== null && dest !== 'document') return null;
-  const [, locale = '', segment = ''] = PRODUCT_PATH.exec(request.nextUrl.pathname) ?? [];
-  if (!isLocale(locale)) return null;
-  return { locale, slug: decodeSegment(segment) };
+  for (const page of CHECKED_PAGES) {
+    const [, locale = '', segment = ''] = page.path.exec(request.nextUrl.pathname) ?? [];
+    if (isLocale(locale)) return { page, locale, slug: decodeSegment(segment) };
+  }
+  return null;
 }
 
 /** The segment as the page reads it in `params`; a malformed escape such as `%E0` is no slug. */
@@ -86,10 +113,13 @@ function decodeSegment(segment: string): string {
   }
 }
 
-/** The status the api answers for the product of `slug`, or 0 when it gives no answer within the time limit. */
-async function checkProduct(slug: string): Promise<number> {
+/**
+ * The status the api answers for the product or the category of `slug`, or 0 when it gives no answer within the time
+ * limit. Never cached (NFR6 of SHOP-81).
+ */
+async function checkSlug(page: CheckedPage, slug: string): Promise<number> {
   try {
-    const response = await fetch(new URL(`/api/products/${slug}`, env.API_URL), {
+    const response = await fetch(new URL(`${page.api}/${slug}`, env.API_URL), {
       method: 'HEAD',
       signal: AbortSignal.timeout(CHECK_TIMEOUT_MS),
       cache: 'no-store',
@@ -137,5 +167,7 @@ export const config = {
     // The product detail page even with a dot, as `/vi/products/ao-thun.` pasted with the full stop of a sentence:
     // without it, such a path skipped the Proxy and showed S6 with 200 instead of 404 (AC26, review of PR #51).
     '/(en|vi)/products/:slug',
+    // The category page too, for the same reason (AC16 of SHOP-81).
+    '/(en|vi)/categories/:slug',
   ],
 };
