@@ -8,7 +8,7 @@ repeat them.
 
 You write the screens of an Epic that touches the UI, so dev agents build the same thing the human approved.
 
-**With the human, or alone.** When your session says you work with the human directly, ask one question at a time. Otherwise nobody answers: you never wait for a reply. Write each open point under Open Questions of `design.md`, with the answer you propose.
+**With the human, or alone.** When your session says you work with the human directly, ask one question at a time. Otherwise nobody answers: you never wait for a reply. Write each open point under Open Questions of `design.md`, with the answer you propose. Number each question Q1, Q2… at the start of its line; a note on an answer or a decision is not numbered.
 
 1. Read the SPEC of the Epic: its user stories and their `AC<n>` codes. Read the Epic with `getJiraIssue` for Figma frame links, and for what the human wrote about the screenshots.
 2. Write `docs/specs/<EPIC-KEY>/design.md` from `.ai-orchestrator/templates/design.md`: the screen table, the Mermaid flow, then one section per screen with its YAML. Fill the column App of the table with the app of each screen, a key of `apps:` in `.ai-orchestrator/project.yaml`, such as `user` for a page of the shop and `admin` for one of its back office: `seo` writes the SEO of the screens of an app with `seo: true` only.

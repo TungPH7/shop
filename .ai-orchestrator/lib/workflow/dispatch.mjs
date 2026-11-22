@@ -2,7 +2,8 @@
 // of each item in its scope (nextCommand), asks decideStep whether that command would run (decide: a dry run of
 // ao-step), and starts what admit lets start, the work nearest its end first. It stops at every STOP that waits for
 // you, and lists those. Pure, but runDispatcher, whose effects are parameters:
-//   readBoard()               { items, pulls }: the items of the space in the order of the board, and the open PRs
+//   readBoard()               { items, pulls, merged }: the items of the space in the order of the board, the open PRs,
+//                             and the PRs merged lately
 //   readLocks()               the locks of the ao-step commands that run now (lib/workflow/locks.mjs)
 //   decide(command, arg)      the decision of ao-step <command> <arg> without --go
 //   start({ command, arg })   runs ao-step <command> <arg> --go; resolves its last decision, or null when it crashed
@@ -33,10 +34,11 @@ const name = ({ command, arg }) => `${command} ${arg}`;
 // One round: { start, waiting, done }. start: the commands to start now, [{ key, command, arg, role, environment }];
 // waiting: what holds the others, [{ key, waits, text, reason? }] in the order of the board; done: no item of the scope
 // has work left. live: the locks that run now; failed: the commands that failed in this /ao-run; starts: how many times
-// each was started.
-export async function planRound({ items, pulls = [], scope, live = [], cap, decide, failed = new Set(), starts = new Map(), agentsPerRole = {} }) {
+// each was started. merged: PRs merged lately, [{ key, number }]: an item In Review whose PR is merged waits for its
+// deploy, not for a fix (T14 of C2). An open PR of an item counts first.
+export async function planRound({ items, pulls = [], merged = [], scope, live = [], cap, decide, failed = new Set(), starts = new Map(), agentsPerRole = {} }) {
   const inScope = scopeOf(items, scope);
-  const prOf = new Map(pulls.map(({ key, number, draft }) => [key, { number, draft, state: 'open' }]));
+  const prOf = new Map([...merged.map(({ key, number }) => [key, { number, state: 'merged' }]), ...pulls.map(({ key, number, draft }) => [key, { number, draft, state: 'open' }])]);
   const busy = new Set(live.map(({ key }) => key));
   const waiting = [];
   const candidates = [];
@@ -48,8 +50,9 @@ export async function planRound({ items, pulls = [], scope, live = [], cap, deci
     const asked = !(item.workType === 'epic' && SHAPING.includes(item.state)) && (item.requests ?? []).some(runnableRequest);
     if (asked) candidates.push({ key: item.key, command: 'request', arg: item.key, rank });
     else if (step.command) candidates.push({ key: item.key, command: step.command, arg: step.arg, rank });
-    // An Epic In Progress waits for its items, which are in the scope too.
-    else if (step.waits && !(item.workType === 'epic' && item.state === 'in-progress')) waiting.push({ key: item.key, waits: step.waits, text: step.text, rank });
+    // An Epic In Progress waits for its items, which are in the scope too. An item whose command runs waits for that
+    // command, not for you (T14 of C2: "waiting for you … after the QA report" while its QA ran).
+    else if (step.waits && !busy.has(item.key) && !(item.workType === 'epic' && item.state === 'in-progress')) waiting.push({ key: item.key, waits: step.waits, text: step.text, rank });
   });
   const open = inScope.filter((item) => !nextCommand(item, prOf.get(item.key) ?? null).done);
   const done = open.every((item) => item.workType === 'epic' && item.state === 'in-progress');

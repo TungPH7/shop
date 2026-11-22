@@ -59,6 +59,8 @@ async function treeOf(git, sha) {
 // project: { name, repo, hosts }, hosts as /etc/ao/deployer.yaml gives them (hosts.mjs). state: the record, saved with `save`. git runs
 // in the project's mirror; token is the installation token of ao-deploy, used only for the fetch. github: a writing
 // client of the repo. audit({ since, head, branch }) is auditRange with its facts bound. installer: { install, prune }.
+// readCi(sha), optional: the CI of a head as readChecks gives it with NOT_BRANCH_CI; a head of a branch of CI_GATED
+// deploys only once it is green (T14 of C2, finding 1).
 export async function tick(options) {
   const { project, state, git, token, log } = options;
   if (!hasBaseline(state)) {
@@ -94,8 +96,11 @@ async function tickEnvironment(ctx, env) {
     if (record.seen[branch] === sha) continue;
     const tree = await treeOf(git, sha);
     const audits = await auditsOf(ctx, branch, sha);
-    const candidate = { sha, tree, branch, audits, pull: audits.at(-1)?.pull ?? null };
+    const ci = ctx.readCi && CI_GATED.includes(branch) ? await ctx.readCi(sha) : undefined;
+    const candidate = { sha, tree, branch, audits, pull: audits.at(-1)?.pull ?? null, ...(ci && { ci }) };
     const decision = decideTarget({ environment: env, candidate, record: runsByEnvironment(state), approvers });
+    // A head whose CI has not ended holds the environment, and is looked at again the next round: not seen.
+    if (decision.action === 'wait') return log(`${env}: wait for ${sha.slice(0, 7)} on ${branch}: ${decision.reason}`);
     if (decision.action !== 'skip') return act(ctx, env, decision, { branch, sha });
     log(`${env}: skip ${sha.slice(0, 7)} on ${branch}: ${decision.reason}`);
     if (!dryRun) {
@@ -104,6 +109,11 @@ async function tickEnvironment(ctx, env) {
     }
   }
 }
+
+// The branches whose head deploys only once CI of that commit is green (Phiên 35 · Lượt 33: "deployer phải chờ CI xanh
+// trên develop thì mới deploy develop"). With lanes, PRs merge one after another, and the tree after a merge was never
+// built by the CI of its PR: e93bfc3 of shop ran on Development with its CI red (T14 of C2).
+export const CI_GATED = ['develop'];
 
 // The heads an environment runs (spec 2.4, 2.8). On Staging a hotfix comes first, and holds Staging until it is on
 // Production; then the open release branch, when there is exactly one.

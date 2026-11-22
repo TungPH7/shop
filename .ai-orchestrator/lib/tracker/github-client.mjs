@@ -6,13 +6,15 @@ import { spawnSync } from 'node:child_process';
 const API = 'https://api.github.com';
 
 // A read is tried again after these waits, on an answer of TRANSIENT or a network error (Phiên 33 of shop: ao-step fix 55
-// ended at once on one 502). A write is sent once: it may have been done.
+// ended at once on one 502; T14 of C2: ao-step ended on one 500 of GET /pulls/82/reviews). A write is sent once: it may
+// have been done.
 const RETRY_WAITS = [1000, 2000, 4000];
-const TRANSIENT = [502, 503, 504];
+const TRANSIENT = [500, 502, 503, 504];
 
+// token: the token, or a function that resolves it, asked before each request: an App token bought again after a long
+// run of an agent reaches the client at once (T14 of C2, renewableToken of lib/quality/github-app.mjs).
 export function createGitHubClient({ repo, token, fetch = globalThis.fetch, write = false, sleep = (ms) => new Promise((done) => setTimeout(done, ms)) }) {
-  const headers = {
-    Authorization: `Bearer ${token}`,
+  const base = {
     Accept: 'application/vnd.github+json',
     'X-GitHub-Api-Version': '2022-11-28',
     'User-Agent': 'ai-orchestrator',
@@ -23,6 +25,7 @@ export function createGitHubClient({ repo, token, fetch = globalThis.fetch, writ
     const waits = method === 'GET' ? RETRY_WAITS : [];
     for (let attempt = 0; ; attempt++) {
       const last = attempt >= waits.length;
+      const headers = { Authorization: `Bearer ${typeof token === 'function' ? await token() : token}`, ...base };
       let res;
       try {
         res = await fetch(

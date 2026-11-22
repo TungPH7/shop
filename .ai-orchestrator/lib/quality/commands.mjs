@@ -198,6 +198,8 @@ function checkCommand(command, role, gates, roster, depth = 0) {
   if (USER_VARIABLES.test(command)) return deny(USER_VARIABLES_REASON);
   // ${NAME:=value} and ${NAME=value} set NAME as they expand (second review of shop PR #81).
   const expanded = [...command.matchAll(EXPANSION_SET)].map(([, name]) => name);
+  // (( NAME = 1 )) and $(( NAME = 1 )) set NAME too (third review of shop PR #81).
+  for (const [, inside] of command.matchAll(ARITHMETIC)) expanded.push(...assignedIn(inside));
   if (expanded.some((name) => SESSION_VARIABLE.test(name))) return deny(IDENTITY);
   if (gates.approvedLibraries && expanded.some((name) => SOURCE_NAME.test(name))) return deny(installRefusal([{ refused: expanded.find((name) => SOURCE_NAME.test(name)), registry: true }], []));
   for (const words of segments(command)) {
@@ -260,15 +262,36 @@ const EXPANSION_SET = /\$\{([A-Za-z_]\w*):?=/g;
 const SHELL_SETUP = /^(?:SHELLOPTS|BASHOPTS|BASH_ENV)$/i;
 const SHELL_OPTIONS = 'do not set the options or the start-up file of a shell, set -a or allexport among them: a variable set after it is exported with no word for gh-guard to read. Pass a variable to one command as NAME=value in front of it';
 // Whether the options of set, or of a shell before its script, turn on allexport: -a, a group of flags with a, or
-// -o allexport.
+// -o allexport. A group of flags with o takes the name after it, wherever o is in the group (set -ox allexport), and
+// set takes -o more than once (set -o pipefail -o allexport; third review of shop PR #81).
 function exportsAll(args) {
   for (let i = 0; i < args.length; i++) {
     const word = args[i];
     if (word === '--' || !/^[-+]/.test(word)) return false;
-    if (/^-[A-Za-z]*a[A-Za-z]*$/.test(word)) return true;
-    if (/^-[A-Za-z]*o$/.test(word) && /^allexport$/i.test(args[i + 1] ?? '')) return true;
+    // A long option of bash, such as --norc.
+    if (word.startsWith('--')) continue;
+    const flags = word.slice(1);
+    if (word.startsWith('-') && flags.includes('a')) return true;
+    if (flags.includes('o')) {
+      if (word.startsWith('-') && /^allexport$/i.test(args[i + 1] ?? '')) return true;
+      i++;
+    }
   }
   return false;
+}
+// shopt -s -o allexport, shopt -so allexport: shopt -o sets the options of set (third review of shop PR #81).
+const shoptExportsAll = (args) => args.some((word) => /^allexport$/i.test(word)) && args.some((word) => /^-[A-Za-z]*s/.test(word));
+// The names for, select and let set, with no NAME= word (third review of shop PR #81): the name after for or select,
+// and each name let assigns or steps. An arithmetic (( )) or $(( )) sets one too: checkCommand reads those on the whole
+// command, since ( and ) end a command for segments.
+const ARITHMETIC = /\(\(([\s\S]*?)\)\)/g;
+const ASSIGNED = /([A-Za-z_]\w*)\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)|([A-Za-z_]\w*)\s*(?:\+\+|--)|(?:\+\+|--)\s*([A-Za-z_]\w*)/g;
+const assignedIn = (text) => [...text.matchAll(ASSIGNED)].map((found) => found[1] ?? found[2] ?? found[3]);
+function namesByKeyword(program, words) {
+  const names = [];
+  if (['for', 'select'].includes(program) && words[1]) names.push(words[1]);
+  if (program === 'let') names.push(...words.slice(1).flatMap(assignedIn));
+  return names;
 }
 // A variable that points a package manager, Maven or its JVM elsewhere, before any program, since a script of the
 // project may run them; or set for the commands after it (review of shop PR #80); or named to printf -v, read and the
@@ -278,7 +301,7 @@ function sourceWord(words, env, program) {
   if (before) return before;
   if (DECLARERS.has(program)) return words.slice(1).find((word) => SOURCE_VARIABLE.test(word) || SOURCE_NAME.test(word));
   if (NAME_SETTERS.has(program)) return namesSet(program, words.slice(1)).find((word) => SOURCE_NAME.test(word));
-  return undefined;
+  return namesByKeyword(program, words).find((name) => SOURCE_NAME.test(name));
 }
 
 // env: the VAR=value words before the command, which git reads too (GIT_CONFIG_*). A line of assignments alone changes
@@ -292,7 +315,9 @@ function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
   if (words.length === 0) return allow;
   const program = first;
   if (NAME_SETTERS.has(program) && namesSet(program, words.slice(1)).some((word) => SESSION_VARIABLE.test(word))) return deny(IDENTITY);
+  if (namesByKeyword(program, words).some((name) => SESSION_VARIABLE.test(name))) return deny(IDENTITY);
   if (program === 'set' && exportsAll(words.slice(1))) return deny(SHELL_OPTIONS);
+  if (program === 'shopt' && shoptExportsAll(words.slice(1))) return deny(SHELL_OPTIONS);
   // set takes words, not names, after its options.
   if (DECLARERS.has(program) && program !== 'set') {
     const names = words.slice(1).filter((word) => !word.startsWith('-')).map(nameOf);
@@ -631,7 +656,8 @@ function checkEdit(file, role, gates, projectDir, roster, tempDir) {
   if (/^\.git(?:\/|$)/i.test(path)) return deny(GIT_DIR);
   // The seo-ok of an item, its run state and the locks are ao-step's: an agent that wrote them could approve a comment
   // of seo, or free an item another run holds (review of shop PR #81). The screenshots of a preview stay the agents'.
-  if (/^\.ai\/runs\/(?:active\/|[^/]+\/(?:seo-ok|state)\.json$)/i.test(path)) return deny(`${path} is ao-step's: agents do not write it`);
+  // So is the file of the comment of seo you approved, which a run reads in place of Jira (third review of shop PR #81).
+  if (/^\.ai\/runs\/(?:active\/|[^/]+\/(?:seo-ok|state)\.json$|[^/]+\/seo-[0-9a-f]+\.md$)/i.test(path)) return deny(`${path} is ao-step's: agents do not write it`);
   const hit = gates.protected_paths.find(({ path: glob }) => matchesGlob(glob.toLowerCase(), path.toLowerCase()));
   if (hit && !(hit.editors ?? []).includes(role)) {
     return deny(`${hit.path} is protected: ${hit.editors ? `only ${hit.editors.join(', ')} may edit it` : 'agents do not edit it'}`);

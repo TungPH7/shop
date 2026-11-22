@@ -25,7 +25,7 @@ import { withProjectPaths } from '../lib/quality/review-tiers.mjs';
 import { matchesGlob } from '../lib/quality/glob.mjs';
 import { DOCKER_INFO, dockerAnswered } from '../lib/quality/maven.mjs';
 import { markReadyForReview, READY_PERMISSIONS } from '../lib/quality/pr-ready.mjs';
-import { appCredentials, botIdentity, githubRepoOf, installationToken, userSecret } from '../lib/quality/github-app.mjs';
+import { appCredentials, botIdentity, githubRepoOf, installationToken, renewableToken, userSecret } from '../lib/quality/github-app.mjs';
 import { npmCli } from '../lib/quality/npm.mjs';
 import { installArgs, managerFromLockfile, pnpmCli, runManager } from '../lib/quality/package-manager.mjs';
 import { attachEvidence } from '../lib/tracker/attachments.mjs';
@@ -51,8 +51,8 @@ import { CHANGES, appRolesOf, decideStep, dockerGate, seoMarkText } from '../lib
 import { restoreWip, saveWip } from '../lib/workflow/wip.mjs';
 import { copyRunFiles, laneKeeper, removeNodeModules, runsSettings } from '../lib/workflow/lanes.mjs';
 import { installLane, pullsOfBranch, qaWatcher, runPlacer } from '../lib/workflow/lane-runs.mjs';
-import { checkoutBranch, laneDir } from '../lib/workflow/places.mjs';
-import { admitAgent, claimRole, claimsRole, jiraWipStop, liveLocks, releaseAgent, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
+import { checkoutBranch, haveCommit, laneDir } from '../lib/workflow/places.mjs';
+import { admitAgent, claimRole, claimsRole, jiraWipStop, liveLocks, releaseAgent, roleBusyWhy, roleOnLock, runningNow, takeLock as takeRunLock } from '../lib/workflow/locks.mjs';
 import { wipHolders } from '../lib/tracker/facts.mjs';
 import { runsAtOnce } from '../lib/workflow/ports.mjs';
 import { hookKitDrift, hookKitNote } from '../lib/workflow/hook-kit.mjs';
@@ -264,8 +264,11 @@ async function main() {
   const jira = createJiraClient({ cloudId: mapping.cloud_id, authorization: bearerAuth(jiraToken) });
   const repo = githubRepoOf(git('remote', 'get-url', 'origin').stdout?.trim() ?? '');
   const appEnv = { ...process.env, AO_REVIEW_APP: apps.review, AO_REVIEW_APP_ID: setting('AO_REVIEW_APP_ID', settings) };
-  const { token } = await installationToken({ ...appCredentials('review', { env: appEnv }), repo, permissions: READ_PERMISSIONS });
-  const github = createGitHubClient({ repo, token });
+  // The read token of ao-review, bought again after each run of an agent and near its end: it lives one hour, and a build
+  // ran 70 minutes (T14 of C2). The first is bought now, so a wrong App stops the command before anything runs.
+  const reviewToken = renewableToken(() => installationToken({ ...appCredentials('review', { env: appEnv }), repo, permissions: READ_PERMISSIONS }));
+  await reviewToken.get();
+  const github = createGitHubClient({ repo, token: reviewToken.get });
   // The lanes of the project (parallel-runs spec 4): off unless project.yaml turns runs.worktrees on.
   const projectYaml = join(projectDir, '.ai-orchestrator', 'project.yaml');
   const runs = runsSettings(existsSync(projectYaml) ? parse(readFileSync(projectYaml, 'utf8')) : {});
@@ -351,9 +354,16 @@ async function main() {
     if (values.go && !values.json) console.log((await preview.stop()).notes.join('\n'));
     else if (!values.json) console.log(`The preview of ${previewRecord.key} runs from its lane: --go stops it first.`);
   }
-  // The board of the dispatcher (C2 spec 5.2): the items of the space in the order of the board, and the open PRs.
+  // The board of the dispatcher (C2 spec 5.2): the items of the space in the order of the board, the open PRs and the
+  // PRs merged lately; and, for whoever watches /ao-run, what runs now and the dispatcher (T14 of C2, finding 13).
   if (values.json && command === 'status') {
-    console.log(JSON.stringify({ items: facts.items ?? [], pulls: facts.pulls ?? [] }));
+    const newestLogAt = (k) => {
+      const dir = join(runsDir, k);
+      const times = existsSync(dir) ? readdirSync(dir).filter((name) => name.endsWith('.jsonl')).map((name) => statSync(join(dir, name)).mtimeMs) : [];
+      return times.length > 0 ? Math.max(...times) : null;
+    };
+    const dispatcher = readJson(join(projectDir, ...DISPATCHER_FILE));
+    console.log(JSON.stringify({ items: facts.items ?? [], pulls: facts.pulls ?? [], merged: facts.merged ?? [], running: runningNow(liveLocks(activeDir, { fs: lockFs, alive }), newestLogAt), dispatcher: dispatcher && alive(dispatcher.pid) ? dispatcher : null }));
     return;
   }
   // A Java app needs Docker for the tests be-dev and qa run (project-scaffold part 3, spec 2.2).
@@ -409,7 +419,8 @@ async function main() {
   // How many commands may run at once, and this one's place among them (parallel-runs spec 5.1).
   const cap = runsAtOnce(runs.lanesMax, process.env);
   const firstRun = decision.runs?.[0] ?? {};
-  const taken = await takeRunLock(activeDir, { pid: process.pid, command, arg, key, role: firstRun.role, environment: firstRun.qa?.environment, startedAt: new Date().toISOString() }, { fs: lockFs, alive, cap, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), agentsPerRole: runs.agentsPerRole, lanes: runs.worktrees });
+  // A fix waits for its dev role below (claim), instead of stopping here while the role is busy (T14 of C2).
+  const taken = await takeRunLock(activeDir, { pid: process.pid, command, arg, key, role: roleOnLock(command, firstRun.role), environment: firstRun.qa?.environment, startedAt: new Date().toISOString() }, { fs: lockFs, alive, cap, sleep: (ms) => new Promise((done) => setTimeout(done, ms)), agentsPerRole: runs.agentsPerRole, lanes: runs.worktrees });
   if (!taken.ok) {
     early(taken.reason, 'item');
     return;
@@ -458,7 +469,8 @@ async function main() {
     // Each run of build or fix takes its dev agent on the lock first: one item at a time per agent (review of shop PR #21).
     const claim = async (run) => {
       if (!claimsRole(command) || !run.role) return;
-      const claimed = await claimRole(activeDir, lock, run.role, { fs: lockFs, alive, sleep, limit: runs.agentsPerRole[run.role] ?? 1, onWait: (busy) => console.log(`Waiting for ${run.role}: it is at work on ${busy.key} (process ${busy.pid}), and builds one item at a time`) });
+      const limit = runs.agentsPerRole[run.role] ?? 1;
+      const claimed = await claimRole(activeDir, lock, run.role, { fs: lockFs, alive, sleep, limit, onWait: (busy) => console.log(`Waiting for ${run.role}: it is at work on ${busy.key} (process ${busy.pid}), and ${roleBusyWhy(run.role, limit)}`) });
       if (!claimed.ok) throw new Error(claimed.reason);
       // Then its WIP on Jira, read now: a build of the role that ended may have left its item In Progress, and jira-guard
       // would refuse the Start of this one (kit followups, batch 2; SHOP-31 after SHOP-58 in Pilot 3).
@@ -480,10 +492,20 @@ async function main() {
         try {
           const logFile = join(runsDir, key, log);
           const logSize = () => (existsSync(logFile) ? statSync(logFile).size : 0);
-          return await watchQa(await placed(run.qa?.auth || run.envAuth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run), (ready, onStart) => qaBeat(ready, (r) => startAgent(r, logFile, onStart), logSize));
+          const ready = await placed(run.qa?.auth || run.envAuth ? { ...run, env: { ...run.env, ...basicAuthEnv(secret('AO_ENV_AUTH')) } } : run);
+          // The words of the comment of seo you approved, in the working folder of the run, just before it starts: the
+          // prompt names this file, which no agent writes (third review of shop PR #81, Medium 2).
+          if (run.seoFile) {
+            const folder = join(ready.cwd ?? projectDir, '.ai', 'runs', key);
+            mkdirSync(folder, { recursive: true });
+            writeFileSync(join(folder, run.seoFile.name), run.seoFile.text);
+          }
+          return await watchQa(ready, (r, onStart) => qaBeat(r, (started) => startAgent(started, logFile, onStart), logSize));
         } finally {
           // Its agent no longer holds RAM for the others that wait (admitAgent).
           if (cap > 1) await releaseAgent(activeDir, run.agentLock ?? lock, { fs: lockFs, alive, sleep });
+          // The reads after the run get a new token (T14 of C2); one that cannot be bought now is bought at the next read.
+          await reviewToken.renew().catch((error) => console.log(`The read token of ao-review was not bought again after the run: ${error.message}`));
         }
       },
       // A defect you reported is checked like a QA run: its evidence goes to the item too (human-loop spec 5.1). seo has
@@ -698,6 +720,9 @@ function addWorktree({ name, sha, install = false, keepInstructions = false }) {
     if (!removed.ok) return { ok: false, reason: `the worktree of ${name} from an earlier run is still at ${path}: ${removed.reason}` };
   }
   mkdirSync(join(path, '..'), { recursive: true });
+  // The commit an environment runs may not be fetched yet (T14 of C2: /ao-qa SHOP-82 at d752638).
+  const have = haveCommit(git, sha);
+  if (!have.ok) return { ok: false, reason: `the worktree of ${name} needs ${sha.slice(0, 7)}: ${have.reason}` };
   const added = git('worktree', 'add', '--detach', '--quiet', path, sha);
   if (added.status !== 0) return { ok: false, reason: `git could not add the worktree of ${name} at ${sha.slice(0, 7)}: ${(added.stderr || added.stdout).trim()}` };
   try {

@@ -130,7 +130,8 @@ Questions. When an item is "mới", or the app has no docs/design-system/<app>.m
 ## Open Questions
 
 <!-- What the design does not settle yet. For a Figma or Image screen, also what the images lack: error states, the
-mobile layout, message texts, values the image does not show clearly. -->
+mobile layout, message texts, values the image does not show clearly. Number each question Q1, Q2… at the start of its line, with the
+answer you propose; ao-step counts the Q lines as the questions. Notes on answers and decisions are not numbered. -->
 
 ## Example
 

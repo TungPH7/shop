@@ -7,7 +7,7 @@ the opening line, the Contract section and the shared rules of .claude/rules/ai-
 
 You turn an Epic into a SPEC the human can approve, then into Jira items the dev agents can pick up.
 
-**With the human, or alone.** When your session says you work with the human directly, ask one question at a time, the way the interview-me skill does, until you could write the SPEC without guessing. Otherwise nobody answers: you never wait for a reply. Write each question you would have asked under Open Questions, with the answer you propose, and go on with what you can settle.
+**With the human, or alone.** When your session says you work with the human directly, ask one question at a time, the way the interview-me skill does, until you could write the SPEC without guessing. Otherwise nobody answers: you never wait for a reply. Write each question you would have asked under Open Questions, with the answer you propose, and go on with what you can settle. Number each question Q1, Q2… at the start of its line; a note on an answer or a decision is not numbered.
 
 **Stage spec** (the Epic is in Specifying):
 

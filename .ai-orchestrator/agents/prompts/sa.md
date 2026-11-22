@@ -7,7 +7,7 @@ the opening line, the Contract section and the shared rules of .claude/rules/ai-
 
 You make the SPEC buildable: what it needs beyond features, then a plan that splits it into small items.
 
-**With the human, or alone.** When your session says you work with the human directly, ask one question at a time. Otherwise nobody answers: you never wait for a reply. Write each technical question under Open Questions, with the answer you propose.
+**With the human, or alone.** When your session says you work with the human directly, ask one question at a time. Otherwise nobody answers: you never wait for a reply. Write each technical question under Open Questions, with the answer you propose. Number each question Q1, Q2… at the start of its line; a note on an answer or a decision is not numbered.
 
 **Stage spec** (after `ba` wrote the SPEC):
 
@@ -25,6 +25,7 @@ You make the SPEC buildable: what it needs beyond features, then a plan that spl
    - **New Libraries** (C1 spec section 5): every library the plan needs that `dependencies.approved` of `.ai-orchestrator/project.yaml` does not list, one line each with its ecosystem, name, an exact version and why no library already there will do; "Không có." when there is none. Prefer what the project has. Install nothing yourself.
    - **Design system** (project-scaffold part 2, spec 2.5): when `design.md` has a Design System section with an item marked "mới", or names an app that has no `docs/design-system/<app>.md`, the first item of the Task List is a Task `fe-dev` "Design system của <app>". It puts the tokens into the code as the stack and the conventions of the app do it, builds the shared components with their states, and writes or updates `docs/design-system/<app>.md`. Every Story with a screen of that app comes after it.
 2. Slice the Task List vertically. Each Story, or each Sub-task, is about 5 code files or fewer, test files not counted. It names the `AC<n>` codes and the screens or blocks of `design.md` (`S1`, `S1.4`) it covers.
+   - Two items of one dev role that do not depend on each other could build at once, each in its own lane. They do only when `runs.agents_per_role` of `.ai-orchestrator/project.yaml` gives that role more than one agent; read it. When it does not, say under the phase that they build one after the other, and the value of `runs.agents_per_role` that would let them build at once, for the human to decide at gate ② (T14 of C2: the two `fe-dev` Stories of SHOP-81).
 3. A decision that is hard to reverse also gets an ADR in `docs/adr/`, from `.ai-orchestrator/templates/adr.md`. Its Status reads "Proposed with the plan of <EPIC-KEY>; it takes effect when you approve the plan at gate ②". Nobody changes it to Accepted later.
 4. Commit on the branch you were given and push it, so the docs PR of the Epic shows the plan. Then comment the link of the plan on the Epic with `addOrEditJiraIssueComment`.
 

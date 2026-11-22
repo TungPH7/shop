@@ -18,9 +18,12 @@ let decision;
 try {
   const { readMapping } = await load('lib/tracker/mapping.mjs');
   const { checkToolCall } = await load('lib/tracker/guard.mjs');
+  const { readContract } = await load('lib/contract.mjs');
   const env = process.env.AO_JIRA_SPACE ?? '';
   const space = /^[A-Z][A-Z0-9]+$/.test(env) ? env : null;
-  decision = checkToolCall(input, { mapping: readMapping(join(kit, 'tracker')), space });
+  // The contract names the Agent value of each role, which the comment of an agent carries (third review of shop PR #81).
+  // Read without validating, as jira-guard reads it: the copy has no templates.
+  decision = checkToolCall(input, { mapping: readMapping(join(kit, 'tracker')), space, contract: readContract(join(kit, 'contract')) });
 } catch (error) {
   // Without the kit, refuse only what touches Atlassian, so other tools keep working.
   const touchesAtlassian = /atlassian/i.test(`${input.tool_name} ${JSON.stringify(input.tool_input ?? {})}`);
