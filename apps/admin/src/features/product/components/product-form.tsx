@@ -23,19 +23,19 @@ import { type AdminProduct, formatPrice } from '@/features/product/model/product
 import {
   type CreateProductInput,
   DESCRIPTION_MAX_LENGTH,
-  isSameSlug,
   NAME_MAX_LENGTH,
   parsePriceInput,
+  PRODUCT_SLUG_FALLBACK,
   productEditSchema,
   type ProductEditInput,
   productFormDefaults,
   productFormSchema,
   productFormValuesOf,
   type ProductFormValues,
-  slugFromName,
 } from '@/features/product/model/product-form';
 import type productEn from '@/lib/i18n/locales/en/product.json';
 import { notify } from '@/lib/notifications/notification-store';
+import { isSameSlug, slugFromName } from '@/lib/text/slug';
 
 // S2 of docs/specs/SHOP-7/design.md, in add mode (US2) or edit mode (US3): the back
 // link (S2.2), the title (S2.3), the card (S2.4) with the banner (S2.5), the fields
@@ -319,7 +319,8 @@ function ProductFormView<Input extends CreateProductInput>({ mode }: { mode: For
           {...register('name', {
             // The slug follows the name until the admin types it (S2.7).
             onChange: (event: ChangeEvent<HTMLInputElement>) => {
-              if (!getValues('slugEdited')) setValue('slug', slugFromName(event.target.value));
+              if (!getValues('slugEdited'))
+                setValue('slug', slugFromName(event.target.value, PRODUCT_SLUG_FALLBACK));
             },
           })}
         />

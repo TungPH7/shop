@@ -1,0 +1,84 @@
+{
+  "title": "Categories",
+  "actions": {
+    "add": "Add category",
+    "edit": "Edit",
+    "editLabel": "Edit {{name}}",
+    "delete": "Delete",
+    "deleteLabel": "Delete {{name}}"
+  },
+  "table": {
+    "label": "Category list",
+    "name": "Name",
+    "slug": "URL slug",
+    "status": "Status",
+    "productCount": "Products",
+    "actions": "Actions"
+  },
+  "status": {
+    "VISIBLE": "Visible",
+    "HIDDEN": "Hidden"
+  },
+  "list": {
+    "loading": "Loading the categories",
+    "empty": "No categories yet.",
+    "error": "Couldn't load the categories.",
+    "retry": "Try again"
+  },
+  "delete": {
+    "title": "Delete “{{name}}”?",
+    "cannotUndo": "This can't be undone.",
+    "products_one": "{{count, number}} product in this category will become No category.",
+    "products_other": "{{count, number}} products in this category will become No category.",
+    "hideHint": "To hide the category for now, set its status to Hidden when you edit it.",
+    "cancel": "Cancel",
+    "confirm": "Delete",
+    "deleting": "Deleting…",
+    "failed": "Couldn't delete. Please try again.",
+    "done": "Category deleted"
+  },
+  "form": {
+    "back": "Categories",
+    "addTitle": "Add category",
+    "editTitle": "Edit category",
+    "subtitle": "Customers only see categories that are Visible.",
+    "name": {
+      "label": "Category name",
+      "placeholder": "e.g. Jackets"
+    },
+    "slug": {
+      "label": "URL slug",
+      "hint": "Generated from the name. If taken, -2, -3… is added.",
+      "editHint": "Renaming doesn't change the link.",
+      "changed": "The old link /categories/{{slug}} will stop working."
+    },
+    "status": {
+      "legend": "Status",
+      "hint": "Hidden: customers can't see the category and its page returns 404. Its products stay on sale."
+    },
+    "cancel": "Cancel",
+    "submitAdd": "Add category",
+    "submitEdit": "Save changes",
+    "saving": "Saving…",
+    "added": "Category added",
+    "saved": "Category saved",
+    "saveFailed": "Couldn't save. Please try again.",
+    "conflict": "This category was just edited elsewhere. Reload to see the latest version.",
+    "reload": "Reload",
+    "loading": "Loading the category",
+    "loadFailed": "Couldn't load the category.",
+    "retry": "Try again",
+    "notFound": "We couldn't find this category. It may have been deleted.",
+    "backToList": "Back to categories",
+    "errors": {
+      "nameRequired": "Enter a category name",
+      "nameTooLong": "Name must be 60 characters or fewer",
+      "nameTaken": "This category name already exists",
+      "slugFormat": "Use lowercase a–z, digits and hyphens only, with no hyphen at the start or end.",
+      "slugTooLong": "Slug must be 100 characters or fewer",
+      "slugTaken": "This slug is already in use",
+      "slugNotGenerated": "Every slug made from this name is taken. Type a slug yourself.",
+      "invalid": "This value isn't valid."
+    }
+  }
+}

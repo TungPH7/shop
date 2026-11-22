@@ -9,7 +9,6 @@ import {
   productFormSchema,
   productFormValuesOf,
   type ProductFormValues,
-  slugFromName,
 } from '@/features/product/model/product-form';
 
 // The form of S2 (US2) checks the Product Rules of docs/specs/SHOP-7/spec.md, like
@@ -26,39 +25,6 @@ function errorsOf(input: ProductFormValues): Record<string, string> {
     result.error.issues.map((issue) => [issue.path.join('.'), issue.message]),
   );
 }
-
-describe('slugFromName', () => {
-  it.each([
-    ['Áo thun cổ tròn', 'ao-thun-co-tron'],
-    ['Đầm maxi đỏ 2026', 'dam-maxi-do-2026'],
-    ['Quần jean (Nam) – Slim', 'quan-jean-nam-slim'],
-    ['Đầm maxi đỏ', 'dam-maxi-do'],
-  ])('turns the example of the Product Rules %s into %s', (name, slug) => {
-    expect(slugFromName(name)).toBe(slug);
-  });
-
-  it('removes accents written as separate combining marks (NFD)', () => {
-    expect(slugFromName('Áo thun')).toBe('ao-thun');
-  });
-
-  it('drops hyphens at either end and joins every run of other characters into one hyphen', () => {
-    expect(slugFromName('  --Áo   thun!!  ')).toBe('ao-thun');
-  });
-
-  it('cuts at 100 characters and drops a hyphen the cut leaves at the end', () => {
-    const name = `${'a'.repeat(99)} b`;
-
-    expect(slugFromName(name)).toBe('a'.repeat(99));
-  });
-
-  it('is san-pham for a name with no letter or digit, as the api', () => {
-    expect(slugFromName('!!!')).toBe('san-pham');
-  });
-
-  it('is empty while the name is blank, so the slug field stays empty', () => {
-    expect(slugFromName('   ')).toBe('');
-  });
-});
 
 describe('parsePriceInput', () => {
   it.each([

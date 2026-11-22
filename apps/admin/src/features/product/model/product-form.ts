@@ -8,6 +8,7 @@ import {
   type ProductAvailability,
   type ProductStatus,
 } from '@/features/product/model/product';
+import { isSameSlug, isSlug, SLUG_MAX_LENGTH } from '@/lib/text/slug';
 
 // The form of S2 and the body of POST /api/admin/products (US2) or of
 // PUT /api/admin/products/{id} (US3). One schema for form and body (FM-002): its input
@@ -17,35 +18,11 @@ import {
 // Lengths are UTF-16 units (`.length`), as `String.length()` of the api counts them.
 
 export const NAME_MAX_LENGTH = 150;
-export const SLUG_MAX_LENGTH = 100;
 export const DESCRIPTION_MAX_LENGTH = 5000;
 export const PRICE_MAX = 999_999_999;
 
 /** The slug the api gives a name with no letter or digit (ProductSlugs.FALLBACK). */
-const SLUG_FALLBACK = 'san-pham';
-const SLUG_FORMAT = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-/** The accents NFD splits off a letter, as COMBINING_MARKS of ProductSlugs. */
-const COMBINING_MARKS = /[\u0300-\u036f]/g;
-
-/**
- * The slug the api generates from a name (ProductSlugs.fromName, Product Rules): no
- * Vietnamese accents, `đ` and `Đ` as `d`, lower case, each run of characters other
- * than a–z and 0–9 one hyphen, no hyphen at either end, cut at 100 characters without
- * a hyphen at the end. A blank name gives an empty slug, so the field stays empty.
- */
-export function slugFromName(name: string): string {
-  if (name.trim() === '') return '';
-  const slug = name
-    .normalize('NFD')
-    .replace(COMBINING_MARKS, '')
-    .replace(/[đĐ]/g, 'd')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, SLUG_MAX_LENGTH)
-    .replace(/-+$/, '');
-  return slug === '' ? SLUG_FALLBACK : slug;
-}
+export const PRODUCT_SLUG_FALLBACK = 'san-pham';
 
 export type PriceInput =
   | { kind: 'empty' }
@@ -163,8 +140,7 @@ function productSchema<Slug extends string | null>(
         when: () => true,
       })
       .refine(
-        (form) =>
-          !checksSlug(form) || form.slug.length > SLUG_MAX_LENGTH || SLUG_FORMAT.test(form.slug),
+        (form) => !checksSlug(form) || form.slug.length > SLUG_MAX_LENGTH || isSlug(form.slug),
         { ...error('slugFormat'), path: ['slug'], when: () => true },
       )
       .refine((form) => form.compareAtPrice === null || form.compareAtPrice > form.price, {
@@ -196,11 +172,6 @@ function productSchema<Slug extends string | null>(
 export const productFormSchema = productSchema(isTypedSlug, (form): string | null =>
   isTypedSlug(form) ? form.slug : null,
 );
-
-/** Whether two slugs are the same for the api, which compares them ignoring case (citext). */
-export function isSameSlug(a: string, b: string): boolean {
-  return a.toLowerCase() === b.toLowerCase();
-}
 
 /**
  * Edit mode (US3): the slug is required and always sent. The saved slug, in any case,

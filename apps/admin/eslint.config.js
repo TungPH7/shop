@@ -129,6 +129,13 @@ export default tseslint.config(
                 'Cross-feature import is not allowed. Lift shared code up to src/ (shared) or compose at the app layer.',
             },
             {
+              target: './src/features/category',
+              from: './src/features',
+              except: ['./category'],
+              message:
+                'Cross-feature import is not allowed. Lift shared code up to src/ (shared) or compose at the app layer.',
+            },
+            {
               target: './src/features/auth',
               from: './src/features',
               except: ['./auth'],

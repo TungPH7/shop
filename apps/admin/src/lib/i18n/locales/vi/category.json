@@ -1,0 +1,83 @@
+{
+  "title": "Danh mục",
+  "actions": {
+    "add": "Thêm danh mục",
+    "edit": "Sửa",
+    "editLabel": "Sửa {{name}}",
+    "delete": "Xóa",
+    "deleteLabel": "Xóa {{name}}"
+  },
+  "table": {
+    "label": "Danh sách danh mục",
+    "name": "Tên",
+    "slug": "Đường dẫn",
+    "status": "Trạng thái",
+    "productCount": "Số sản phẩm",
+    "actions": "Thao tác"
+  },
+  "status": {
+    "VISIBLE": "Hiện",
+    "HIDDEN": "Ẩn"
+  },
+  "list": {
+    "loading": "Đang tải danh sách danh mục",
+    "empty": "Chưa có danh mục nào.",
+    "error": "Không tải được danh sách danh mục.",
+    "retry": "Thử lại"
+  },
+  "delete": {
+    "title": "Xóa “{{name}}”?",
+    "cannotUndo": "Việc xóa không hoàn tác được.",
+    "products_other": "{{count, number}} sản phẩm của danh mục này sẽ thành Không có danh mục.",
+    "hideHint": "Nếu chỉ muốn tạm ẩn danh mục, hãy chọn Ẩn khi sửa.",
+    "cancel": "Hủy",
+    "confirm": "Xóa",
+    "deleting": "Đang xóa…",
+    "failed": "Không xóa được. Vui lòng thử lại.",
+    "done": "Đã xóa danh mục"
+  },
+  "form": {
+    "back": "Danh mục",
+    "addTitle": "Thêm danh mục",
+    "editTitle": "Sửa danh mục",
+    "subtitle": "Khách chỉ thấy danh mục ở trạng thái Hiện.",
+    "name": {
+      "label": "Tên danh mục",
+      "placeholder": "vd. Áo khoác"
+    },
+    "slug": {
+      "label": "Đường dẫn (slug)",
+      "hint": "Tự sinh từ tên. Nếu đã có, hệ thống thêm -2, -3…",
+      "editHint": "Đổi tên không đổi đường dẫn.",
+      "changed": "Đường dẫn cũ /categories/{{slug}} sẽ không mở được nữa."
+    },
+    "status": {
+      "legend": "Trạng thái",
+      "hint": "Ẩn: khách không thấy danh mục và trang của nó trả 404. Sản phẩm trong danh mục vẫn bán như cũ."
+    },
+    "cancel": "Hủy",
+    "submitAdd": "Thêm danh mục",
+    "submitEdit": "Lưu thay đổi",
+    "saving": "Đang lưu…",
+    "added": "Đã thêm danh mục",
+    "saved": "Đã lưu danh mục",
+    "saveFailed": "Không lưu được. Vui lòng thử lại.",
+    "conflict": "Danh mục vừa được sửa ở nơi khác. Tải lại để xem bản mới nhất.",
+    "reload": "Tải lại",
+    "loading": "Đang tải danh mục",
+    "loadFailed": "Không tải được danh mục.",
+    "retry": "Thử lại",
+    "notFound": "Không tìm thấy danh mục này. Có thể nó đã bị xóa.",
+    "backToList": "Về danh sách danh mục",
+    "errors": {
+      "nameRequired": "Nhập tên danh mục",
+      "nameTooLong": "Tên tối đa 60 ký tự",
+      "nameTaken": "Tên danh mục này đã có",
+      "slugFormat": "Chỉ dùng chữ thường a–z, số và dấu gạch ngang; không bắt đầu hay kết thúc bằng dấu gạch ngang.",
+      "slugTooLong": "Slug tối đa 100 ký tự",
+      "slugTaken": "Slug này đã được dùng",
+      "slugNotGenerated": "Các slug tự sinh từ tên này đều đã được dùng. Hãy tự nhập một slug.",
+      "invalid": "Giá trị này không hợp lệ."
+    }
+  }
+}
