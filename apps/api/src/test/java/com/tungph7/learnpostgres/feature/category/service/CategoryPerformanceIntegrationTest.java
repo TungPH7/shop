@@ -60,6 +60,12 @@ import com.tungph7.learnpostgres.AbstractContainerBaseTest;
  *
  * <p>The data is committed, since each request runs in transactions of its own, and deleted after
  * the class.
+ *
+ * <p>The plan of each statement depends on the statistics of the two tables. The class starts from
+ * the stale ones that an earlier class can leave, with autovacuum paused on both tables until the
+ * end, and analyzes the tables once the data is in. So the median does not depend on the order of
+ * the classes or on when the daemon last ran: CI of develop at {@code e93bfc3} measured 351 ms for
+ * {@code GET /api/categories}, where CI of the same tree in PR #83 measured 4 ms.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -73,6 +79,12 @@ class CategoryPerformanceIntegrationTest extends AbstractContainerBaseTest {
 
   /** The {@code ACTIVE} products of the big category: one in ten is hidden. */
   private static final int ACTIVE_OF_THE_BIG_CATEGORY = 4_500;
+
+  /** The products an earlier class added and deleted, before it left the statistics. */
+  private static final int EARLIER_PRODUCTS = 20_000;
+
+  /** The products the statistics of the earlier class describe, all of one category. */
+  private static final int EARLIER_PRODUCTS_OF_ONE_CATEGORY = 20;
 
   private static final int RUNS = 5;
   private static final long MAX_READ_MILLIS = 200;
@@ -103,15 +115,26 @@ class CategoryPerformanceIntegrationTest extends AbstractContainerBaseTest {
     transaction = new TransactionTemplate(transactionManager);
     transaction.executeWithoutResult(
         tx -> {
+          pauseAutovacuum();
+          leaveTheStatisticsOfAnEarlierClass();
+        });
+    transaction.executeWithoutResult(
+        tx -> {
           deleteAll();
           insertCategories();
           insertProducts();
         });
+    transaction.executeWithoutResult(tx -> analyzeTheData());
   }
 
   @AfterAll
   void deleteTheData() {
-    transaction.executeWithoutResult(tx -> deleteAll());
+    transaction.executeWithoutResult(
+        tx -> {
+          // TRUNCATE, not DELETE: the next class starts from an empty table, not 10,000 dead rows.
+          jdbc.sql("TRUNCATE app.products, app.categories").update();
+          resumeAutovacuum();
+        });
   }
 
   @Test
@@ -420,6 +443,59 @@ SELECT app.gen_uuid_v7(),
   private void deleteAll() {
     jdbc.sql("DELETE FROM app.products").update();
     jdbc.sql("DELETE FROM app.categories").update();
+  }
+
+  /**
+   * Keeps autovacuum from analyzing the two tables while the class runs, so the planner sees the
+   * statistics this class leaves, not those of a run of the daemon at a random instant.
+   */
+  private void pauseAutovacuum() {
+    jdbc.sql("ALTER TABLE app.categories SET (autovacuum_enabled = false)").update();
+    jdbc.sql("ALTER TABLE app.products SET (autovacuum_enabled = false)").update();
+  }
+
+  /**
+   * The statistics of the data measured, which autovacuum gives a Production database within a
+   * minute of a change of 50 rows and a tenth of the table. Without them, the planner keeps those
+   * of {@link #leaveTheStatisticsOfAnEarlierClass()}, and reads every product again for each
+   * category in the list and the sitemap of the store: more than 200 ms (NFR2).
+   */
+  private void analyzeTheData() {
+    jdbc.sql("ANALYZE app.categories, app.products").update();
+  }
+
+  private void resumeAutovacuum() {
+    jdbc.sql("ALTER TABLE app.categories RESET (autovacuum_enabled)").update();
+    jdbc.sql("ALTER TABLE app.products RESET (autovacuum_enabled)").update();
+  }
+
+  /**
+   * The statistics an earlier class can leave, those of the failed CI run of develop at {@code
+   * e93bfc3}: a table of products that held {@value #EARLIER_PRODUCTS} rows, all deleted and not
+   * vacuumed yet, analyzed while it held {@value #EARLIER_PRODUCTS_OF_ONE_CATEGORY} products of a
+   * single category. On them the planner takes the table of products for a few rows.
+   */
+  private void leaveTheStatisticsOfAnEarlierClass() {
+    jdbc.sql("TRUNCATE app.products, app.categories").update();
+    jdbc.sql(
+            """
+INSERT INTO app.products (name, slug, description, price_vnd)
+SELECT 'Trước ' || i, 'truoc-' || i, repeat('Mô tả sản phẩm, chất liệu cotton. ', 15), 1000
+  FROM generate_series(1, :products) AS s(i)
+""")
+        .param("products", EARLIER_PRODUCTS)
+        .update();
+    jdbc.sql("DELETE FROM app.products").update();
+    jdbc.sql("INSERT INTO app.categories (name, slug) VALUES ('Trước', 'truoc')").update();
+    jdbc.sql(
+            """
+INSERT INTO app.products (name, slug, price_vnd, category_id)
+SELECT 'Trước ' || i, 'truoc-' || i, 1000, c.id
+  FROM generate_series(1, :products) AS s(i) CROSS JOIN app.categories c
+""")
+        .param("products", EARLIER_PRODUCTS_OF_ONE_CATEGORY)
+        .update();
+    jdbc.sql("ANALYZE app.categories, app.products").update();
   }
 
   // ============================================================
