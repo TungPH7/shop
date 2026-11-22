@@ -1,5 +1,6 @@
 import 'i18next';
 
+import type category from './locales/en/category.json';
 import type common from './locales/en/common.json';
 import type product from './locales/en/product.json';
 
@@ -12,6 +13,7 @@ declare module 'i18next' {
     defaultNS: 'common';
     resources: {
       common: typeof common;
+      category: typeof category;
       product: typeof product;
     };
   }

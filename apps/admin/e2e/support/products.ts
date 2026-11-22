@@ -23,12 +23,22 @@ export interface E2eProduct {
   createdAt: string;
 }
 
+/** A product as GET /api/admin/products/{id} answers, with its category (SHOP-81). */
+export interface E2eProductDetail extends E2eProduct {
+  description: string | null;
+  compareAtPrice: number | null;
+  categoryId: string | null;
+  version: number;
+}
+
 export interface NewE2eProduct {
   /** The name before `E2E <runId>`. */
   name: string;
   price?: number;
   status?: E2eProduct['status'];
   availability?: E2eProduct['availability'];
+  /** The id of its category (SHOP-81); none when absent. */
+  categoryId?: string | null;
 }
 
 /** Six random characters, a–z and 0–9. */
@@ -64,6 +74,7 @@ export async function createProduct(
       price: product.price ?? 100000,
       status: product.status ?? 'ACTIVE',
       availability: product.availability ?? 'IN_STOCK',
+      ...(product.categoryId === undefined ? {} : { categoryId: product.categoryId }),
     },
   });
   expect(response.status(), await response.text()).toBe(201);
@@ -79,6 +90,16 @@ export async function createProducts(
   const created: E2eProduct[] = [];
   for (const product of products) created.push(await createProduct(request, runId, product));
   return created;
+}
+
+/** One product with every field, its category too (SHOP-81). */
+export async function getProduct(
+  request: APIRequestContext,
+  id: string,
+): Promise<E2eProductDetail> {
+  const response = await request.get(`${API}/${id}`);
+  expect(response.status()).toBe(200);
+  return (await response.json()) as E2eProductDetail;
 }
 
 /** The products whose name matches `q`, as the admin list finds them: for products a test made in the form. */

@@ -14,6 +14,7 @@ function buildRouter(initialEntry = '/') {
           { index: true, element: <h1>Home page</h1> },
           { path: '/products', element: <h1>Products page</h1> },
           { path: '/about', element: <h1>About page</h1> },
+          { path: '/categories/new', element: <h1>Add category page</h1> },
         ],
       },
     ],
@@ -30,6 +31,33 @@ describe('RootLayout (S1.1)', () => {
     expect(within(nav).getByRole('link', { name: 'Home' })).toBeInTheDocument();
     expect(within(nav).getByRole('link', { name: 'Products' })).toBeInTheDocument();
     expect(within(nav).getByRole('link', { name: 'About' })).toBeInTheDocument();
+  });
+
+  it('lists Categories between Products and About (S1.1 of SHOP-81)', async () => {
+    renderWithRouter(buildRouter());
+
+    const nav = await screen.findByRole('navigation', { name: 'Main navigation' });
+
+    expect(
+      within(nav)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['Home', 'Products', 'Categories', 'About']);
+    expect(within(nav).getByRole('link', { name: 'Categories' })).toHaveAttribute(
+      'href',
+      '/categories',
+    );
+  });
+
+  it('marks Categories as the current page on its add and edit pages too (S2.1 of SHOP-81)', async () => {
+    renderWithRouter(buildRouter('/categories/new'));
+
+    const nav = await screen.findByRole('navigation', { name: 'Main navigation' });
+
+    expect(within(nav).getByRole('link', { name: 'Categories' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
   });
 
   it('marks the link of the current page with aria-current=page', async () => {

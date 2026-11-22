@@ -27,6 +27,21 @@ export const paths = {
     path: '/products/:productId/edit',
     getHref: (productId: string) => `/products/${encodeURIComponent(productId)}/edit`,
   },
+  /** S1 of docs/specs/SHOP-81/design.md: the category list, with the delete dialog S3. */
+  categories: {
+    path: '/categories',
+    getHref: () => '/categories',
+  },
+  /** S2 of SHOP-81 in add mode. */
+  categoryNew: {
+    path: '/categories/new',
+    getHref: () => '/categories/new',
+  },
+  /** S2 of SHOP-81 in edit mode. */
+  categoryEdit: {
+    path: '/categories/:categoryId/edit',
+    getHref: (categoryId: string) => `/categories/${encodeURIComponent(categoryId)}/edit`,
+  },
   about: {
     path: '/about',
     getHref: () => '/about',

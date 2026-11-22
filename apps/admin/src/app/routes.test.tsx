@@ -124,6 +124,57 @@ describe('routes', () => {
     ).toBeInTheDocument();
   });
 
+  it('opens the category list S1 of SHOP-81 on /categories without signing in', async () => {
+    server.use(http.get('*/admin/categories', () => HttpResponse.json({ items: [] })));
+    const router = createMemoryRouter(routes, { initialEntries: ['/categories'] });
+    renderWithRouter(router);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Categories' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText('No categories yet.')).toBeInTheDocument();
+  });
+
+  it('goes from Add category of S1 to the add form S2 of SHOP-81', async () => {
+    server.use(http.get('*/admin/categories', () => HttpResponse.json({ items: [] })));
+    const router = createMemoryRouter(routes, { initialEntries: ['/categories'] });
+    const { user } = renderWithRouter(router);
+    await screen.findByText('No categories yet.');
+
+    await user.click(screen.getByRole('link', { name: 'Add category' }));
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Add category' }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/categories/new');
+  });
+
+  it('opens the edit form S2 of SHOP-81 of the category on /categories/:categoryId/edit', async () => {
+    const category = {
+      id: '019a9c41-2b3d-7e10-8f2a-3c4d5e6f7a8b',
+      name: 'Áo',
+      slug: 'ao',
+      status: 'VISIBLE',
+      createdAt: '2026-11-22T02:10:00.000Z',
+      updatedAt: '2026-11-22T02:10:00.000Z',
+      version: 0,
+    };
+    const ids: string[] = [];
+    server.use(
+      http.get('*/admin/categories/:id', ({ params }) => {
+        ids.push(String(params['id']));
+        return HttpResponse.json(category);
+      }),
+    );
+    renderAt(`/categories/${category.id}/edit`);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Edit category' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole('textbox', { name: /Category name/ })).toHaveValue('Áo');
+    expect(ids).toEqual([category.id]);
+  });
+
   it('still opens the About page', async () => {
     renderAt('/about');
 

@@ -64,6 +64,15 @@
       "hint": "Tự sinh từ tên. Nếu đã có, hệ thống thêm -2, -3…",
       "changed": "Đường dẫn cũ /products/{{slug}} sẽ không mở được nữa."
     },
+    "category": {
+      "label": "Danh mục",
+      "none": "Không có danh mục",
+      "hiddenOption": "{{name}} (Ẩn)",
+      "hint": "Chọn được cả danh mục Ẩn, để chuẩn bị sản phẩm trước khi cho hiện danh mục.",
+      "loading": "Đang tải danh mục…",
+      "loadFailed": "Không tải được danh mục.",
+      "retry": "Thử lại"
+    },
     "description": {
       "label": "Mô tả (không bắt buộc)",
       "hint": "Xuống dòng được giữ nguyên. Thẻ HTML hiện như chữ, không có tác dụng."
@@ -110,7 +119,8 @@
       "priceMax": "Giá tối đa 999.999.999 ₫",
       "priceInvalid": "Nhập giá bằng số, như 250.000",
       "compareAtPriceGreater": "Giá gốc phải lớn hơn giá bán",
-      "invalid": "Giá trị này không hợp lệ."
+      "invalid": "Giá trị này không hợp lệ.",
+      "categoryGone": "Danh mục này không còn. Hãy chọn danh mục khác."
     }
   }
 }

@@ -45,6 +45,27 @@ export const routes: RouteObject[] = [
         },
       },
       {
+        path: paths.categories.path,
+        lazy: async () => {
+          const { CategoriesRoute } = await import('@/app/routes/categories/categories-route');
+          return { Component: CategoriesRoute };
+        },
+      },
+      {
+        path: paths.categoryNew.path,
+        lazy: async () => {
+          const { CategoryNewRoute } = await import('@/app/routes/categories/category-new-route');
+          return { Component: CategoryNewRoute };
+        },
+      },
+      {
+        path: paths.categoryEdit.path,
+        lazy: async () => {
+          const { CategoryEditRoute } = await import('@/app/routes/categories/category-edit-route');
+          return { Component: CategoryEditRoute };
+        },
+      },
+      {
         path: paths.about.path,
         lazy: async () => {
           const { AboutRoute } = await import('@/app/routes/about/about-route');

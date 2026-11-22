@@ -21,6 +21,7 @@ const input: CreateProductInput = {
   compareAtPrice: null,
   status: 'ACTIVE',
   availability: 'IN_STOCK',
+  categoryId: null,
 };
 
 const created: AdminProduct = {
@@ -32,6 +33,7 @@ const created: AdminProduct = {
   compareAtPrice: null,
   status: 'ACTIVE',
   availability: 'IN_STOCK',
+  categoryId: null,
   createdAt: '2026-11-16T02:10:00.000Z',
   updatedAt: '2026-11-16T02:10:00.000Z',
   version: 0,
@@ -199,6 +201,23 @@ describe('createProductErrorOf', () => {
     expect(createProductErrorOf(error, input)).toEqual({
       kind: 'fields',
       fields: ['name', 'slug', 'price', 'compareAtPrice'],
+    });
+  });
+
+  it('AC10 names categoryId for a 400 on a category that no longer exists, after the slug (SHOP-81)', async () => {
+    const error = await errorOf(() =>
+      problem(400, 'VALIDATION_FAILED', {
+        errors: [
+          { field: 'price', rejectedValue: 0, message: '…' },
+          { field: 'categoryId', rejectedValue: 'x', message: 'must be an existing category' },
+          { field: 'slug', rejectedValue: 'A', message: '…' },
+        ],
+      }),
+    );
+
+    expect(createProductErrorOf(error, input)).toEqual({
+      kind: 'fields',
+      fields: ['slug', 'categoryId', 'price'],
     });
   });
 

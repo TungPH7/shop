@@ -14,28 +14,30 @@ import {
   createProductErrorOf,
   useCreateProduct,
 } from '@/features/product/api/create-product';
+import { useCategoryOptions } from '@/features/product/api/get-category-options';
 import {
   type UpdateProductError,
   updateProductErrorOf,
   useUpdateProduct,
 } from '@/features/product/api/update-product';
+import { ProductCategoryField } from '@/features/product/components/product-category-field';
 import { type AdminProduct, formatPrice } from '@/features/product/model/product';
 import {
   type CreateProductInput,
   DESCRIPTION_MAX_LENGTH,
-  isSameSlug,
   NAME_MAX_LENGTH,
   parsePriceInput,
+  PRODUCT_SLUG_FALLBACK,
   productEditSchema,
   type ProductEditInput,
   productFormDefaults,
   productFormSchema,
   productFormValuesOf,
   type ProductFormValues,
-  slugFromName,
 } from '@/features/product/model/product-form';
 import type productEn from '@/lib/i18n/locales/en/product.json';
 import { notify } from '@/lib/notifications/notification-store';
+import { isSameSlug, slugFromName } from '@/lib/text/slug';
 
 // S2 of docs/specs/SHOP-7/design.md, in add mode (US2) or edit mode (US3): the back
 // link (S2.2), the title (S2.3), the card (S2.4) with the banner (S2.5), the fields
@@ -53,6 +55,13 @@ import { notify } from '@/lib/notifications/notification-store';
 //
 // Everything the two modes do differently is one FormMode, built once by AddProductForm
 // or EditProductForm; ProductFormView renders S2 from it and never asks which mode.
+//
+// The Category field (S4 of docs/specs/SHOP-81/design.md) sits between the slug and the
+// description, and the form always sends categoryId, No category as null (NFR19 of
+// SHOP-81). Until its options are loaded, Save is locked. A 400 on categoryId is a
+// category deleted in another tab (AC10): nothing is saved, the options load again,
+// the field goes back to No category, and its error stays until the admin picks again;
+// a Save then sends what the field shows.
 
 type FormErrorKey = keyof typeof productEn.form.errors;
 
@@ -190,6 +199,11 @@ function ProductFormView<Input extends CreateProductInput>({ mode }: { mode: For
   const navigate = useNavigate();
   const [banner, setBanner] = useState<Banner>(null);
   const bannerRef = useRef<HTMLDivElement>(null);
+  const categoryOptions = useCategoryOptions();
+  // The form cannot send a category it does not know: Save waits for the options (S4.2).
+  const categoriesReady = categoryOptions.data !== undefined;
+  // Set by a 400 on categoryId (AC10), cleared once the admin picks a category again.
+  const [categoryGone, setCategoryGone] = useState(false);
   // The banner sits over the fields, off screen while the person is at Save: bring it
   // into view. Scrolling moves no focus, which stays where it is (S2.5).
   useEffect(() => {
@@ -225,7 +239,14 @@ function ProductFormView<Input extends CreateProductInput>({ mode }: { mode: For
     switch (failure.kind) {
       case 'fields':
         failure.fields.forEach((field, index) => {
-          setError(field, { type: 'server', message: 'invalid' }, { shouldFocus: index === 0 });
+          if (field === 'categoryId') {
+            // AC10: the category was deleted since the options loaded.
+            setCategoryGone(true);
+            setValue('categoryId', '');
+            void categoryOptions.refetch();
+          }
+          const message = field === 'categoryId' ? 'categoryGone' : 'invalid';
+          setError(field, { type: 'server', message }, { shouldFocus: index === 0 });
         });
         return;
       case 'slugTaken':
@@ -280,7 +301,7 @@ function ProductFormView<Input extends CreateProductInput>({ mode }: { mode: For
         className="card product-form"
         noValidate
         onSubmit={(event) => {
-          if (mode.isPending) {
+          if (mode.isPending || !categoriesReady) {
             event.preventDefault();
             return;
           }
@@ -319,7 +340,8 @@ function ProductFormView<Input extends CreateProductInput>({ mode }: { mode: For
           {...register('name', {
             // The slug follows the name until the admin types it (S2.7).
             onChange: (event: ChangeEvent<HTMLInputElement>) => {
-              if (!getValues('slugEdited')) setValue('slug', slugFromName(event.target.value));
+              if (!getValues('slugEdited'))
+                setValue('slug', slugFromName(event.target.value, PRODUCT_SLUG_FALLBACK));
             },
           })}
         />
@@ -338,6 +360,31 @@ function ProductFormView<Input extends CreateProductInput>({ mode }: { mode: For
               if (mode.slugFollowsName) setValue('slugEdited', event.target.value !== '');
             },
           })}
+        />
+
+        <Controller
+          control={control}
+          name="categoryId"
+          render={({ field }) => (
+            <ProductCategoryField
+              ref={field.ref}
+              name={field.name}
+              value={field.value}
+              onChange={(value) => {
+                setCategoryGone(false);
+                field.onChange(value);
+              }}
+              onBlur={field.onBlur}
+              options={categoryOptions.data}
+              loadFailed={categoryOptions.data === undefined && categoryOptions.isError}
+              onRetry={() => void categoryOptions.refetch()}
+              // A pointer down and the focus that follows it make one request, not two.
+              onOpen={() => void categoryOptions.refetch({ cancelRefetch: false })}
+              error={
+                categoryGone ? t('form.errors.categoryGone') : errorText(errors.categoryId?.message)
+              }
+            />
+          )}
         />
 
         <TextAreaField
@@ -406,12 +453,13 @@ function ProductFormView<Input extends CreateProductInput>({ mode }: { mode: For
           <Link className="btn btn--secondary" to={paths.products.getHref()}>
             {t('form.cancel')}
           </Link>
-          {/* Never disabled before a save: AC6 shows the errors on save (S2.14). */}
+          {/* Never disabled before a save: AC6 shows the errors on save (S2.14). Locked
+              only while it saves, or until the options of the Category field load (S4.2). */}
           <button
             type="submit"
             className="btn btn--primary"
             aria-busy={mode.isPending || undefined}
-            aria-disabled={mode.isPending || undefined}
+            aria-disabled={mode.isPending || !categoriesReady || undefined}
           >
             {mode.isPending ? t('form.saving') : t(mode.submitKey)}
           </button>

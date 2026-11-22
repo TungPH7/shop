@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { type CreateProductError, fieldErrorsOf } from '@/features/product/api/create-product';
-import { productKeys } from '@/features/product/api/query-keys';
+import { refreshAfterProductWrite } from '@/features/product/api/refresh-after-product-write';
 import { type AdminProduct, adminProductSchema } from '@/features/product/model/product';
 import { type ProductEditInput } from '@/features/product/model/product-form';
 import { api } from '@/lib/api/api';
@@ -58,8 +58,8 @@ export function useUpdateProduct() {
     mutationFn: updateProduct,
     // The form shows every error itself (S2.3, S2.5, S2.7): no global toast on top.
     meta: { skipGlobalError: true },
-    // The list shows the new name, price and labels. The product itself loads anew
-    // each time the form opens (productQueryOptions).
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: productKeys.lists() }),
+    // The list shows the new name, price and labels, and a new category changes the
+    // counts of two categories.
+    onSuccess: () => refreshAfterProductWrite(queryClient),
   });
 }

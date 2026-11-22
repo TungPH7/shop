@@ -9,7 +9,6 @@ import {
   productFormSchema,
   productFormValuesOf,
   type ProductFormValues,
-  slugFromName,
 } from '@/features/product/model/product-form';
 
 // The form of S2 (US2) checks the Product Rules of docs/specs/SHOP-7/spec.md, like
@@ -26,39 +25,6 @@ function errorsOf(input: ProductFormValues): Record<string, string> {
     result.error.issues.map((issue) => [issue.path.join('.'), issue.message]),
   );
 }
-
-describe('slugFromName', () => {
-  it.each([
-    ['Áo thun cổ tròn', 'ao-thun-co-tron'],
-    ['Đầm maxi đỏ 2026', 'dam-maxi-do-2026'],
-    ['Quần jean (Nam) – Slim', 'quan-jean-nam-slim'],
-    ['Đầm maxi đỏ', 'dam-maxi-do'],
-  ])('turns the example of the Product Rules %s into %s', (name, slug) => {
-    expect(slugFromName(name)).toBe(slug);
-  });
-
-  it('removes accents written as separate combining marks (NFD)', () => {
-    expect(slugFromName('Áo thun')).toBe('ao-thun');
-  });
-
-  it('drops hyphens at either end and joins every run of other characters into one hyphen', () => {
-    expect(slugFromName('  --Áo   thun!!  ')).toBe('ao-thun');
-  });
-
-  it('cuts at 100 characters and drops a hyphen the cut leaves at the end', () => {
-    const name = `${'a'.repeat(99)} b`;
-
-    expect(slugFromName(name)).toBe('a'.repeat(99));
-  });
-
-  it('is san-pham for a name with no letter or digit, as the api', () => {
-    expect(slugFromName('!!!')).toBe('san-pham');
-  });
-
-  it('is empty while the name is blank, so the slug field stays empty', () => {
-    expect(slugFromName('   ')).toBe('');
-  });
-});
 
 describe('parsePriceInput', () => {
   it.each([
@@ -117,7 +83,16 @@ describe('productFormSchema', () => {
       compareAtPrice: 500000,
       status: 'HIDDEN',
       availability: 'OUT_OF_STOCK',
+      categoryId: null,
     });
+  });
+
+  it('sends the category picked, and null for No category, always (NFR19 of SHOP-81)', () => {
+    const id = '019a9c41-2b3d-7e10-8f2a-3c4d5e6f7a8b';
+
+    expect(productFormDefaults.categoryId).toBe('');
+    expect(productFormSchema.parse(values({ categoryId: id })).categoryId).toBe(id);
+    expect(productFormSchema.parse(values({ categoryId: '' })).categoryId).toBeNull();
   });
 
   it('sends slug null while the slug was not edited by hand, so the api generates it', () => {
@@ -240,6 +215,7 @@ const saved: AdminProduct = {
   compareAtPrice: null,
   status: 'ACTIVE',
   availability: 'IN_STOCK',
+  categoryId: null,
   createdAt: '2026-11-16T02:10:00.000Z',
   updatedAt: '2026-11-16T02:15:30.000Z',
   version: 3,
@@ -256,7 +232,15 @@ describe('productFormValuesOf', () => {
       compareAtPrice: '1.250.000',
       status: 'ACTIVE',
       availability: 'IN_STOCK',
+      categoryId: '',
     });
+  });
+
+  it('AC9 fills the Category field with the saved category, or No category', () => {
+    const id = '019a9c41-2b3d-7e10-8f2a-3c4d5e6f7a8b';
+
+    expect(productFormValuesOf({ ...saved, categoryId: id }).categoryId).toBe(id);
+    expect(productFormValuesOf({ ...saved, categoryId: null }).categoryId).toBe('');
   });
 
   it('leaves the description and the compare-at price empty when the product has none', () => {
@@ -294,6 +278,7 @@ describe('productEditSchema', () => {
       compareAtPrice: 250000,
       status: 'ACTIVE',
       availability: 'IN_STOCK',
+      categoryId: null,
     });
   });
 
