@@ -33,7 +33,6 @@ import com.tungph7.learnpostgres.feature.category.repository.CategoryRepository;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
-import com.tungph7.learnpostgres.feature.product.domain.ProductSlugs;
 import com.tungph7.learnpostgres.feature.product.dto.CreateProductRequest;
 import com.tungph7.learnpostgres.feature.product.dto.UpdateProductRequest;
 import com.tungph7.learnpostgres.feature.product.repository.ProductQueryRepository;
@@ -127,24 +126,6 @@ class AdminProductServiceTest {
         .startsWith("ao-thun", "ao-thun-2", "ao-thun-3")
         .endsWith("ao-thun-999", "ao-thun-1000")
         .doesNotHaveDuplicates();
-  }
-
-  @Test
-  void slugCandidates_ofABaseCutForItsSuffix_areTheSlugsWithSuffixBuildsAndKeep100Characters() {
-    String base = "ao-thun-" + "a".repeat(87) + "-bcde";
-
-    List<String> candidates = AdminProductService.slugCandidates(base);
-
-    assertThat(candidates.get(0)).isEqualTo(base);
-    for (int number = 2; number <= AdminProductService.MAX_SLUG_NUMBER; number++) {
-      assertThat(candidates.get(number - 1))
-          .isEqualTo(ProductSlugs.withSuffix(base, number))
-          .endsWith("-" + number);
-    }
-    assertThat(candidates)
-        .hasSize(AdminProductService.MAX_SLUG_NUMBER)
-        .doesNotHaveDuplicates()
-        .allSatisfy(slug -> assertThat(ProductSlugs.isValid(slug)).as(slug).isTrue());
   }
 
   @Test

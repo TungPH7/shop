@@ -74,7 +74,20 @@ class SlugsTest {
 
   @ParameterizedTest
   @ValueSource(
-      strings = {"", "AO", "Ao-thun", "áo", "ao thun", "-ao", "ao-", "ao--thun", "ao_thun"})
+      strings = {
+        "",
+        "AO",
+        "Ao-thun",
+        "áo",
+        "ao thun",
+        "-ao",
+        "ao-",
+        "ao--thun",
+        "-a--b-",
+        "ao_thun",
+        "ao%",
+        "ao-thun\n"
+      })
   void isValid_refusesAnythingElse(String slug) {
     assertThat(Slugs.isValid(slug)).isFalse();
   }
@@ -108,6 +121,17 @@ class SlugsTest {
   }
 
   @Test
+  void withSuffix_cutInsideAHyphen_dropsTheHyphenBeforeTheSuffix() {
+    // Cut to 97 characters for "-10", the base would end with the hyphen at index 96.
+    String base = "a".repeat(96) + "-bcdef";
+
+    String slug = Slugs.withSuffix(base, 10);
+
+    assertThat(slug).isEqualTo("a".repeat(96) + "-10");
+    assertThat(Slugs.isValid(slug)).isTrue();
+  }
+
+  @Test
   void withSuffix_below2_isAProgrammingError() {
     assertThatThrownBy(() -> Slugs.withSuffix("ao", 1))
         .isInstanceOf(IllegalArgumentException.class);
@@ -120,5 +144,22 @@ class SlugsTest {
     assertThat(candidates).hasSize(1000);
     assertThat(candidates.subList(0, 3)).containsExactly("ao-thun", "ao-thun-2", "ao-thun-3");
     assertThat(candidates.getLast()).isEqualTo("ao-thun-1000");
+  }
+
+  @Test
+  void candidates_ofABaseCutForItsSuffix_areEachWithSuffixAndKeepTheFormat() {
+    String base = "ao-thun-" + "a".repeat(87) + "-bcde";
+
+    List<String> candidates = Slugs.candidates(base, 1000);
+
+    assertThat(candidates.getFirst()).isEqualTo(base);
+    for (int number = 2; number <= 1000; number++) {
+      assertThat(candidates.get(number - 1))
+          .isEqualTo(Slugs.withSuffix(base, number))
+          .endsWith("-" + number);
+    }
+    assertThat(candidates)
+        .doesNotHaveDuplicates()
+        .allSatisfy(slug -> assertThat(Slugs.isValid(slug)).as(slug).isTrue());
   }
 }

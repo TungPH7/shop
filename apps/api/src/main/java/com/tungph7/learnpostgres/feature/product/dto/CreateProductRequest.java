@@ -10,11 +10,11 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import com.tungph7.learnpostgres.common.text.FormText;
+import com.tungph7.learnpostgres.common.text.SlugFormat;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
 import com.tungph7.learnpostgres.feature.product.validation.ValidCategoryId;
 import com.tungph7.learnpostgres.feature.product.validation.ValidCompareAtPrice;
-import com.tungph7.learnpostgres.feature.product.validation.ValidSlug;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 
@@ -35,7 +35,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
  *
  * @param name trimmed, then 1–150 characters
  * @param slug absent or {@code null}: generated from the name; otherwise the slug format, at most
- *     100 characters ({@link ValidSlug})
+ *     100 characters ({@link SlugFormat})
  * @param description at most 5,000 characters, kept verbatim; empty or only white space is {@code
  *     null}
  * @param price whole dong, 1–999,999,999
@@ -53,7 +53,7 @@ public record CreateProductRequest(
             max = CreateProductRequest.NAME_MAX_LENGTH,
             message = "must be at most 150 characters")
         String name,
-    @ValidSlug String slug,
+    @SlugFormat String slug,
     @Size(
             max = CreateProductRequest.DESCRIPTION_MAX_LENGTH,
             message = "must be at most 5000 characters")

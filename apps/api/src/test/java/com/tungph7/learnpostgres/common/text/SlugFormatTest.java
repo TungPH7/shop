@@ -1,4 +1,4 @@
-package com.tungph7.learnpostgres.feature.product.validation;
+package com.tungph7.learnpostgres.common.text;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -16,13 +16,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * {@link ValidSlug}: the slug rule of {@code ProductSlugs.isValid}, as a constraint on the slug of
- * the add only (SHOP-46). The edit keeps a stored slug out of the format (NFR16), so its request
- * body has no such constraint; the service of the edit (US3, SHOP-34) checks a changed slug.
+ * {@link SlugFormat}: the slug rule of {@link Slugs#isValid}, as a constraint on the slug of the
+ * add and the edit of a category, and of the add of a product. The edit of a product keeps a stored
+ * slug out of the format (NFR16), so its request body has no such constraint; its service checks a
+ * changed slug.
  */
-class ValidSlugTest {
+class SlugFormatTest {
 
-  record Body(@ValidSlug String slug) {}
+  record Body(@SlugFormat String slug) {}
 
   private static ValidatorFactory factory;
   private static Validator validator;
