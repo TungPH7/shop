@@ -11,6 +11,7 @@ import {
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 
 import { JsonLd } from '~/components/seo/json-ld';
+import { Breadcrumb } from '~/components/ui/breadcrumb';
 import { ProductDetail, ProductDetailSkeleton } from '~/features/product/components/product-detail';
 import type { StoreProduct } from '~/features/product/model/product';
 import { ApiError } from '~/lib/http/api-error';
@@ -38,7 +39,8 @@ vi.mock('next-intl/server', () => ({ getTranslations, setRequestLocale }));
 // alternates.test.ts (localePrefix 'always'). The real one is checked by the E2E of AC27.
 vi.mock('~/i18n/navigation', () => ({
   Link: () => null,
-  getPathname: ({ locale, href }: { locale: string; href: string }) => `/${locale}${href}`,
+  getPathname: ({ locale, href }: { locale: string; href: string }) =>
+    href === '/' ? `/${locale}` : `/${locale}${href}`,
 }));
 
 const SITE_DESCRIPTION = 'Câu chung của site.';
@@ -78,23 +80,39 @@ async function renderView(params: Params) {
   return render(view.props);
 }
 
-/** The elements the view returns: the JSON-LD block, then the product. */
+/**
+ * The elements the view returns: the JSON-LD `Product`, the JSON-LD `BreadcrumbList` and the breadcrumb of S8.2 from the
+ * same crumbs, then the product.
+ */
 async function partsOf(params: Params) {
   const element = await renderView(params);
   if (element.type !== Fragment) throw new Error('not a fragment');
-  const [ld, detail] = Children.toArray((element.props as { children: ReactNode }).children);
+  const [ld, breadcrumbLd, breadcrumb, detail] = Children.toArray(
+    (element.props as { children: ReactNode }).children,
+  );
   if (
     !isValidElement<{ data: unknown }>(ld) ||
+    !isValidElement<{ data: unknown }>(breadcrumbLd) ||
+    !isValidElement<{ items: unknown; label: string }>(breadcrumb) ||
     !isValidElement<{ product: StoreProduct }>(detail)
   ) {
     throw new Error('no parts');
   }
-  return { ld, detail };
+  return { ld, breadcrumbLd, breadcrumb, detail };
 }
+
+/** The words the page reads, by namespace: the site sentence and Home of Seo, the name of the breadcrumb. */
+const MESSAGES: Record<string, Record<string, string>> = {
+  Seo: { siteDescription: SITE_DESCRIPTION, home: 'Trang chủ' },
+  Breadcrumb: { label: 'Đường dẫn trang' },
+};
 
 beforeEach(() => {
   getStoreProduct.mockResolvedValue(shirt);
-  getTranslations.mockResolvedValue((key) => (key === 'siteDescription' ? SITE_DESCRIPTION : key));
+  getTranslations.mockImplementation((scope) => {
+    const namespace = typeof scope === 'string' ? scope : scope.namespace;
+    return Promise.resolve((key) => MESSAGES[namespace]?.[key] ?? key);
+  });
 });
 
 test('is a <main> wider than other pages, for the two columns of S5', () => {
@@ -246,5 +264,93 @@ describe('generateMetadata', () => {
 
     await expect(metadataOf('vi', 'ao-thun-co-tron')).rejects.toMatchObject({ status: 503 });
     expect(notFound).not.toHaveBeenCalled();
+  });
+});
+
+describe('the breadcrumb S8.2 of SHOP-81', () => {
+  const ao = { name: 'Áo', slug: 'ao' };
+
+  test('shows Trang chủ › Áo › Áo thun cổ tròn above the back link, named "Đường dẫn trang" (AC20)', async () => {
+    getStoreProduct.mockResolvedValue({ ...shirt, category: ao });
+
+    const { breadcrumb, detail } = await partsOf(
+      Promise.resolve({ locale: 'vi', slug: 'AO-THUN-CO-TRON' }),
+    );
+
+    expect(breadcrumb.type).toBe(Breadcrumb);
+    expect(breadcrumb.props).toEqual({
+      items: [
+        { name: 'Trang chủ', url: 'https://site.example.test/vi' },
+        { name: 'Áo', url: 'https://site.example.test/vi/categories/ao' },
+        { name: 'Áo thun cổ tròn', url: 'https://site.example.test/vi/products/ao-thun-co-tron' },
+      ],
+      label: 'Đường dẫn trang',
+    });
+    // The back link "← Sản phẩm" of S8.3 is the first element of ProductDetail, so it stays under the breadcrumb.
+    expect(detail.type).toBe(ProductDetail);
+  });
+
+  test('adds a JSON-LD BreadcrumbList of the same three crumbs, with absolute URLs of the locale of the page (AC20)', async () => {
+    getStoreProduct.mockResolvedValue({ ...shirt, category: ao });
+
+    const { ld, breadcrumbLd } = await partsOf(
+      Promise.resolve({ locale: 'en', slug: 'ao-thun-co-tron' }),
+    );
+
+    expect(breadcrumbLd.type).toBe(JsonLd);
+    expect(breadcrumbLd.props.data).toEqual({
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        {
+          '@type': 'ListItem',
+          position: 1,
+          name: 'Trang chủ',
+          item: 'https://site.example.test/en',
+        },
+        {
+          '@type': 'ListItem',
+          position: 2,
+          name: 'Áo',
+          item: 'https://site.example.test/en/categories/ao',
+        },
+        {
+          '@type': 'ListItem',
+          position: 3,
+          name: 'Áo thun cổ tròn',
+          item: 'https://site.example.test/en/products/ao-thun-co-tron',
+        },
+      ],
+    });
+    // The JSON-LD Product of SHOP-7 stays, a block of its own.
+    expect(ld.props.data).toMatchObject({ '@type': 'Product' });
+  });
+
+  test('has two crumbs, Trang chủ › the product, for a product with no category or a hidden one (AC21)', async () => {
+    getStoreProduct.mockResolvedValue({ ...shirt, category: null });
+
+    const { breadcrumb, breadcrumbLd } = await partsOf(
+      Promise.resolve({ locale: 'vi', slug: 'ao-thun-co-tron' }),
+    );
+
+    const crumbs = [
+      { name: 'Trang chủ', url: 'https://site.example.test/vi' },
+      { name: 'Áo thun cổ tròn', url: 'https://site.example.test/vi/products/ao-thun-co-tron' },
+    ];
+    expect(breadcrumb.props.items).toEqual(crumbs);
+    expect(breadcrumbLd.props.data).toMatchObject({
+      itemListElement: [
+        { position: 1, name: 'Trang chủ', item: crumbs[0]?.url },
+        { position: 2, name: 'Áo thun cổ tròn', item: crumbs[1]?.url },
+      ],
+    });
+  });
+
+  test('reads the category only from the product, with no other request (NFR6)', async () => {
+    getStoreProduct.mockResolvedValue({ ...shirt, category: ao });
+
+    await partsOf(Promise.resolve({ locale: 'vi', slug: 'ao-thun-co-tron' }));
+
+    expect(getStoreProduct).toHaveBeenCalledTimes(1);
   });
 });

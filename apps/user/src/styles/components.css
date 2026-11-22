@@ -1057,6 +1057,57 @@ a.product-card:hover {
   }
 }
 
+/* --- Category links S7.3 and S7.4 (src/features/category/components/category-links.tsx, SHOP-84) ------ */
+
+/* Under the title and above the search and the sort: 12 from the title (its margin is 16, so 4 back) and 18 above the
+   search. The label 13.5/600 in --muted-foreground, on the row of the links from 768px, on a row of its own under it. */
+.category-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  margin: calc(var(--space-3) - var(--space-4)) 0 var(--space-4-5);
+}
+
+.category-links__label {
+  margin: 0;
+  color: var(--muted-foreground);
+  font: var(--fw-semibold) var(--fs-md) / var(--lh-base) var(--font);
+}
+
+/* One small secondary button per category, 8 apart, wrapping when narrow; every category, with no Load more. */
+.category-links__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.category-links__list > li {
+  min-width: 0;
+}
+
+/* A long name wraps inside its button instead of overflowing, so 320px has no horizontal scroll. */
+.category-links__link {
+  max-width: 100%;
+  height: auto;
+  min-height: 34px;
+  padding-block: var(--space-1);
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (width < 768px) {
+  .category-links {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 /* --- Fallbacks -------------------------------------------------------------- */
 
 /* No backdrop-filter, or the person asks for less transparency: solid surfaces. */

@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
 import { JsonLd } from '~/components/seo/json-ld';
+import { CategoryLinks } from '~/features/category/components/category-links';
 import { ProductResults } from '~/features/product/components/product-results';
 import { ProductResultsSkeleton } from '~/features/product/components/product-results-skeleton';
 import { localizedUrl } from '~/lib/seo/alternates';
@@ -34,6 +35,10 @@ export async function generateMetadata({
  *
  * `searchParams` (a Promise in Next 16) is not awaited here but passed down, so only the part inside the `<Suspense>`
  * is dynamic.
+ *
+ * The row of category links of SHOP-81 (S7.3) sits in the same `<Suspense>`, above the results: its request to the api
+ * runs side by side with theirs, and it shows with the grid, never pushing it down after (NFR4). It hides itself when
+ * its request fails, so the results still show (NFR20). The title, the metadata and the BreadcrumbList do not change.
  */
 export default async function ProductsPage({
   params,
@@ -58,6 +63,7 @@ export default async function ProductsPage({
       />
       <h1>{t('title')}</h1>
       <Suspense fallback={<ProductResultsSkeleton />}>
+        <CategoryLinks />
         <ProductResults searchParams={searchParams} />
       </Suspense>
     </main>

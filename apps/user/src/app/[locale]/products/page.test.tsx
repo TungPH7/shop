@@ -5,6 +5,7 @@ import { createTranslator } from 'next-intl';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, test, vi } from 'vitest';
 
+import { CategoryLinks } from '~/features/category/components/category-links';
 import { ProductResults } from '~/features/product/components/product-results';
 import { ProductResultsSkeleton } from '~/features/product/components/product-results-skeleton';
 
@@ -38,6 +39,9 @@ vi.mock('~/i18n/navigation', () => ({
 }));
 vi.mock('~/features/product/components/product-results', () => ({
   ProductResults: () => <p>results stub</p>,
+}));
+vi.mock('~/features/category/components/category-links', () => ({
+  CategoryLinks: () => <p>category links stub</p>,
 }));
 vi.mock('~/features/product/components/product-results-skeleton', () => ({
   ProductResultsSkeleton: () => <p>skeleton stub</p>,
@@ -79,10 +83,12 @@ test('puts the BreadcrumbList Trang chủ › Sản phẩm in the shell, with th
   });
 });
 
-test('renders the results after the title', async () => {
+test('renders the category links, then the results, after the title (S7.3)', async () => {
   const html = await renderPage('en');
 
-  expect(html).toMatch(/<h1>Products<\/h1><p>results stub<\/p><\/main>$/);
+  expect(html).toMatch(
+    /<h1>Products<\/h1><p>category links stub<\/p><p>results stub<\/p><\/main>$/,
+  );
 });
 
 test('gives the page the width of the frame, for a grid of up to 4 columns', async () => {
@@ -91,7 +97,7 @@ test('gives the page the width of the frame, for a grid of up to 4 columns', asy
   expect(html).toMatch(/^<main class="products-page">/);
 });
 
-test('puts the results, and only them, inside a <Suspense> with the skeleton of S4.5, with the searchParams of the page', async () => {
+test('puts the category links and the results, and only them, inside a <Suspense> with the skeleton of S4.5 (NFR4)', async () => {
   const searchParams = Promise.resolve({ q: 'tea' });
   const page = (await ProductsPage({
     params: Promise.resolve({ locale: 'en' }),
@@ -106,7 +112,9 @@ test('puts the results, and only them, inside a <Suspense> with the skeleton of 
   expect(boundaries).toHaveLength(1);
   const fallback = (boundaries[0]?.props as { fallback?: unknown }).fallback;
   expect(isValidElement(fallback) && fallback.type).toBe(ProductResultsSkeleton);
-  const [results] = Children.toArray(boundaries[0]?.props.children);
+  const [links, results, ...others] = Children.toArray(boundaries[0]?.props.children);
+  expect(others).toEqual([]);
+  expect(isValidElement(links) && links.type).toBe(CategoryLinks);
   expect(isValidElement(results) && results.type).toBe(ProductResults);
   expect(isValidElement<{ searchParams: unknown }>(results) && results.props.searchParams).toBe(
     searchParams,
