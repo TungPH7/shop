@@ -119,7 +119,8 @@ class StoreProductControllerWebMvcTest {
             "compareAtPrice",
             "availability",
             "description",
-            "updatedAt");
+            "updatedAt",
+            "category");
   }
 
   @Test
@@ -134,7 +135,8 @@ class StoreProductControllerWebMvcTest {
                 null,
                 ProductAvailability.OUT_OF_STOCK,
                 null,
-                Instant.parse("2026-11-16T02:15:30Z")));
+                Instant.parse("2026-11-16T02:15:30Z"),
+                null));
 
     String body =
         mockMvc
@@ -611,7 +613,8 @@ class StoreProductControllerWebMvcTest {
         250_000L,
         ProductAvailability.IN_STOCK,
         "Áo thun cotton 100%.\nCổ tròn, tay ngắn.",
-        Instant.parse("2026-11-16T02:15:30Z"));
+        Instant.parse("2026-11-16T02:15:30Z"),
+        null);
   }
 
   private static StoreProductSummary sampleSummary() {

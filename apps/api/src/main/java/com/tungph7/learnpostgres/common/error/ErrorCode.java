@@ -34,6 +34,7 @@ public enum ErrorCode {
 
   // ==== 404 NOT FOUND ==============================================
   PRODUCT_NOT_FOUND(HttpStatus.NOT_FOUND, "Product not found"),
+  CATEGORY_NOT_FOUND(HttpStatus.NOT_FOUND, "Category not found"),
   RESOURCE_NOT_FOUND(HttpStatus.NOT_FOUND, "Resource not found"),
 
   // ==== 405 METHOD NOT ALLOWED =====================================
@@ -41,6 +42,8 @@ public enum ErrorCode {
 
   // ==== 409 CONFLICT ===============================================
   PRODUCT_SLUG_DUPLICATED(HttpStatus.CONFLICT, "Product slug already exists"),
+  CATEGORY_NAME_DUPLICATED(HttpStatus.CONFLICT, "Category name already exists"),
+  CATEGORY_SLUG_DUPLICATED(HttpStatus.CONFLICT, "Category slug already exists"),
   OPTIMISTIC_LOCK_CONFLICT(HttpStatus.CONFLICT, "Resource was modified by another transaction"),
   DATA_INTEGRITY_VIOLATION(HttpStatus.CONFLICT, "Data integrity violation"),
 

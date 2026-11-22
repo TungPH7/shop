@@ -276,8 +276,18 @@ public class GlobalExceptionHandler {
   }
 
   /**
-   * UNIQUE / FK / NOT NULL constraint violations, etc. Attempts to detect specific cases (UNIQUE on
-   * slug → 409 with a dedicated code; anything else → generic 409).
+   * UNIQUE / FK / NOT NULL constraint violations, etc. Attempts to detect specific cases, the last
+   * guard behind the checks of the services (NFR11 of SHOP-81):
+   *
+   * <ul>
+   *   <li>UNIQUE on the slug of a product → 409 {@code PRODUCT_SLUG_DUPLICATED};
+   *   <li>UNIQUE on the name or the slug of a category → 409 {@code CATEGORY_NAME_DUPLICATED} or
+   *       {@code CATEGORY_SLUG_DUPLICATED}, one code per field, so the form shows the error under
+   *       the right field (AC4);
+   *   <li>the foreign key of the category of a product → 400 {@code VALIDATION_FAILED} on the field
+   *       {@code categoryId}, the body of the check before the write (AC10);
+   *   <li>anything else → generic 409.
+   * </ul>
    *
    * <p>Do NOT echo {@code ex.getMessage()} — Postgres error messages contain SQL fragments and
    * internal constraint names.
@@ -295,11 +305,33 @@ public class GlobalExceptionHandler {
       DataIntegrityViolationException ex, HttpServletRequest request) {
     String constraint = ConstraintViolations.nameOf(ex).orElse("unknown");
 
+    if (ConstraintViolations.isViolationOf(ex, ConstraintViolations.PRODUCT_CATEGORY_FK)) {
+      log.warn(
+          "Data integrity violation at {}: code={} constraint={}",
+          request.getRequestURI(),
+          ErrorCode.VALIDATION_FAILED,
+          constraint);
+      BadRequestException invalidCategory =
+          BadRequestException.ofField(
+              ConstraintViolations.CATEGORY_ID_FIELD,
+              null,
+              ConstraintViolations.NOT_AN_EXISTING_CATEGORY,
+              ex);
+      return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+          .body(problemFactory.from(invalidCategory, request));
+    }
+
     ErrorCode code;
     String detail;
     if (ConstraintViolations.isViolationOf(ex, ConstraintViolations.PRODUCT_SLUG_UNIQUE)) {
       code = ErrorCode.PRODUCT_SLUG_DUPLICATED;
       detail = "Product slug already exists.";
+    } else if (ConstraintViolations.isViolationOf(ex, ConstraintViolations.CATEGORY_NAME_UNIQUE)) {
+      code = ErrorCode.CATEGORY_NAME_DUPLICATED;
+      detail = "Category name already exists.";
+    } else if (ConstraintViolations.isViolationOf(ex, ConstraintViolations.CATEGORY_SLUG_UNIQUE)) {
+      code = ErrorCode.CATEGORY_SLUG_DUPLICATED;
+      detail = "Category slug already exists.";
     } else {
       code = ErrorCode.DATA_INTEGRITY_VIOLATION;
       detail = "Data integrity violation.";

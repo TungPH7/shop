@@ -316,6 +316,125 @@ class GlobalExceptionHandlerTest {
         .doesNotContain("Ao thun SHOP53");
   }
 
+  // ---- The constraints of the categories (SHOP-82; plan of SHOP-81, API Contract, NFR11) ----
+
+  @Test
+  void handleDataIntegrity_ofTheUniqueNameOfACategory_returns409CategoryNameDuplicated() {
+    ResponseEntity<ProblemDetail> resp =
+        handler.handleDataIntegrity(
+            violationOf(
+                "categories_name_unique",
+                "ERROR: duplicate key value violates unique constraint"
+                    + " \"categories_name_unique\"\n  Detail: Key (name)=(Áo SHOP82) already"
+                    + " exists."),
+            request());
+
+    assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(resp.getBody().getProperties()).containsEntry("code", "CATEGORY_NAME_DUPLICATED");
+    assertThat(resp.getBody().getDetail()).isEqualTo("Category name already exists.");
+    assertThat(textOf(resp.getBody()))
+        .doesNotContain("categories_name_unique")
+        .doesNotContain("Áo SHOP82")
+        .doesNotContain("duplicate key");
+  }
+
+  @Test
+  void handleDataIntegrity_ofTheUniqueSlugOfACategory_returns409CategorySlugDuplicated() {
+    ResponseEntity<ProblemDetail> resp =
+        handler.handleDataIntegrity(
+            violationOf(
+                "categories_slug_unique",
+                "ERROR: duplicate key value violates unique constraint"
+                    + " \"categories_slug_unique\"\n  Detail: Key (slug)=(ao-shop82) already"
+                    + " exists."),
+            request());
+
+    assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(resp.getBody().getProperties()).containsEntry("code", "CATEGORY_SLUG_DUPLICATED");
+    assertThat(resp.getBody().getDetail()).isEqualTo("Category slug already exists.");
+    assertThat(textOf(resp.getBody()))
+        .doesNotContain("categories_slug_unique")
+        .doesNotContain("ao-shop82")
+        .doesNotContain("duplicate key");
+  }
+
+  /**
+   * AC10: a category deleted between the check of {@code categoryId} and the write of the product
+   * breaks {@code products_category_fk}. That is a 400 on the field {@code categoryId}, the body of
+   * the check, not a 409 or a 500.
+   */
+  @Test
+  void handleDataIntegrity_ofTheForeignKeyOfTheCategory_returns400OnTheFieldCategoryId() {
+    ResponseEntity<ProblemDetail> resp =
+        handler.handleDataIntegrity(
+            violationOf(
+                "products_category_fk",
+                "ERROR: insert or update on table \"products\" violates foreign key constraint"
+                    + " \"products_category_fk\"\n  Detail: Key"
+                    + " (category_id)=(019a9c41-2b3d-7e10-8f2a-3c4d5e6f7a8b) is not present in"
+                    + " table \"categories\"."),
+            request());
+
+    assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(resp.getBody().getProperties()).containsEntry("code", "VALIDATION_FAILED");
+    assertThat(resp.getBody().getDetail()).isEqualTo("Validation failed for 1 field(s).");
+    assertThat(resp.getBody().getProperties().get("errors"))
+        .asInstanceOf(InstanceOfAssertFactories.list(Map.class))
+        .singleElement()
+        .satisfies(
+            error -> {
+              assertThat(error).containsEntry("field", "categoryId");
+              assertThat(error).containsEntry("message", "must be an existing category");
+              assertThat(error.get("rejectedValue")).isNull();
+            });
+    assertThat(textOf(resp.getBody()))
+        .doesNotContain("products_category_fk")
+        .doesNotContain("categories\"")
+        .doesNotContain("insert or update");
+  }
+
+  @Test
+  @ExtendWith(OutputCaptureExtension.class)
+  void handleDataIntegrity_ofTheForeignKeyOfTheCategory_logsTheConstraintAndNoValue(
+      CapturedOutput output) {
+    handler.handleDataIntegrity(
+        violationOf(
+            "products_category_fk",
+            "Detail: Key (category_id)=(019a9c41-2b3d-7e10-8f2a-3c4d5e6f7a8b) is not present"),
+        request());
+
+    assertThat(output.getOut())
+        .contains("code=VALIDATION_FAILED constraint=products_category_fk")
+        .doesNotContain("019a9c41-2b3d-7e10-8f2a-3c4d5e6f7a8b");
+  }
+
+  @Test
+  void theThreeCategoryCodesHaveTheirStatus() {
+    assertThat(ErrorCode.CATEGORY_NOT_FOUND.defaultStatus()).isEqualTo(HttpStatus.NOT_FOUND);
+    assertThat(ErrorCode.CATEGORY_NAME_DUPLICATED.defaultStatus()).isEqualTo(HttpStatus.CONFLICT);
+    assertThat(ErrorCode.CATEGORY_SLUG_DUPLICATED.defaultStatus()).isEqualTo(HttpStatus.CONFLICT);
+  }
+
+  /** A violation of {@code constraint} as Hibernate wraps it, with the words of the driver. */
+  private static DataIntegrityViolationException violationOf(
+      String constraint, String driverMessage) {
+    return new DataIntegrityViolationException(
+        "could not execute statement [" + driverMessage + "] [insert into app.categories ...]",
+        new ConstraintViolationException(
+            "could not execute statement", new SQLException(driverMessage), constraint));
+  }
+
+  /** Every text of a response body: what a client could read. */
+  private static String textOf(ProblemDetail body) {
+    return String.join(
+        "\n",
+        String.valueOf(body.getType()),
+        String.valueOf(body.getTitle()),
+        String.valueOf(body.getDetail()),
+        String.valueOf(body.getInstance()),
+        String.valueOf(body.getProperties()));
+  }
+
   @Test
   void handleAny_returns_500_generic() {
     Exception ex = new RuntimeException("unexpected");

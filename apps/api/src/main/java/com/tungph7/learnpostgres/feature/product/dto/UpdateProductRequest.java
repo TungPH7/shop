@@ -12,7 +12,10 @@ import jakarta.validation.constraints.Size;
 import com.tungph7.learnpostgres.common.text.FormText;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
+import com.tungph7.learnpostgres.feature.product.validation.ValidCategoryId;
 import com.tungph7.learnpostgres.feature.product.validation.ValidCompareAtPrice;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * The body of {@code PUT /api/admin/products/{id}}: {@code UpdateProductInput} of the API Contract
@@ -35,6 +38,8 @@ import com.tungph7.learnpostgres.feature.product.validation.ValidCompareAtPrice;
  * @param status required
  * @param availability required
  * @param version the version of the product the form read: another one is a 409 (AC13)
+ * @param categoryId absent: keep the category of the product; {@code null}: no category; otherwise
+ *     the id of an existing category, hidden too (plan of SHOP-81, Architecture Decisions 7)
  */
 @ValidCompareAtPrice
 public record UpdateProductRequest(
@@ -59,12 +64,26 @@ public record UpdateProductRequest(
         BigDecimal compareAtPrice,
     @NotNull(message = "must not be null") ProductStatus status,
     @NotNull(message = "must not be null") ProductAvailability availability,
-    @NotNull(message = "must not be null") Long version)
+    @NotNull(message = "must not be null") Long version,
+    @Schema(
+            type = "string",
+            format = "uuid",
+            nullable = true,
+            description =
+                "Absent: the product keeps its category. null: no category. Else the id of an"
+                    + " existing category, visible or hidden; any other value is a field error on"
+                    + " categoryId")
+        @ValidCategoryId
+        CategoryIdField categoryId)
     implements ValidCompareAtPrice.Prices {
 
-  /** Trims the name, and turns a blank description into {@code null}, as the form does. */
+  /**
+   * Trims the name, and turns a blank description into {@code null}, as the form does. A {@code
+   * null} category field, which Jackson never gives, is an absent one.
+   */
   public UpdateProductRequest {
     name = FormText.trim(name);
     description = FormText.isBlank(description) ? null : description;
+    categoryId = categoryId == null ? CategoryIdField.ABSENT : categoryId;
   }
 }

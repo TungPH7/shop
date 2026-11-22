@@ -24,6 +24,7 @@ import com.tungph7.learnpostgres.common.error.ConstraintViolations;
 import com.tungph7.learnpostgres.common.error.ErrorCode;
 import com.tungph7.learnpostgres.common.error.NotFoundException;
 import com.tungph7.learnpostgres.common.logging.CorrelationContext;
+import com.tungph7.learnpostgres.feature.category.repository.CategoryRepository;
 import com.tungph7.learnpostgres.feature.product.domain.Product;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductAvailability;
 import com.tungph7.learnpostgres.feature.product.domain.Product.ProductStatus;
@@ -85,16 +86,19 @@ public class AdminProductService {
   private final ProductQueryRepository queryRepository;
   private final CorrelationContext correlation;
   private final EntityManager entityManager;
+  private final CategoryRepository categoryRepository;
 
   public AdminProductService(
       ProductRepository repository,
       ProductQueryRepository queryRepository,
       CorrelationContext correlation,
-      EntityManager entityManager) {
+      EntityManager entityManager,
+      CategoryRepository categoryRepository) {
     this.repository = repository;
     this.queryRepository = queryRepository;
     this.correlation = correlation;
     this.entityManager = entityManager;
+    this.categoryRepository = categoryRepository;
   }
 
   /**
@@ -105,8 +109,11 @@ public class AdminProductService {
    *     a generated slug kept being taken by adds at the same time
    */
   public AdminProduct create(CreateProductRequest request) {
+    UUID categoryId = existingCategory(request.categoryId());
     Product saved =
-        request.slug() != null ? createWithTypedSlug(request) : createWithGeneratedSlug(request);
+        request.slug() != null
+            ? createWithTypedSlug(request, categoryId)
+            : createWithGeneratedSlug(request, categoryId);
     log.info(
         "Product created: operation=create id={} slug={} correlationId={}",
         saved.getId(),
@@ -171,6 +178,12 @@ public class AdminProductService {
    * version = ?}, and the second edit is an {@code ObjectOptimisticLockingFailureException}, which
    * {@code GlobalExceptionHandler} makes the same 409.
    *
+   * <p>The category (plan of SHOP-81, Architecture Decisions 7, NFR19): an absent {@code
+   * categoryId} keeps the category of the product, {@code null} drops it, and an id must be an
+   * existing category, hidden too (400 on {@code categoryId}). It is checked after the slug format
+   * and before the version, the 400s before the 409s. A category deleted between the check and the
+   * write breaks {@code products_category_fk}, which is the same 400 (AC10).
+   *
    * <p>After the write the product is read again, since the trigger {@code
    * trg_products_set_updated_at} sets {@code updated_at} in the database: the response then shows
    * the instant a later read shows.
@@ -178,6 +191,8 @@ public class AdminProductService {
    * @throws NotFoundException {@code PRODUCT_NOT_FOUND} when no product has this id
    * @throws BadRequestException {@code VALIDATION_FAILED} on the field {@code slug}, when the slug
    *     changes to one out of the format
+   * @throws BadRequestException {@code VALIDATION_FAILED} on the field {@code categoryId}, when no
+   *     category has the id sent
    * @throws ConflictException {@code OPTIMISTIC_LOCK_CONFLICT} when the version is not the stored
    *     one; {@code PRODUCT_SLUG_DUPLICATED} when another product has the new slug
    */
@@ -192,6 +207,10 @@ public class AdminProductService {
               ? ValidSlug.TOO_LONG
               : ValidSlug.WRONG_FORMAT);
     }
+    UUID categoryId =
+        request.categoryId().present()
+            ? existingCategory(request.categoryId().value())
+            : product.getCategoryId();
     if (!product.getVersion().equals(request.version())) {
       throw new ConflictException(ErrorCode.OPTIMISTIC_LOCK_CONFLICT, VERSION_CHANGED);
     }
@@ -208,13 +227,14 @@ public class AdminProductService {
     product.setCompareAtPriceVnd(toLong(request.compareAtPrice()));
     product.setStatus(request.status());
     product.setAvailability(request.availability());
+    product.setCategoryId(categoryId);
     try {
       repository.saveAndFlush(product);
     } catch (DataIntegrityViolationException e) {
       if (isSlugTaken(e)) {
         throw slugTaken(e);
       }
-      throw e;
+      throw categoryGoneOrItself(e, request.categoryId().value());
     }
     entityManager.refresh(product);
 
@@ -274,6 +294,44 @@ public class AdminProductService {
     }
   }
 
+  /**
+   * The id of the category a request names, checked to exist, hidden too; {@code null} when it
+   * names none. The format is already checked by {@code ValidCategoryId}.
+   *
+   * @throws BadRequestException {@code VALIDATION_FAILED} on the field {@code categoryId} when no
+   *     category has the id (AC10)
+   */
+  private UUID existingCategory(String categoryId) {
+    if (categoryId == null) {
+      return null;
+    }
+    UUID id = UUID.fromString(categoryId);
+    if (!categoryRepository.existsById(id)) {
+      throw categoryGone(categoryId, null);
+    }
+    return id;
+  }
+
+  /**
+   * The 400 on {@code categoryId} when the write broke {@code products_category_fk}, as when the
+   * category was deleted after the check: the body of the check, with the id sent (AC10, NFR11).
+   * Any other violation is passed on as it is.
+   */
+  private static RuntimeException categoryGoneOrItself(
+      DataIntegrityViolationException e, String categoryId) {
+    return ConstraintViolations.isViolationOf(e, ConstraintViolations.PRODUCT_CATEGORY_FK)
+        ? categoryGone(categoryId, e)
+        : e;
+  }
+
+  private static BadRequestException categoryGone(String categoryId, Throwable cause) {
+    return BadRequestException.ofField(
+        ConstraintViolations.CATEGORY_ID_FIELD,
+        categoryId,
+        ConstraintViolations.NOT_AN_EXISTING_CATEGORY,
+        cause);
+  }
+
   private Product find(UUID id) {
     return repository
         .findById(id)
@@ -285,29 +343,29 @@ public class AdminProductService {
     return sent.toLowerCase(Locale.ROOT).equals(stored.toLowerCase(Locale.ROOT));
   }
 
-  private Product createWithTypedSlug(CreateProductRequest request) {
+  private Product createWithTypedSlug(CreateProductRequest request, UUID categoryId) {
     if (repository.existsBySlug(request.slug())) {
       throw slugTaken(null);
     }
     try {
-      return repository.saveAndFlush(newProduct(request, request.slug()));
+      return repository.saveAndFlush(newProduct(request, request.slug(), categoryId));
     } catch (DataIntegrityViolationException e) {
       if (isSlugTaken(e)) {
         throw slugTaken(e);
       }
-      throw e;
+      throw categoryGoneOrItself(e, request.categoryId());
     }
   }
 
-  private Product createWithGeneratedSlug(CreateProductRequest request) {
+  private Product createWithGeneratedSlug(CreateProductRequest request, UUID categoryId) {
     String base = ProductSlugs.fromName(request.name());
     for (int retry = 0; ; retry++) {
       String slug = firstFreeSlug(base);
       try {
-        return repository.saveAndFlush(newProduct(request, slug));
+        return repository.saveAndFlush(newProduct(request, slug, categoryId));
       } catch (DataIntegrityViolationException e) {
         if (!isSlugTaken(e)) {
-          throw e;
+          throw categoryGoneOrItself(e, request.categoryId());
         }
         if (retry == MAX_SLUG_RETRIES) {
           throw slugTaken(e);
@@ -356,15 +414,18 @@ public class AdminProductService {
     return candidates;
   }
 
-  private static Product newProduct(CreateProductRequest request, String slug) {
-    return new Product(
-        request.name(),
-        slug,
-        request.description(),
-        request.price().longValueExact(),
-        toLong(request.compareAtPrice()),
-        request.status() != null ? request.status() : ProductStatus.ACTIVE,
-        request.availability() != null ? request.availability() : ProductAvailability.IN_STOCK);
+  private static Product newProduct(CreateProductRequest request, String slug, UUID categoryId) {
+    Product product =
+        new Product(
+            request.name(),
+            slug,
+            request.description(),
+            request.price().longValueExact(),
+            toLong(request.compareAtPrice()),
+            request.status() != null ? request.status() : ProductStatus.ACTIVE,
+            request.availability() != null ? request.availability() : ProductAvailability.IN_STOCK);
+    product.setCategoryId(categoryId);
+    return product;
   }
 
   private static Long toLong(BigDecimal value) {

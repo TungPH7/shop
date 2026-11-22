@@ -45,9 +45,22 @@ final class MigrationDatabase implements AutoCloseable {
   /** The Flyway target of the check that {@code pgcrypto} is in {@code public} (SHOP-50). */
   static final String V6 = "6";
 
+  /** The Flyway target of the categories, the expand step of {@code v0.4.0} (SHOP-82). */
+  static final String V7 = "7";
+
   /** The migrations of {@code v0.2.0}: the only ones its Flyway resolves. */
   private static final List<String> V0_2_0_MIGRATIONS =
       List.of("V1__init.sql", "V2__app_helpers.sql", "V3__create_products_table.sql");
+
+  /** The migrations of {@code v0.3.0}: the only ones its Flyway resolves. */
+  private static final List<String> V0_3_0_MIGRATIONS =
+      List.of(
+          "V1__init.sql",
+          "V2__app_helpers.sql",
+          "V3__create_products_table.sql",
+          "V4__expand_products_catalog.sql",
+          "V5__gen_uuid_v7_qualify_pgcrypto.sql",
+          "V6__assert_pgcrypto_in_public.sql");
 
   private static final String MIGRATIONS = "db/migration/";
   private static final String INIT_SCRIPT = "db/init/test-init.sql";
@@ -110,7 +123,20 @@ final class MigrationDatabase implements AutoCloseable {
    * ignoreMigrationPatterns} keeps its default, {@code *:future}, as {@code application*.yml} does.
    */
   Flyway flywayOfV020(Path folder) {
-    for (String file : V0_2_0_MIGRATIONS) {
+    return flywayOver(V0_2_0_MIGRATIONS, folder);
+  }
+
+  /**
+   * Flyway as {@code v0.3.0} runs it after a rollback: the same settings, but only V1–V6 to
+   * resolve, and {@code ignoreMigrationPatterns} at its default, {@code *:future} (NFR16 of
+   * SHOP-81).
+   */
+  Flyway flywayOfV030(Path folder) {
+    return flywayOver(V0_3_0_MIGRATIONS, folder);
+  }
+
+  private Flyway flywayOver(List<String> migrations, Path folder) {
+    for (String file : migrations) {
       try (InputStream in = new ClassPathResource(MIGRATIONS + file).getInputStream()) {
         Files.copy(in, folder.resolve(file));
       } catch (IOException e) {

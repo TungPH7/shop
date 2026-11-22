@@ -115,7 +115,8 @@ class AdminProductEditWebMvcTest {
             "availability",
             "createdAt",
             "updatedAt",
-            "version");
+            "version",
+            "categoryId");
   }
 
   @Test
@@ -398,7 +399,8 @@ class AdminProductEditWebMvcTest {
         ProductAvailability.IN_STOCK,
         Instant.parse("2026-11-16T02:10:00Z"),
         Instant.parse("2026-11-16T02:15:30Z"),
-        version);
+        version,
+        null);
   }
 
   private static Iterable<String> fieldNames(JsonNode node) {

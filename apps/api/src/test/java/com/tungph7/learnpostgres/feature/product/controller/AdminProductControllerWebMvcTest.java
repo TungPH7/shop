@@ -119,7 +119,8 @@ class AdminProductControllerWebMvcTest {
             "availability",
             "createdAt",
             "updatedAt",
-            "version");
+            "version",
+            "categoryId");
   }
 
   @Test
@@ -137,7 +138,8 @@ class AdminProductControllerWebMvcTest {
                 ProductAvailability.IN_STOCK,
                 Instant.parse("2026-11-16T02:10:00Z"),
                 Instant.parse("2026-11-16T02:10:00Z"),
-                0L));
+                0L,
+                null));
 
     post("{\"name\":\"Quần jean nam\",\"price\":450000}")
         .andExpect(status().isCreated())
@@ -189,7 +191,8 @@ class AdminProductControllerWebMvcTest {
                 ProductAvailability.IN_STOCK,
                 Instant.parse("2026-11-16T02:10:00.120Z"),
                 Instant.parse("2026-11-16T02:10:00.123456Z"),
-                0L));
+                0L,
+                null));
 
     post("{\"name\":\"A\",\"price\":1}")
         .andExpect(status().isCreated())
@@ -496,7 +499,8 @@ class AdminProductControllerWebMvcTest {
         ProductAvailability.IN_STOCK,
         Instant.parse("2026-11-16T02:10:00Z"),
         Instant.parse("2026-11-16T02:15:30Z"),
-        1L);
+        1L,
+        null);
   }
 
   private static Iterable<String> fieldNames(JsonNode node) {

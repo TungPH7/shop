@@ -1,5 +1,7 @@
 package com.tungph7.learnpostgres.feature.product.domain;
 
+import java.util.UUID;
+
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -71,6 +73,15 @@ public class Product extends BaseEntity {
   @Enumerated(EnumType.STRING)
   @Column(name = "availability", nullable = false, length = 16)
   private ProductAvailability availability;
+
+  /**
+   * The id of the category of the product, or {@code null} when it has none (SHOP-81). A plain
+   * {@code UUID}, not a {@code @ManyToOne}: the product reads no category, and {@code
+   * feature/product} checks the id through {@code CategoryRepository}. The foreign key {@code
+   * products_category_fk} sets it to {@code null} when the category is deleted (ADR-0004).
+   */
+  @Column(name = "category_id")
+  private UUID categoryId;
 
   /** JPA needs a default constructor — kept protected so business code does not use it. */
   protected Product() {
@@ -150,5 +161,14 @@ public class Product extends BaseEntity {
 
   public void setAvailability(ProductAvailability availability) {
     this.availability = availability;
+  }
+
+  /** The id of the category of the product, {@code null} when it has none. */
+  public UUID getCategoryId() {
+    return categoryId;
+  }
+
+  public void setCategoryId(UUID categoryId) {
+    this.categoryId = categoryId;
   }
 }

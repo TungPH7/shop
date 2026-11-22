@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -70,13 +71,16 @@ public class ProductQueryRepository {
    * @param sort the order; {@link ProductSort#RELEVANCE} needs a keyword
    * @param offset the products to skip, 0 or more
    * @param limit the products of the page, 1 to {@value ProductQueryRepository#MAX_LIMIT}
+   * @param categoryId only the products of this category, or {@code null} for every product
+   *     (SHOP-81)
    */
   public record Criteria(
       ProductSearchTerms search,
       Set<ProductStatus> statuses,
       ProductSort sort,
       int offset,
-      int limit) {
+      int limit,
+      UUID categoryId) {
 
     public Criteria {
       Objects.requireNonNull(statuses, "statuses");
@@ -94,6 +98,16 @@ public class ProductQueryRepository {
       if (limit < 1 || limit > MAX_LIMIT) {
         throw new IllegalArgumentException("A limit out of 1 to " + MAX_LIMIT + ": " + limit);
       }
+    }
+
+    /** The criteria of every product, whatever its category (SHOP-7). */
+    public Criteria(
+        ProductSearchTerms search,
+        Set<ProductStatus> statuses,
+        ProductSort sort,
+        int offset,
+        int limit) {
+      this(search, statuses, sort, offset, limit, null);
     }
 
     /**
@@ -166,6 +180,10 @@ public class ProductQueryRepository {
       where.append(" AND p.status IN (:statuses)");
       params.put("statuses", criteria.statuses().stream().map(ProductStatus::name).toList());
     }
+    if (criteria.categoryId() != null) {
+      where.append(" AND p.category_id = :categoryId");
+      params.put("categoryId", criteria.categoryId());
+    }
     if (criteria.search() != null) {
       List<String> patterns = criteria.search().wordPatterns();
       for (int i = 0; i < patterns.size(); i++) {
@@ -174,6 +192,55 @@ public class ProductQueryRepository {
       }
     }
     return where.toString();
+  }
+
+  /**
+   * The store detail of one product, with the name and slug of its category when the category is
+   * {@code VISIBLE}, and {@code null} for both otherwise.
+   */
+  public record DetailRow(
+      UUID id,
+      String name,
+      String slug,
+      long priceVnd,
+      Long compareAtPriceVnd,
+      ProductAvailability availability,
+      String description,
+      Instant updatedAt,
+      String categoryName,
+      String categorySlug) {}
+
+  /**
+   * The {@code ACTIVE} product with this slug, compared ignoring case ({@code citext}), and its
+   * category, in one statement (plan of SHOP-81, Architecture Decisions 8; NFR2). The category is
+   * joined only when it is {@code VISIBLE}: a product of a hidden category reads exactly as a
+   * product without category (NFR8, AC21). Both statuses are constants of the SQL.
+   */
+  @Transactional(readOnly = true)
+  public Optional<DetailRow> findActiveDetail(String slug) {
+    return jdbc.sql(
+            "SELECT p.id, p.name, p.slug::text AS slug, p.price_vnd, p.compare_at_price_vnd,"
+                + " p.availability, p.description, p.updated_at,"
+                + " c.name AS category_name, c.slug::text AS category_slug"
+                + " FROM app.products p"
+                + " LEFT JOIN app.categories c ON c.id = p.category_id AND c.status = 'VISIBLE'"
+                + " WHERE p.slug OPERATOR(public.=) CAST(:slug AS public.citext)"
+                + " AND p.status = 'ACTIVE'")
+        .param("slug", slug)
+        .query(
+            (rs, rowNum) ->
+                new DetailRow(
+                    rs.getObject("id", UUID.class),
+                    rs.getString("name"),
+                    rs.getString("slug"),
+                    rs.getLong("price_vnd"),
+                    rs.getObject("compare_at_price_vnd", Long.class),
+                    ProductAvailability.valueOf(rs.getString("availability")),
+                    rs.getString("description"),
+                    rs.getTimestamp("updated_at").toInstant(),
+                    rs.getString("category_name"),
+                    rs.getString("category_slug")))
+        .optional();
   }
 
   /** One product of the sitemap of the store: its slug as saved and its last update. */
