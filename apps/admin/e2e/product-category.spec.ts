@@ -90,6 +90,31 @@ test.describe('US2 the Category field of the product form S4', () => {
     expect((await categoryField(page).locator('option').allInnerTexts())[0]).toBe('No category');
   });
 
+  test('AC9 lists a category added in another tab once the field is opened, without a reload', async ({
+    context,
+    page,
+  }) => {
+    const shirts = e2eName('Áo', runId);
+    await page.goto('/products/new');
+    await expect(categoryField(page)).toBeEnabled();
+    expect(await optionsOfRun(page)).toEqual(['No category']);
+
+    // Another tab of the same admin adds a category through its form.
+    const other = await context.newPage();
+    await other.goto('/categories/new');
+    await other.getByRole('textbox', { name: /Category name/ }).fill(shirts);
+    await other.getByRole('button', { name: 'Add category' }).click();
+    await expect(other.getByRole('status').filter({ hasText: 'Category added' })).toBeVisible();
+    await other.close();
+
+    await page.bringToFront();
+    await categoryField(page).click();
+
+    await expect.poll(() => optionsOfRun(page)).toEqual(['No category', shirts]);
+    await categoryField(page).selectOption({ label: shirts });
+    await expect(categoryField(page).locator('option:checked')).toHaveText(shirts);
+  });
+
   test('AC9 adds a product to a category, its count goes up by 1, and No category takes it out again', async ({
     page,
     request,

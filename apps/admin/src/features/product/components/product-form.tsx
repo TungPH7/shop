@@ -378,6 +378,8 @@ function ProductFormView<Input extends CreateProductInput>({ mode }: { mode: For
               options={categoryOptions.data}
               loadFailed={categoryOptions.data === undefined && categoryOptions.isError}
               onRetry={() => void categoryOptions.refetch()}
+              // A pointer down and the focus that follows it make one request, not two.
+              onOpen={() => void categoryOptions.refetch({ cancelRefetch: false })}
               error={
                 categoryGone ? t('form.errors.categoryGone') : errorText(errors.categoryId?.message)
               }

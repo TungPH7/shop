@@ -181,6 +181,63 @@ describe('the Category field of the product form (S4)', () => {
     expect(options.calls()).toBe(failedCalls + 1);
   });
 
+  it('loads the options again when the admin opens the field, so a category added in another tab shows', async () => {
+    const options = fakeOptions([shirts], [shirts, accessories]);
+    const { user } = renderAdd();
+    await ready();
+    expect(optionTexts(category())).toEqual(['No category', 'Áo']);
+
+    await user.click(category());
+
+    await waitFor(() => {
+      expect(optionTexts(category())).toEqual(['No category', 'Áo', 'Phụ kiện (Hidden)']);
+    });
+    expect(options.calls()).toBe(2);
+  });
+
+  it('loads the options again when the field gets the focus from the keyboard', async () => {
+    const options = fakeOptions([shirts], [shirts, accessories]);
+    const { user } = renderAdd();
+    await ready();
+    screen.getByRole('textbox', { name: 'URL slug' }).focus();
+
+    await user.tab();
+
+    expect(category()).toHaveFocus();
+    await waitFor(() => {
+      expect(optionTexts(category())).toEqual(['No category', 'Áo', 'Phụ kiện (Hidden)']);
+    });
+    expect(options.calls()).toBe(2);
+  });
+
+  it('keeps the field open on the options it has, and Save free, while they load again', async () => {
+    fakeOptions([shirts], () => new Promise<Response>(() => undefined));
+    const { user } = renderAdd();
+    await ready();
+
+    await user.click(category());
+
+    expect(category()).toBeEnabled();
+    expect(category()).not.toHaveAttribute('aria-busy');
+    expect(optionTexts(category())).toEqual(['No category', 'Áo']);
+    expect(screen.getByRole('button', { name: 'Add product' })).not.toHaveAttribute(
+      'aria-disabled',
+    );
+  });
+
+  it('keeps the category picked when the options load again', async () => {
+    fakeOptions([shirts, accessories]);
+    const { user } = renderAdd();
+    await ready();
+    await user.selectOptions(category(), 'Áo');
+
+    await user.click(category());
+
+    await waitFor(() => {
+      expect(category()).toHaveValue(shirts.id);
+    });
+  });
+
   it('AC9 posts the category picked', async () => {
     fakeOptions([shirts, accessories]);
     const bodies = fakeProductApi();
@@ -226,7 +283,9 @@ describe('the Category field of the product form (S4)', () => {
   });
 
   it('AC10 keeps everything and shows the error under the field for a 400 on categoryId, then reloads the options at No category', async () => {
-    const options = fakeOptions([shirts, accessories], [shirts]);
+    // Phụ kiện is deleted in another tab once it is picked: the save is the first to know.
+    let categories = [shirts, accessories];
+    const options = fakeOptions(() => HttpResponse.json({ items: categories }));
     const bodies = fakeProductApi(() =>
       HttpResponse.json(
         {
@@ -250,6 +309,8 @@ describe('the Category field of the product form (S4)', () => {
     await user.clear(name);
     await user.type(name, 'Áo thun mới');
     await user.selectOptions(category(), 'Phụ kiện (Hidden)');
+    categories = [shirts];
+    const callsBeforeSave = options.calls();
 
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
@@ -265,11 +326,12 @@ describe('the Category field of the product form (S4)', () => {
     expect(category()).toHaveValue('');
     expect(category()).toHaveAttribute('aria-invalid', 'true');
     expect(category()).toHaveFocus();
-    expect(options.calls()).toBe(2);
+    expect(options.calls()).toBeGreaterThan(callsBeforeSave);
   });
 
   it('AC10 keeps the error until the admin picks again', async () => {
-    fakeOptions([shirts, accessories], [shirts]);
+    let categories = [shirts, accessories];
+    fakeOptions(() => HttpResponse.json({ items: categories }));
     fakeProductApi(() =>
       HttpResponse.json(
         { status: 400, code: 'VALIDATION_FAILED', errors: [{ field: 'categoryId' }] },
@@ -280,6 +342,7 @@ describe('the Category field of the product form (S4)', () => {
     await screen.findByRole('heading', { level: 1, name: 'Edit product' });
     await ready();
     await user.selectOptions(category(), 'Phụ kiện (Hidden)');
+    categories = [shirts];
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     await screen.findByText('This category no longer exists. Pick another one.');
 
