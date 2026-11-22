@@ -4,10 +4,8 @@ import type { Metadata } from 'next';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
 
 import { JsonLd } from '~/components/seo/json-ld';
-import {
-  ProductResults,
-  ProductResultsSkeleton,
-} from '~/features/product/components/product-results';
+import { ProductResults } from '~/features/product/components/product-results';
+import { ProductResultsSkeleton } from '~/features/product/components/product-results-skeleton';
 import { localizedUrl } from '~/lib/seo/alternates';
 import { buildPageMetadata } from '~/lib/seo/metadata';
 import { breadcrumbLd } from '~/lib/seo/structured-data';

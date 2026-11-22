@@ -14,6 +14,7 @@ import { useLocale, useTranslations } from 'next-intl';
 
 import { SearchIcon } from '~/components/ui/icons';
 import {
+  CATALOG,
   chosenSortOf,
   MAX_KEYWORD_LENGTH,
   parseProductQuery,
@@ -21,6 +22,7 @@ import {
   sortHref,
   sortsFor,
   type ProductQuery,
+  type ProductSource,
 } from '~/features/product/model/product-query';
 import { getPathname, useRouter } from '~/i18n/navigation';
 
@@ -38,8 +40,17 @@ import { getPathname, useRouter } from '~/i18n/navigation';
  *   is an option only while searching (AC20). While the new products are on their way, the select shows the choice.
  * - The field shows the keyword of the URL (AC18), and follows it when the URL changes, as after Clear search (S4.8).
  *   It is not controlled, so words typed before React takes over the page are kept, not reset by the hydration.
+ *
+ * On the page of a category (`source`, S5.4 of SHOP-81) there is no search, so no relevance either (AC13): the sort
+ * alone sits on the right of the row, and goes to the first 24 products of the category in the new order.
  */
-export function ProductFilters({ query }: { query: ProductQuery }) {
+export function ProductFilters({
+  query,
+  source = CATALOG,
+}: {
+  query: ProductQuery;
+  source?: ProductSource;
+}) {
   const t = useTranslations('Products');
   const locale = useLocale();
   const router = useRouter();
@@ -68,37 +79,41 @@ export function ProductFilters({ query }: { query: ProductQuery }) {
     const next = parseProductQuery({ q: query.q, sort: event.target.value }).sort;
     startTransition(() => {
       showSort(next);
-      router.push(sortHref(query, next), { scroll: false });
+      router.push(sortHref(query, next, source), { scroll: false });
     });
   };
 
+  const hasSearch = source.kind === 'catalog';
+
   return (
-    <div className="product-filters">
-      <form
-        role="search"
-        method="get"
-        action={getPathname({ href: '/products', locale })}
-        className="search product-filters__search"
-        onSubmit={search}
-      >
-        <SearchIcon className="search__icon" />
-        <label className="visually-hidden" htmlFor={`${id}-q`}>
-          {t('searchLabel')}
-        </label>
-        <input
-          id={`${id}-q`}
-          className="input search__input"
-          type="search"
-          name="q"
-          ref={field}
-          defaultValue={query.q}
-          placeholder={t('searchPlaceholder')}
-          maxLength={MAX_KEYWORD_LENGTH}
-          enterKeyHint="search"
-          autoComplete="off"
-        />
-        {chosenSort !== null && <input type="hidden" name="sort" value={chosenSort} />}
-      </form>
+    <div className={hasSearch ? 'product-filters' : 'product-filters product-filters--sort-only'}>
+      {hasSearch && (
+        <form
+          role="search"
+          method="get"
+          action={getPathname({ href: '/products', locale })}
+          className="search product-filters__search"
+          onSubmit={search}
+        >
+          <SearchIcon className="search__icon" />
+          <label className="visually-hidden" htmlFor={`${id}-q`}>
+            {t('searchLabel')}
+          </label>
+          <input
+            id={`${id}-q`}
+            className="input search__input"
+            type="search"
+            name="q"
+            ref={field}
+            defaultValue={query.q}
+            placeholder={t('searchPlaceholder')}
+            maxLength={MAX_KEYWORD_LENGTH}
+            enterKeyHint="search"
+            autoComplete="off"
+          />
+          {chosenSort !== null && <input type="hidden" name="sort" value={chosenSort} />}
+        </form>
+      )}
       <div className="product-filters__sort">
         <label className="label product-filters__sort-label" htmlFor={`${id}-sort`}>
           {t('sortLabel')}

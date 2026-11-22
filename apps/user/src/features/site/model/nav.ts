@@ -10,10 +10,12 @@ export const NAV_ITEMS = [
 
 /**
  * Pages of a section outside its path. S6 is served at the address of the product, `/products/{slug}`, but the Proxy
- * rewrites it to `/product-not-found`, and that is the path the prerender of S6 reads (SHOP-24).
+ * rewrites it to `/product-not-found`, and that is the path the prerender of S6 reads (SHOP-24). The pages of a
+ * category (`/categories/{slug}`) and their S6 (`/category-not-found`) are a part of the store of products too, so
+ * Products stays current there (design.md of SHOP-81, S5.1 and S6.1).
  */
 const SECTION_PAGES: Partial<Record<string, readonly string[]>> = {
-  '/products': ['/product-not-found'],
+  '/products': ['/product-not-found', '/categories', '/category-not-found'],
 };
 
 /**

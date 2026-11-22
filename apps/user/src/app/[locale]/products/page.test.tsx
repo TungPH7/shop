@@ -5,10 +5,8 @@ import { createTranslator } from 'next-intl';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, test, vi } from 'vitest';
 
-import {
-  ProductResults,
-  ProductResultsSkeleton,
-} from '~/features/product/components/product-results';
+import { ProductResults } from '~/features/product/components/product-results';
+import { ProductResultsSkeleton } from '~/features/product/components/product-results-skeleton';
 
 import en from '../../../../messages/en.json';
 import vi_ from '../../../../messages/vi.json';
@@ -40,6 +38,8 @@ vi.mock('~/i18n/navigation', () => ({
 }));
 vi.mock('~/features/product/components/product-results', () => ({
   ProductResults: () => <p>results stub</p>,
+}));
+vi.mock('~/features/product/components/product-results-skeleton', () => ({
   ProductResultsSkeleton: () => <p>skeleton stub</p>,
 }));
 

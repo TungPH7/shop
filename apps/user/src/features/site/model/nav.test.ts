@@ -25,6 +25,20 @@ describe('isCurrentPath', () => {
     expect(isCurrentPath('/product-not-found', '/about')).toBe(false);
   });
 
+  it('marks Products on the page of a category, S5 of SHOP-81, a part of the store of products', () => {
+    expect(isCurrentPath('/categories/ao', '/products')).toBe(true);
+    expect(isCurrentPath('/categories/ao', '/')).toBe(false);
+  });
+
+  it('marks Products on S6 of SHOP-81, the page the Proxy serves for a category that is not there', () => {
+    expect(isCurrentPath('/category-not-found', '/products')).toBe(true);
+    expect(isCurrentPath('/category-not-found', '/about')).toBe(false);
+  });
+
+  it('does not mark Products on a path that only starts like a category page', () => {
+    expect(isCurrentPath('/categories-archive', '/products')).toBe(false);
+  });
+
   it('does not mark a section whose name only starts the same way', () => {
     expect(isCurrentPath('/products-archive', '/products')).toBe(false);
   });

@@ -1,18 +1,21 @@
-import { useTranslations } from 'next-intl';
 import { getTranslations } from 'next-intl/server';
+import { notFound } from 'next/navigation';
 
 import { LoadMoreButton } from '~/features/product/components/load-more-button';
 import { ProductCard } from '~/features/product/components/product-card';
 import { ProductFilters } from '~/features/product/components/product-filters';
-import { nextProductsHref, parseProductQuery } from '~/features/product/model/product-query';
+import {
+  CATALOG,
+  nextProductsHref,
+  parseCategoryProductQuery,
+  parseProductQuery,
+  type ProductSource,
+} from '~/features/product/model/product-query';
 import { getStoreProducts } from '~/features/product/server/get-products';
 import { Link } from '~/i18n/navigation';
 
 /** The id of the grid, for Load more to move the focus to the first new card. */
 const LIST_ID = 'product-list';
-
-/** Skeleton cards while the products load: 8 (design.md of SHOP-7, S4.5, loading). */
-const SKELETON_CARDS = 8;
 
 /**
  * The results of S4 (`/[locale]/products`, design.md of SHOP-7, S4.3–S4.10): the dynamic hole of the page, inside its
@@ -31,17 +34,41 @@ const SKELETON_CARDS = 8;
  * - The api fails: the DAL throws, and so does this component, to the error boundary of `[locale]`, the error state of
  *   S4.5 with its Try again; never an empty list (NFR26). A later block that fails leaves the products read before it,
  *   with the error line of S4.10.
+ *
+ * The same results serve the page of a category (`source`, S5.4–S5.10 of SHOP-81), with the products on sale of that
+ * category: the sort with no search and no relevance (AC13), the grid, the progress line and Load more on the path of
+ * the category (AC14). With no product on sale, "Chưa có sản phẩm nào trong danh mục này." and View all products
+ * replace the sort and the grid (S5.9, S5.10, AC15). A category hidden or deleted since the page read its name:
+ * `notFound()`, the same S6 as for a slug that never existed (AC16).
  */
 export async function ProductResults({
   searchParams,
+  source = CATALOG,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
+  source?: ProductSource;
 }) {
-  const query = parseProductQuery(await searchParams);
-  const { items, totalItems, complete } = await getStoreProducts(query);
+  const raw = await searchParams;
+  const isCategory = source.kind === 'category';
+  const query = isCategory ? parseCategoryProductQuery(raw) : parseProductQuery(raw);
+  const list = isCategory ? await getStoreProducts(query, source) : await getStoreProducts(query);
+  if (list === null) notFound();
+  const { items, totalItems, complete } = list;
   const t = await getTranslations('Products');
 
-  const filters = <ProductFilters query={query} />;
+  if (items.length === 0 && isCategory) {
+    const tCategory = await getTranslations('Category');
+    return (
+      <div className="product-empty">
+        <p role="status">{tCategory('empty')}</p>
+        <Link className="btn btn--primary" href="/products">
+          {tCategory('viewAll')}
+        </Link>
+      </div>
+    );
+  }
+
+  const filters = <ProductFilters query={query} source={source} />;
 
   if (items.length === 0) {
     return (
@@ -55,7 +82,7 @@ export async function ProductResults({
     );
   }
 
-  const nextHref = nextProductsHref(query, { shown: items.length, totalItems, complete });
+  const nextHref = nextProductsHref(query, { shown: items.length, totalItems, complete }, source);
 
   return (
     <>
@@ -78,34 +105,6 @@ export async function ProductResults({
           failed={!complete}
         />
       </div>
-    </>
-  );
-}
-
-/**
- * What S4 shows while it reads the products: the place of the search and the sort, with no field to type into yet,
- * since the real ones replace it; then 8 skeleton cards in a busy list, with no words.
- */
-export function ProductResultsSkeleton() {
-  const t = useTranslations('Products');
-
-  return (
-    <>
-      <div className="product-filters" aria-hidden="true">
-        <span className="skeleton product-filters__search product-filters__skeleton" />
-        <span className="skeleton product-filters__sort product-filters__skeleton" />
-      </div>
-      <ul className="product-grid" aria-label={t('list')} aria-busy="true">
-        {Array.from({ length: SKELETON_CARDS }, (_, i) => (
-          <li key={i}>
-            <div className="card product-card">
-              <span className="skeleton product-card__skeleton-tile" />
-              <span className="skeleton product-card__skeleton-line" />
-              <span className="skeleton product-card__skeleton-price" />
-            </div>
-          </li>
-        ))}
-      </ul>
     </>
   );
 }
