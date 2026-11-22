@@ -18,7 +18,10 @@ export default defineConfig({
     globals: false,
     setupFiles: ['./src/testing/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
-    css: false,
+    // No CSS is processed, as with `css: false`, except a `?raw` import: the text of a
+    // stylesheet, which src/styles/layout-backdrop.test.ts reads (SHOP-88). With
+    // `css: false` Vitest empties that text too.
+    css: { include: [/\.css\?raw$/] },
     clearMocks: true,
     restoreMocks: true,
     // env.ts validates VITE_API_URL at import → provide one for the test run so

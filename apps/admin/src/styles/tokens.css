@@ -69,6 +69,9 @@
     color-mix(in srgb, #7aaef0 16%, transparent)
   );
   --focus-halo: color-mix(in srgb, var(--accent) 18%, transparent);
+  /* Lines of the layout backdrop (SHOP-88): --text at 7% (light) or white at 6% (dark),
+     faint enough that every text on the page keeps its AA contrast. */
+  --backdrop-line: light-dark(#0f172412, #ffffff0f);
   /* Scrim behind a modal dialog (S3), with --blur-thick. */
   --scrim: light-dark(#0f172466, #00000099);
 
@@ -143,6 +146,8 @@
   --icon-btn: 40px;
   /* Search box of a list (S1.5), on the right of the filter row. */
   --search-width: 320px;
+  /* One tile of the layout backdrop, the size of public/layout-backdrop.svg. */
+  --backdrop-tile: 112px;
 
   /* --- Glass ---------------------------------------------------------------- */
   --blur: 14px;

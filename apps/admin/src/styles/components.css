@@ -374,10 +374,35 @@ textarea.input {
 
 /* --- App shell, S1.1 ---------------------------------------------------------- */
 
+/* isolation: the backdrop below has z-index -1; without a stacking context of its own
+   the shell would put it under the gradient of <body>. */
 .shell {
+  isolation: isolate;
   max-width: var(--app-max);
   margin: 0 auto;
   padding: var(--space-4-5) var(--gutter) var(--space-7);
+}
+
+/* Backdrop of the layout (SHOP-88): public/layout-backdrop.svg, a geometric pattern
+   drawn in the repo, used as a mask over --backdrop-line, so one file serves both
+   themes. Fixed to the viewport, behind the content, and takes no clicks or space. */
+.shell::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--backdrop-line);
+  mask-image: url('/layout-backdrop.svg');
+  mask-size: var(--backdrop-tile) var(--backdrop-tile);
+  mask-repeat: repeat;
+}
+
+/* High contrast themes pick their own colours: the pattern would only add noise. */
+@media (forced-colors: active) {
+  .shell::before {
+    display: none;
+  }
 }
 
 .shell__bar {
