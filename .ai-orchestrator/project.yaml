@@ -99,6 +99,10 @@ runs:
   worktrees: true
   lanes_max: 3
   min_free_ram_gb: 1.5
+  # Two fe-dev agents at once, each on its own item in its own lane (C2 spec section 6; SHOP-86, Phiên 35 · Lượt 35:
+  # the two Stories of SHOP-81 built one after the other because every dev role had one agent).
+  agents_per_role:
+    fe-dev: 2
   copy:
     - apps/api/.env
     - apps/user/.env.development
