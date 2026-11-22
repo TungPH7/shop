@@ -31,7 +31,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 
 <!-- render: branches -->
 
-- Commit headers read `type(scope): subject (<KEY>)`, in English.
+- Commit headers read `type(scope): subject (<KEY>)`, in English. For a Sub-task, `<KEY>` is the key of the Sub-task, not of its Story: its Complete transition looks for it.
 - Open, edit and comment on PRs only with `node .ai-orchestrator/scripts/ao-pr.mjs`, never with `gh pr`. `merge-gate` merges, and no agent approves a PR.
 - Never push to a protected branch, never use `--no-verify`, and never rewrite pushed commits on a branch that is not yours.
 

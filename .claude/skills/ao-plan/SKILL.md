@@ -39,6 +39,11 @@ $ARGUMENTS
   timeout of 7200000 ms, and wait for its notification. Do not poll. After gate ② this run asks GitHub to run jira-sync
   with the human's gh login, which is expected.
   Do not run any agent yourself, and do not change Jira or GitHub yourself.
+- While it runs, also run `node .ai-orchestrator/scripts/ao-step.mjs watch` with the Bash tool in the background. It
+  reads files only and runs no model, and ends with a report only when something is wrong: a process gone with its
+  lock, an agent silent 20 minutes, a stop that waits for the human, an item flagged Needs you. Tell the human its
+  report in Vietnamese, then start it again while the command still runs. It ends by itself once nothing of the kit
+  has run for 10 minutes.
 - Then read `.ai/runs/<KEY>/last.md` and report in Vietnamese: what each agent did and cost, what changed in the plan
   and the items when the human asked for a change, the items the human must cancel, the questions left, what the
   human must do at gate ② (numbered clicks: read plan.md on the docs PR, then Approve plan on the Epic), and the next

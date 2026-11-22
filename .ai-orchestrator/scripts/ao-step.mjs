@@ -4,6 +4,7 @@
 // approves or merges a PR; the second /ao-plan only asks GitHub to run jira-sync, with your gh login.
 // Usage: node .ai-orchestrator/scripts/ao-step.mjs <status|spec|plan|request|build|review|fix|...> [<KEY>|<PR>] [--go]
 //        [--answers <file>] [--note <file>] [--retest]
+//        or: ao-step.mjs watch [--once] [--quiet <minutes>], the watcher of what the kit runs (lib/workflow/watch.mjs)
 // It exits 0 on GO and on STOP, and 1 only when it cannot run: a token missing, Jira or GitHub not answering.
 // Jira is read with ATLASSIAN_AGENT_TOKEN, GitHub with a read-only token of the ao-review App. Run it from the project
 // root; the kit is in AO_KIT_DIR when set.
@@ -58,11 +59,12 @@ import { runsAtOnce } from '../lib/workflow/ports.mjs';
 import { hookKitDrift, hookKitNote } from '../lib/workflow/hook-kit.mjs';
 import { planRound, runDispatcher, scopeOf } from '../lib/workflow/dispatch.mjs';
 import { DISPATCHER_FILE, dispatcherEffects, spentSince } from '../lib/workflow/run-command.mjs';
+import { WATCH, boardDue, look, nextWatchState, nowLines, readWatchState, watchEffects } from '../lib/workflow/watch.mjs';
 import { seoChange } from '../lib/workflow/seo-commit.mjs';
 import { QA_CONTEXT, qaSignal } from '../lib/workflow/qa-signal.mjs';
 
 const COMMANDS = ['status', 'intake', 'preview', 'spec', 'plan', 'request', 'build', 'review', 'fix', 'qa', 'release', 'ship', 'rollback'];
-const USAGE = 'usage: node .ai-orchestrator/scripts/ao-step.mjs <status|intake|preview|spec|plan|request|build|review|fix|qa|release|ship|rollback> [<KEY>|<PR>|<vX.Y.0> <sha>|<vX.Y.Z>|<environment> [<sha>]] [--go] [--answers <file>] [--note <file>] [--change <word>] [--stop] [--retest]; or run <EPIC>|<KEY>… [--go] [--budget <USD>], or run --stop';
+const USAGE = 'usage: node .ai-orchestrator/scripts/ao-step.mjs <status|intake|preview|spec|plan|request|build|review|fix|qa|release|ship|rollback> [<KEY>|<PR>|<vX.Y.0> <sha>|<vX.Y.Z>|<environment> [<sha>]] [--go] [--answers <file>] [--note <file>] [--change <word>] [--stop] [--retest]; or run <EPIC>|<KEY>… [--go] [--budget <USD>], or run --stop; or watch [--once] [--quiet <minutes>]';
 // --json (the dry run of the dispatcher /ao-run, C2 spec 5.2) prints the decision as one line of JSON and nothing else;
 // --result <file>, with --go (its real run), writes the last decision there.
 export function decisionJson(decision) {
@@ -189,10 +191,14 @@ export function runsFile(projectDir, file) {
 
 
 async function main() {
-  const { values, positionals } = parseArgs({ allowPositionals: true, options: { go: { type: 'boolean', default: false }, answers: { type: 'string' }, note: { type: 'string' }, change: { type: 'string' }, stop: { type: 'boolean', default: false }, retest: { type: 'boolean', default: false }, 'light-report': { type: 'string' }, full: { type: 'boolean', default: false }, 'seo-ok': { type: 'string' }, json: { type: 'boolean', default: false }, result: { type: 'string' }, budget: { type: 'string' } } });
+  const { values, positionals } = parseArgs({ allowPositionals: true, options: { go: { type: 'boolean', default: false }, answers: { type: 'string' }, note: { type: 'string' }, change: { type: 'string' }, stop: { type: 'boolean', default: false }, retest: { type: 'boolean', default: false }, 'light-report': { type: 'string' }, full: { type: 'boolean', default: false }, 'seo-ok': { type: 'string' }, json: { type: 'boolean', default: false }, result: { type: 'string' }, budget: { type: 'string' }, once: { type: 'boolean', default: false }, quiet: { type: 'string' } } });
   const [command, arg, extra] = positionals;
   if (command === 'run') {
     await runCommand(positionals.slice(1), values);
+    return;
+  }
+  if (command === 'watch') {
+    await watchCommand(positionals.slice(1), values);
     return;
   }
   const settings = projectSettings(projectDir);
@@ -211,7 +217,7 @@ async function main() {
     else console.log(`STOP: ${reason}`);
     writeResult(decision);
   };
-  const wrong = checkArgument(command, arg, space, extra) ?? checkChange(command, values.change, Boolean(values.note)) ?? (values.stop && command !== 'preview' ? '--stop goes with /ao-preview and /ao-run only' : null) ?? (values['light-report'] && command !== 'qa' ? '--light-report goes with /ao-qa only' : null) ?? (values.full && command !== 'review' ? '--full goes with /ao-review only' : null) ?? (values['seo-ok'] !== undefined && command !== 'build' ? '--seo-ok goes with /ao-build only' : null) ?? (values['seo-ok'] !== undefined && !SEO_MARK.test(values['seo-ok']) ? '--seo-ok takes the mark the check printed, such as 10612:a1b2c3d4e5f60718' : null) ?? (values.budget ? '--budget goes with /ao-run only' : null) ?? (values.result && !values.go ? '--result goes with --go' : null) ?? (values.json && values.go ? '--json is a dry run: it does not go with --go' : null);
+  const wrong = checkArgument(command, arg, space, extra) ?? checkChange(command, values.change, Boolean(values.note)) ?? (values.stop && command !== 'preview' ? '--stop goes with /ao-preview and /ao-run only' : null) ?? (values['light-report'] && command !== 'qa' ? '--light-report goes with /ao-qa only' : null) ?? (values.full && command !== 'review' ? '--full goes with /ao-review only' : null) ?? (values['seo-ok'] !== undefined && command !== 'build' ? '--seo-ok goes with /ao-build only' : null) ?? (values['seo-ok'] !== undefined && !SEO_MARK.test(values['seo-ok']) ? '--seo-ok takes the mark the check printed, such as 10612:a1b2c3d4e5f60718' : null) ?? (values.budget ? '--budget goes with /ao-run only' : null) ?? (values.once || values.quiet !== undefined ? '--once and --quiet go with watch only' : null) ?? (values.result && !values.go ? '--result goes with --go' : null) ?? (values.json && values.go ? '--json is a dry run: it does not go with --go' : null);
   if (wrong) {
     early(wrong);
     return;
@@ -1111,7 +1117,7 @@ async function runCommand(keys, values) {
   const settings = projectSettings(projectDir);
   const space = setting('AO_JIRA_SPACE', settings);
   const effects = dispatcherEffects({ kitDir, projectDir, spawn, fs: { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, appendFileSync, rmSync }, alive });
-  const other = ['answers', 'note', 'change', 'light-report', 'result'].find((name) => values[name] !== undefined) ?? ['retest', 'full', 'seo-ok', 'json'].find((name) => values[name]);
+  const other = ['answers', 'note', 'change', 'light-report', 'result', 'quiet'].find((name) => values[name] !== undefined) ?? ['retest', 'full', 'seo-ok', 'json', 'once'].find((name) => values[name]);
   if (other) return console.log(`STOP: --${other} does not go with /ao-run`);
   if (values.stop) {
     if (keys.length > 0 || values.go) return console.log('STOP: /ao-run --stop takes no key and no --go');
@@ -1181,6 +1187,81 @@ async function runCommand(keys, values) {
     if (end.waiting.length > 0) console.log(['Waiting for you:', ...end.waiting.map((line) => `  ${line}`)].join('\n'));
   } finally {
     effects.unlock();
+  }
+}
+
+// ao-step watch (Phiên 35 · Lượt 39–41): watches what the kit runs in this project, with no model, and ends with a
+// report when there is something new and wrong to tell (lib/workflow/watch.mjs). The main session starts it in the
+// background next to a long command, tells the human its report, and starts it again; while all is well it prints
+// nothing. --once prints what runs now and what it would tell, and keeps nothing. --quiet <minutes>: how long an agent
+// may write no log before it says so, 20 by default.
+async function watchCommand(args, values) {
+  const other = ['answers', 'note', 'change', 'light-report', 'result', 'budget', 'seo-ok'].find((name) => values[name] !== undefined) ?? ['go', 'stop', 'retest', 'full', 'json'].find((name) => values[name]);
+  if (other) return console.log(`STOP: --${other} does not go with watch`);
+  if (args.length > 0) return console.log('STOP: watch takes no key: it watches every command of the kit in this project');
+  const quietMin = values.quiet === undefined ? WATCH.quietMs / 60_000 : Number(values.quiet);
+  if (!(quietMin >= 5 && quietMin <= 240)) return console.log(`STOP: --quiet is ${values.quiet}: minutes, from 5 to 240`);
+  const options = { quietMs: quietMin * 60_000 };
+  const files = watchEffects({ projectDir, fs: { existsSync, readdirSync, readFileSync, statSync }, alive });
+  // The board as the dispatcher reads it: ao-step status --json, with the tokens of this project.
+  const board = dispatcherEffects({ kitDir, projectDir, spawn, fs: { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, appendFileSync, rmSync }, alive });
+  const flaggedNow = async () => (await board.readBoard()).items.filter(({ flagged }) => flagged).map(({ key, flag }) => ({ key, flag }));
+  let state = readWatchState(existsSync(files.stateFile) ? readFileSync(files.stateFile, 'utf8') : '', files.logLines());
+  const stamp = () => new Date().toTimeString().slice(0, 5);
+
+  if (values.once) {
+    const now = Date.now();
+    const snapshot = { now, locks: files.locks(), logAt: files.logAt, dispatcher: files.dispatcher(), events: files.newEvents(state.offsets).events };
+    let flagged = null;
+    let boardFailed = null;
+    try {
+      flagged = await flaggedNow();
+    } catch (error) {
+      boardFailed = { count: 1, reason: error.message, since: now };
+    }
+    const { tell } = look({ ...snapshot, flagged, boardFailed }, new Set(state.told), { ...options, boardFailures: 1 });
+    console.log([`ao-step watch at ${stamp()}`, ...nowLines(snapshot), ...(tell.length > 0 ? ['To tell:', ...tell.map((line) => `  ${line}`)] : ['Nothing new to tell.'])].join('\n'));
+    return;
+  }
+
+  let lastBoard = 0;
+  let failures = 0;
+  let failingSince = null;
+  let reason = '';
+  let idleSince = null;
+  let before = [];
+  for (;;) {
+    const now = Date.now();
+    const { events, offsets } = files.newEvents(state.offsets);
+    const locks = files.locks();
+    const after = locks.filter(({ alive: live }) => live).map(({ name }) => name);
+    let flagged = null;
+    if (boardDue({ now, lastBoard, before, after })) {
+      lastBoard = now;
+      try {
+        flagged = await flaggedNow();
+        failures = 0;
+        failingSince = null;
+      } catch (error) {
+        failures += 1;
+        failingSince ??= now;
+        reason = error.message;
+      }
+    }
+    const boardFailed = failures > 0 ? { count: failures, reason, since: failingSince } : null;
+    before = after;
+    const result = look({ now, locks, logAt: files.logAt, dispatcher: files.dispatcher(), events, flagged, boardFailed }, new Set(state.told), options);
+    idleSince = result.running ? null : (idleSince ?? now);
+    const ends = idleSince !== null && now - idleSince >= WATCH.endMs;
+    state = nextWatchState(state, { marks: result.marks, offsets });
+    mkdirSync(dirname(files.stateFile), { recursive: true });
+    writeFileSync(files.stateFile, `${JSON.stringify(state, null, 2)}\n`);
+    if (result.tell.length > 0 || ends) {
+      const lines = [...result.tell, ...(ends ? [`nothing of the kit has run for ${WATCH.endMs / 60_000} min, so the watcher ends`] : [])];
+      console.log([`${stamp()} ao-step watch:`, ...lines.map((line) => `- ${line}`)].join('\n'));
+      return;
+    }
+    await new Promise((done) => setTimeout(done, WATCH.everyMs));
   }
 }
 

@@ -44,6 +44,17 @@ export function findingsTask({ epic }) {
 // item is in an Epic and the Epic's findings Task does not name the PR yet. Returns the action, or null.
 export function findingsStep({ item, epic, pr, findings }) {
   const minor = pr?.minorFindings ?? [];
-  if (!epic || !pr?.merged || minor.length === 0 || findings?.recorded) return null;
+  if (!epic || !pr?.merged || minor.length === 0 || findings?.recorded || ownFindings({ item, findings })) return null;
   return { action: 'findings-task', key: item.key, epic: epic.key, task: findings?.key ?? null, pr: pr.number, findings: minor, continue: true };
+}
+
+// The findings Task does not record the findings of its own PR in itself: its QA checks every finding of its comments,
+// so it would never pass (SHOP-85 of shop, T14 of C2). They stay on the reports of the PR.
+const ownFindings = ({ item, findings }) => Boolean(findings?.key) && findings.key === item?.key;
+
+// The line /ao-qa of the findings Task prints for the findings of its own PR, or null.
+export function ownFindingsLine({ item, epic, pr, findings }) {
+  const minor = pr?.minorFindings ?? [];
+  if (!epic || !pr?.merged || minor.length === 0 || !ownFindings({ item, findings })) return null;
+  return `The ${minor.length} Medium and Low findings of PR #${pr.number} stay on its reports: ${item.key} is the findings Task of the Epic, and does not record those of its own PR. Make a Task for them if you want them fixed`;
 }

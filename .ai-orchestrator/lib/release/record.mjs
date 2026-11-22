@@ -2,7 +2,8 @@
 // deployer trusts it, not the deployments on GitHub, for what passed Staging and what a rollback may go back to.
 // - branches: per branch, the newest commit audited or that you approved by a deployment request, and the PR it merged;
 // - environments: per environment, the release running, every run with whether its smoke test passed, the head of each
-//   branch already decided, and the deploy under way, so a tick cut short is finished by the next one;
+//   branch already decided, the head of each branch refused once for red CI and looked at again (refused, from the
+//   review of shop PR #90), and the deploy under way, so a tick cut short is finished by the next one;
 // - requests: the deployment requests already handled.
 import { ENVIRONMENTS } from './targets.mjs';
 

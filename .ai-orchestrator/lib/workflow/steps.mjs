@@ -29,7 +29,7 @@ import { fullReviewEffort, reviewScope } from './security-scope.mjs';
 import { deltaEffort } from '../quality/review-tiers.mjs';
 import { waiverFor } from '../quality/waivers.mjs';
 import { planLibraries } from '../quality/dependencies.mjs';
-import { findingsStep } from './findings.mjs';
+import { findingsStep, ownFindingsLine } from './findings.mjs';
 import { effectiveLevel } from './levels.mjs';
 
 const ASKING = ['ba', 'ux', 'sa'];
@@ -1234,6 +1234,8 @@ function decideQa(facts, options) {
     ...(defect && { note: noteKey(defect) }),
   });
   const lines = [`${env} runs ${eight(qa.running.sha)}, which holds the merge of PR #${pr.number}`];
+  const own = ownFindingsLine(facts);
+  if (own) lines.push(own);
   // The run goes on in its session, in a new worktree with the same URL and basic auth: carryOn would drop them.
   if (stopped) return go([{ ...qaRun, effort: stopped.effort ?? qaRun.effort, resume: stopped.session, prompt: resumePrompt(item.key, qaRun.role) }], lines);
   const resumed = carryOn('qa', facts, options);

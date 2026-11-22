@@ -41,6 +41,11 @@ $ARGUMENTS
 - On GO, run `node .ai-orchestrator/scripts/ao-step.mjs build $0 --go` with the Bash tool in the background, with a
   timeout of 7200000 ms, and wait for its notification. Do not poll.
   Do not run any agent yourself, and do not change Jira or GitHub yourself.
+- While it runs, also run `node .ai-orchestrator/scripts/ao-step.mjs watch` with the Bash tool in the background. It
+  reads files only and runs no model, and ends with a report only when something is wrong: a process gone with its
+  lock, an agent silent 20 minutes, a stop that waits for the human, an item flagged Needs you. Tell the human its
+  report in Vietnamese, then start it again while the command still runs. It ends by itself once nothing of the kit
+  has run for 10 minutes.
 - Then read `.ai/runs/<KEY>/last.md`, where KEY is the item the check printed, and report in Vietnamese: what each
   agent did and cost, the questions left, what the human must do at a gate (numbered clicks), and the next command.
 - When the build ends at a draft PR, list the files in `.ai/runs/<KEY>/preview/` (the screenshots of `fe-dev`, the

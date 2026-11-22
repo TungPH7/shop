@@ -53,7 +53,9 @@ function fromBranch(environment, { sha, tree, branch, audits, pull, ci }, record
   // another, and the tree after a merge was never built by the CI of its PR. e93bfc3 of shop ran on Development with
   // its CI red.
   if (ci && !ci.green) {
-    if (ci.failed) return refuse(`CI failed on ${short}, the head of ${branch}: ${ENVIRONMENT_NAMES[environment]} keeps what it runs; a later head with green CI deploys`);
+    // A run again of CI on the same commit may pass, so the deployer looks at this head again (again: true), and
+    // reports it once (review of shop PR #90, reviewer, Low).
+    if (ci.failed) return { ...refuse(`CI failed on ${short}, the head of ${branch}: ${ENVIRONMENT_NAMES[environment]} keeps what it runs until CI of ${short} or of a later head passes`), again: true };
     return wait(ci.started ? `CI of ${short}, the head of ${branch}, is still running` : `CI has not started on ${short}, the head of ${branch}: if Actions was off at the push, run gh workflow run CI --ref ${branch}`);
   }
 
