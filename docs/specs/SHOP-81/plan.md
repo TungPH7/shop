@@ -245,7 +245,7 @@ Quy tắc của lệnh ghi:
   5. slug đổi và đã có, 409 slug.
 
   Slug bằng slug đang lưu, không phân biệt chữ hoa, thì giữ slug đang lưu. Hai lần sửa cùng lúc với cùng `version`: `@Version` của Hibernate chặn lần thứ hai, cũng là 409.
-- **Xóa** là hai câu trong một transaction. Câu đầu đếm sản phẩm của danh mục, cho log. Câu sau là `DELETE FROM app.categories WHERE id = :id`, và khóa ngoại đặt sản phẩm về trống. Xóa một danh mục đã không còn thì trả 204 và ghi log "already gone", như sản phẩm.
+- **Xóa** là hai câu trong một transaction. Câu đầu khóa danh mục (`FOR UPDATE`) và đọc slug, cho log. Câu sau là `DELETE FROM app.categories WHERE id = :id`, đếm sản phẩm của danh mục cho log trong `RETURNING`, rồi khóa ngoại đặt sản phẩm về trống. Câu `DELETE` bắt đầu sau khi đã có khóa, nên số đếm thấy cả sản phẩm vừa được gán trong lúc câu đầu chờ khóa (SHOP-85). Xóa một danh mục đã không còn thì trả 204 và ghi log "already gone", như sản phẩm.
 
 Ví dụ một mục của `GET /api/admin/categories`, để unit test của schema Zod ở `admin` parse:
 
@@ -538,6 +538,7 @@ Không có.
 | Một tab `admin` mở từ trước khi deploy, hay form của SHOP-7 trên Development giữa lúc T1 và ADM merge, xóa mất danh mục của sản phẩm | Medium | Vắng `categoryId` là giữ danh mục đang có (Architecture Decisions 7), có WebMvc test ghim |
 | Hai Story chạy E2E cùng lúc trên Development dùng chung, đụng dữ liệu của nhau | Medium | Tên `E2E <runId>`. Test chỉ kiểm danh mục và sản phẩm của lần chạy đó, và dọn những gì nó tạo (Architecture Decisions 13) |
 | Cache của Next giữ danh mục cũ quá 60 s | Medium | Profile `catalog`: tối đa 25 s cộng 30 s. Proxy không cache. E2E của phần trang khách của AC5–AC9 chờ tới 60 s |
+| Thống kê PostgreSQL của `app.categories` và `app.products` cũ, như ngay sau một lần nạp, xóa hay sửa nhiều sản phẩm: ba câu danh sách danh mục (của khách, sitemap, quản trị) chọn plan theo thống kê, và chạy 230–360 ms thay vì vài ms, quá 200 ms của NFR2 | Low | Architecture Decisions 6 giữ nguyên, không thêm index hay `ANALYZE` trong code: autoanalyze sửa thống kê trong khoảng một phút, vì ngưỡng mặc định là 50 dòng cộng 10% bảng, naptime 1 phút, và không file nào của dự án đổi các giá trị này. `CategoryPerformanceIntegrationTest` đo NFR2 từ thống kê cũ rồi `ANALYZE`, như autoanalyze làm. Khi NFR2 đỏ trên Production, việc đầu tiên là xem `last_autoanalyze` của hai bảng trong `pg_stat_user_tables` |
 | Hàng liên kết làm trang Sản phẩm chậm hay xô lệch | Low | Hàng được đọc song song với khối sản phẩm đầu, trong cùng `<Suspense>`. `qa` đo NFR4 trên Staging |
 
 ## Open Questions
