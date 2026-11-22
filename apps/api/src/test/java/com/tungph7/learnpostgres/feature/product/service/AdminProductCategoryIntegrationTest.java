@@ -210,6 +210,42 @@ class AdminProductCategoryIntegrationTest extends AbstractContainerBaseTest {
   }
 
   /**
+   * The delete runs first and holds its transaction, and the edit sends no {@code categoryId}: the
+   * edit waits for the delete, then keeps what the product has by then, no category, as
+   * Architecture Decisions 7 says. It never writes back the category it read before the delete
+   * committed, which would break {@code products_category_fk} on a field the request did not send.
+   */
+  @Test
+  void update_withoutCategoryId_whileItsCategoryIsDeleted_waitsThenReturns200WithoutCategory()
+      throws Exception {
+    UUID ao = category("Áo", "VISIBLE");
+    UUID product = product(ao);
+    CountDownLatch deleted = new CountDownLatch(1);
+
+    CompletableFuture<Void> delete =
+        CompletableFuture.runAsync(
+            () ->
+                transaction.executeWithoutResult(
+                    tx -> {
+                      jdbc.sql("DELETE FROM app.categories WHERE id = ?").param(ao).update();
+                      deleted.countDown();
+                      sleep(Duration.ofMillis(800));
+                    }));
+    assertThat(deleted.await(10, TimeUnit.SECONDS)).isTrue();
+
+    // A new description, so the edit writes the row; and no categoryId.
+    putJson(product, ",\"description\":\"Áo cotton.\"")
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.description").value("Áo cotton."))
+        .andExpect(jsonPath("$.categoryId").isEmpty())
+        .andExpect(jsonPath("$.version").value(1));
+
+    delete.get(10, TimeUnit.SECONDS);
+    assertThat(categoryOf(product)).isNull();
+    assertThat(versionOf(product)).isEqualTo(1);
+  }
+
+  /**
    * The assign runs first and holds its transaction: the delete waits for it, then leaves the
    * product without category.
    */

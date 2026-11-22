@@ -186,7 +186,7 @@ class AdminProductServiceTest {
   void update_toASlugTakenMeanwhile_returns409SlugDuplicated() {
     UUID id = UUID.randomUUID();
     Product stored = storedProduct();
-    when(repository.findById(id)).thenReturn(Optional.of(stored));
+    when(repository.findByIdForUpdate(id)).thenReturn(Optional.of(stored));
     when(repository.existsBySlug("ao-thun-basic")).thenReturn(false);
     when(repository.saveAndFlush(any(Product.class))).thenThrow(violation("products_slug_unique"));
 
@@ -201,7 +201,7 @@ class AdminProductServiceTest {
     UUID id = UUID.randomUUID();
     DataIntegrityViolationException other = violation("products_price_vnd_valid");
     Product stored = storedProduct();
-    when(repository.findById(id)).thenReturn(Optional.of(stored));
+    when(repository.findByIdForUpdate(id)).thenReturn(Optional.of(stored));
     when(repository.saveAndFlush(any(Product.class))).thenThrow(other);
 
     assertThatThrownBy(() -> service.update(id, updateRequest("ao-thun"))).isSameAs(other);

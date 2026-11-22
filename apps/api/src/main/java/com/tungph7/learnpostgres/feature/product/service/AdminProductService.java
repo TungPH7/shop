@@ -184,6 +184,11 @@ public class AdminProductService {
    * and before the version, the 400s before the 409s. A category deleted between the check and the
    * write breaks {@code products_category_fk}, which is the same 400 (AC10).
    *
+   * <p>The product is read with its row locked ({@link ProductRepository#findByIdForUpdate}). A
+   * category delete that empties the product holds that row until it commits, so the edit reads the
+   * product the delete left: an absent {@code categoryId} then keeps no category, and the response
+   * is a 200 without one, never a 400 on a field the request did not send.
+   *
    * <p>After the write the product is read again, since the trigger {@code
    * trg_products_set_updated_at} sets {@code updated_at} in the database: the response then shows
    * the instant a later read shows.
@@ -198,7 +203,10 @@ public class AdminProductService {
    */
   @Transactional
   public AdminProduct update(UUID id, UpdateProductRequest request) {
-    Product product = find(id);
+    Product product =
+        repository
+            .findByIdForUpdate(id)
+            .orElseThrow(() -> new NotFoundException(ErrorCode.PRODUCT_NOT_FOUND, NOT_FOUND));
     boolean slugChanged = !sameSlug(request.slug(), product.getSlug());
     if (slugChanged && !ProductSlugs.isValid(request.slug())) {
       throw invalidSlug(

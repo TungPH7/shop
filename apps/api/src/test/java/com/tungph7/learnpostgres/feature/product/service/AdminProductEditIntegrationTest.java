@@ -360,9 +360,10 @@ class AdminProductEditIntegrationTest extends AbstractContainerBaseTest {
   }
 
   /**
-   * Two edits at once with the same version both pass the check of the version, so {@code @Version}
-   * of Hibernate is what stops the second: the test holds a lock on the row until both edits wait
-   * to write it, then lets them go.
+   * Two edits at once with the same version: the test holds a lock on the row until both edits wait
+   * to read it, then lets them go. The edit reads the product with its row locked (SHOP-85), so the
+   * second waits for the first to commit, reads the version the first wrote, and is the 409 of the
+   * check of the version.
    */
   @Test
   void update_twiceAtOnceWithTheSameVersion_savesOneAndReturns409ToTheOther() throws Exception {
@@ -380,7 +381,7 @@ class AdminProductEditIntegrationTest extends AbstractContainerBaseTest {
                     List.of(
                         pool.submit(() -> updateStatus(id, "Tab một")),
                         pool.submit(() -> updateStatus(id, "Tab hai")));
-                awaitUpdatesWaitingForTheLock(2);
+                awaitEditsWaitingForTheLock(2);
                 return sent;
               });
 
@@ -463,10 +464,10 @@ class AdminProductEditIntegrationTest extends AbstractContainerBaseTest {
   }
 
   /**
-   * Waits until {@code count} sessions wait on a lock to update the products, read from another
-   * connection than the one that holds the lock.
+   * Waits until {@code count} sessions wait on a lock of the products, to read or to write them,
+   * read from another connection than the one that holds the lock.
    */
-  private void awaitUpdatesWaitingForTheLock(int count) {
+  private void awaitEditsWaitingForTheLock(int count) {
     JdbcClient other = JdbcClient.create(dataSource);
     TransactionTemplate newTransaction = new TransactionTemplate(transactionManager);
     newTransaction.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
@@ -481,7 +482,7 @@ class AdminProductEditIntegrationTest extends AbstractContainerBaseTest {
                           SELECT count(*) FROM pg_stat_activity
                           WHERE datname = current_database()
                             AND wait_event_type = 'Lock'
-                            AND query ILIKE 'update%app.products%'
+                            AND query ILIKE '%app.products%'
                           """)
                       .query(Long.class)
                       .single());
@@ -495,7 +496,7 @@ class AdminProductEditIntegrationTest extends AbstractContainerBaseTest {
         throw new IllegalStateException(e);
       }
     }
-    throw new IllegalStateException("The two edits did not reach the update of the row");
+    throw new IllegalStateException("The two edits did not reach the lock of the row");
   }
 
   /** A full {@code UpdateProductInput}; {@code null} writes JSON null. */
