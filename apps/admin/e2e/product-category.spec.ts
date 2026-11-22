@@ -207,7 +207,9 @@ test.describe('US2 the Category field of the product form S4', () => {
     await expect(categoryField(page)).toHaveValue('');
     await expect(page).toHaveURL(new RegExp(`/products/${scarf.id}/edit$`));
     await expect(nameField).toHaveValue(renamed);
-    expect(await optionsOfRun(page)).toEqual(['No category']);
+    // The error shows at once, while the options load again in the background: the
+    // deleted category leaves the field when that GET lands, sooner or later.
+    await expect.poll(() => optionsOfRun(page)).toEqual(['No category']);
     const saved = await getProduct(request, scarf.id);
     expect(saved).toMatchObject({ name: scarf.name, categoryId: null });
   });
