@@ -1,6 +1,6 @@
 # Design system: admin
 
-> **App:** `apps/admin` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-17, SHOP-8, SHOP-9, SHOP-19, SHOP-20 và SHOP-37
+> **App:** `apps/admin` · **Nguồn:** bảng Design System của [docs/specs/SHOP-7/design.md](../specs/SHOP-7/design.md) · **Plan:** [docs/specs/SHOP-7/plan.md](../specs/SHOP-7/plan.md), Architecture Decisions mục 14 và 15 · **Cập nhật:** 2026-11-17, SHOP-8, SHOP-9, SHOP-19, SHOP-20, SHOP-37 và SHOP-88
 
 Design system của `admin` là CSS variables và CSS thường, không có Tailwind hay thư viện UI (NFR13). Mỗi màn hình dùng token và class dưới đây, không tự đặt màu, cỡ chữ hay khoảng cách.
 
@@ -13,6 +13,7 @@ Design system của `admin` là CSS variables và CSS thường, không có Tail
 | `apps/admin/src/styles/components.css` | Class dùng chung: nút, huy hiệu, thẻ kính, ô nhập, bảng, banner, khung xương, khung trang |
 | `apps/admin/src/styles/list-page.css` | Class riêng của trang danh sách sản phẩm (S1): ô, dòng thông báo và khung xương của bảng sản phẩm, hàng tiêu đề, hàng bộ lọc, thẻ của bảng. Tách khỏi `components.css` ở SHOP-52 |
 | `apps/admin/src/styles/form-page.css` | Class riêng của trang form sản phẩm (S2), thêm và sửa: cột và liên kết quay lại, khung form, trạng thái và khung xương của S2.3 ở chế độ sửa. Tách khỏi `components.css` ở SHOP-67 |
+| `apps/admin/public/layout-backdrop.svg` | Hoạ tiết hình học của ảnh nền khung trang (SHOP-88): một ô 112 × 112, nét đen, dưới 1 KB; `.shell::before` dùng nó làm mask, nên màu nét do token `--backdrop-line` quyết định |
 | `apps/admin/public/theme-init.js` | Script thường, chặn render, trong `<head>` của `index.html`: đặt giao diện đã lưu lên `<html>` trước khung hình đầu tiên |
 | `apps/admin/src/main.tsx` | Nạp font, rồi `tokens.css`, `global.css`, `components.css`, `list-page.css`, `form-page.css` theo thứ tự đó (`list-page.css` và `form-page.css` dựa trên `.table`, `.card`, `.skeleton` của `components.css`); cho `<html>` theo mọi lần đổi giao diện của store |
 | `apps/admin/src/stores/theme/apply-theme.ts` | `applyTheme`, `syncThemeToDocument`: đặt hay gỡ `data-theme` trên `<html>` theo store |
@@ -45,6 +46,7 @@ Cột "Trạng thái" theo bảng của `design.md`: mọi dòng ở đó là "m
 | `--surface` | #ffffffb8 | #1e1e226b | Thẻ kính, viên thuốc; đi cùng `--blur`, `--sat` |
 | `--solid` | #ffffff | #1d1d21 | Thay `--surface` khi không có `backdrop-filter` hay khi bật giảm độ trong suốt |
 | `--dialog` | #fffffff0 | #1c1c20db | Hộp thoại và toast |
+| `--backdrop-line` | #0f172412 (`--text` ở 7%) | #ffffff0f (trắng ở 6%) | Nét của ảnh nền khung trang (SHOP-88). Đủ nhạt để mọi chữ trên nền trang giữ AA: chữ `--hint` trên nét đậm nhất còn khoảng 4,8:1 (sáng) và 6,6:1 (tối) |
 | `--scrim` | #0f172466 | #00000099 | Màn che sau hộp thoại, đi cùng `--blur-thick`. SHOP-9 thêm: `design.md` chỉ ghi "tối đi và mờ" |
 | `--text` | #0f1724 | #f6f8fc | Chữ chính, nhãn trường |
 | `--muted` | #3b475a | #c9d1de | Chữ phụ, tiêu đề cột bảng, huy hiệu Ẩn |
@@ -121,6 +123,7 @@ Tương phản: `ux` đã tính mọi cặp chữ và nền ở hai giao diện 
 | `--blur-thick` | 30 px | Màn che sau hộp thoại (`.dialog::backdrop`) |
 | `--tile-thumb` | 40 px | Ô giữ chỗ ở dòng bảng S1.6 (SHOP-9) |
 | `--icon-btn` | 40 px | Nút tròn chỉ có biểu tượng: nút Đóng của hộp thoại S3.2 (SHOP-9) |
+| `--backdrop-tile` | 112 px | Cỡ một ô lặp của `layout-backdrop.svg` (SHOP-88) |
 | `--search-width` | 320 px | Bề rộng ô tìm S1.5 ở bên phải hàng bộ lọc (SHOP-19). `design.md` không ghi số; ảnh S1 không có ô tìm, nên đây là đề xuất của `fe-dev` |
 
 Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card` và `.pill` dùng nền `--solid`. Không dùng bộ lọc SVG của trang mẫu.
@@ -168,7 +171,7 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.product-form__skeleton-title`, `.product-form__skeleton-text`, `.product-form__skeleton-label`, `.product-form__skeleton-input` | Khung xương của S2.3 | Đi cùng `.skeleton`: tiêu đề cao 36, dòng phụ 16, nhãn 14, ô 44 như `.input`; thẻ có `aria-busy="true"` và nhãn "Đang tải sản phẩm" (SHOP-34); ở `form-page.css` |
 | `.skeleton` | Khung xương | Nền `--surface-2`, nhấp nháy 1,2 s; đặt `border-radius` như phần tử thật; vùng chứa có `aria-busy="true"` |
 | `.visually-hidden` | | Chữ chỉ cho trình đọc màn hình, như nhãn ẩn "Tìm theo tên" |
-| `.shell`, `.shell__bar`, `.shell__main`, `.shell__status` | Khung trang | Rộng tối đa `--app-max`, lề `--gutter` |
+| `.shell`, `.shell__bar`, `.shell__main`, `.shell__status` | Khung trang | Rộng tối đa `--app-max`, lề `--gutter`. `.shell::before` là ảnh nền (mục App shell) |
 | `.field`, `.field__meta`, `.field__messages`, `.field-warning`, `.field-counter`, `.field-icon` | Trường của form | Do `InputField`, `TextAreaField`, `SelectField` vẽ. Dòng cảnh báo màu `--warn-text` kèm biểu tượng; bộ đếm `--hint`, thành `--bad-text` khi vượt (`data-over`) |
 | `.input-group`, `.input-group__input`, `.input-group__affix` | Ô nhập có phần đầu hay hậu tố | Khung là `.input`; focus và lỗi vẽ trên khung (`:focus-within`, `:has([aria-invalid])`) |
 | `.segmented`, `.segmented__item`, `.segmented__radio`, `.choice` | Nút phân đoạn | Nhóm nền `--surface-2`, bo 999, rộng vừa các mục; mục cao 34, đệm 8 14, chữ 12,5/600 `--muted`; mục đang chọn (`aria-pressed`, hay radio `:checked`) nền `--line-2`, chữ `--text` |
@@ -187,6 +190,8 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 3. Phải: đổi ngôn ngữ, đổi giao diện (nhãn ẩn "Ngôn ngữ", "Giao diện"), Đăng nhập hay email khi đã đăng nhập.
 
 Không có thanh công cụ dọc của ảnh mẫu. Nút "thanh bên" demo và `<aside>` của nó đã gỡ (plan, mục 14). `admin` chỉ có bố cục máy tính, từ 1024 px.
+
+Ảnh nền (SHOP-88): `.shell::before` phủ cả khung nhìn (`position: fixed; inset: 0`), nằm sau nội dung (`z-index: -1`, và `.shell` có `isolation: isolate` để lớp này ở trên gradient của `<body>`), không nhận bấm (`pointer-events: none`) và không chiếm chỗ. Nền là `--backdrop-line`, mask là `public/layout-backdrop.svg` lặp theo `--backdrop-tile`, nên một file SVG dùng cho cả sáng và tối. Ẩn khi `forced-colors: active`. Test: `src/styles/layout-backdrop.test.ts` (file SVG và luật CSS) và `e2e/smoke.spec.ts` (trình duyệt thật, axe ở sáng và tối).
 
 ## Components
 
