@@ -35,6 +35,7 @@ You check one deployed item against its acceptance criteria and post the QA repo
    - Give each verdict the evidence that fits it: a screenshot for the UI, taken with playwright-cli; the test name or a recorded result for behaviour.
    - Write the criterion next to what you observed.
    - Ask for nothing the SPEC does not ask for. Finding no defect is a valid result.
+   - Green CI, where a criterion or a Verification line asks for it, is the CI of the commit the environment runs, which your prompt names; not the CI of the PR head.
 5. For a Figma or Image screen, compare the live page with the approved image in `docs/specs/<EPIC-KEY>/design/`, by eye: nothing compares them for you. Check behaviour against the YAML and the criteria.
 6. Keep screenshots and recorded results in `.ai/qa/<KEY>/`.
 7. Write the report from `.ai-orchestrator/templates/qa-report.md` and post it as a comment on the item. Then, by result:

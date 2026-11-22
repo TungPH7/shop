@@ -8,13 +8,15 @@ export const ENVIRONMENTS = ['development', 'staging', 'production'];
 // environment: one of ENVIRONMENTS. Then either:
 // - candidate, a new head on a branch the environment watches: { sha, tree, branch, audits, pull }. audits holds the
 //   audit of every new first-parent commit up to sha, oldest first, each { sha, ok, problems }; pull is { number, head }
-//   of the PR whose merge commit sha is, or null;
+//   of the PR whose merge commit sha is, or null; ci, on a branch whose head deploys only after its own CI passed, the
+//   CI of sha as readChecks gives it ({ green, failed, started }), or undefined;
 // - or request, a deployment request: { sha, tree, creator, rollback }, creator being the login GitHub recorded.
 // record: the deployer's own record of past deploys by environment, each { sha, tree, ok }, ok when smoke passed.
 // approvers: the logins of AO_APPROVERS.
 // Returns { action: 'deploy', sha, tree, via } with via 'branch', 'request' or 'rollback'; { action: 'skip', reason }
-// for a commit another environment runs; or { action: 'refuse', reason } for one the deployer reports with deployment
-// status error, leaving the environment as it is (spec 2.4: failure is kept for a smoke test that failed).
+// for a commit another environment runs; { action: 'wait', reason } for a head whose CI has not ended, looked at again
+// the next round; or { action: 'refuse', reason } for one the deployer reports with deployment status error, leaving
+// the environment as it is (spec 2.4: failure is kept for a smoke test that failed).
 export function decideTarget({ environment, candidate, request, record, approvers }) {
   if (!ENVIRONMENTS.includes(environment)) throw new Error(`unknown environment ${environment}`);
   if (request) return fromRequest(environment, request, record, approvers);
@@ -35,7 +37,7 @@ function environmentOf(branch, pull) {
   return null;
 }
 
-function fromBranch(environment, { sha, tree, branch, audits, pull }, record) {
+function fromBranch(environment, { sha, tree, branch, audits, pull, ci }, record) {
   const short = sha.slice(0, 7);
   const target = environmentOf(branch, pull);
   if (target && target !== environment) return skip(`${short} on ${branch} goes to ${target}`);
@@ -47,6 +49,13 @@ function fromBranch(environment, { sha, tree, branch, audits, pull }, record) {
     return refuse(`${failed.sha.slice(0, 7)} did not pass audit: ${failed.problems.join('; ')}. Read it, then run /ao-rollback ${environment} <sha> for a later head`);
   }
   if (audits.at(-1)?.sha !== sha) return refuse(`the audit does not reach ${short}`);
+  // The CI of the head itself, not only of the PR it merged (T14 of C2, finding 1): with lanes, PRs merge one after
+  // another, and the tree after a merge was never built by the CI of its PR. e93bfc3 of shop ran on Development with
+  // its CI red.
+  if (ci && !ci.green) {
+    if (ci.failed) return refuse(`CI failed on ${short}, the head of ${branch}: ${ENVIRONMENT_NAMES[environment]} keeps what it runs; a later head with green CI deploys`);
+    return wait(ci.started ? `CI of ${short}, the head of ${branch}, is still running` : `CI has not started on ${short}, the head of ${branch}: if Actions was off at the push, run gh workflow run CI --ref ${branch}`);
+  }
 
   if (!target) {
     return refuse(branch === 'main' ? `main takes release and hotfix PRs only, but ${short} merged ${pull?.head ?? 'no PR'}` : `no environment runs ${branch}`);
@@ -71,4 +80,6 @@ const notStaged = (short) => `the tree of ${short} has not passed Staging: Produ
 
 const deploy = (sha, tree, via) => ({ action: 'deploy', sha, tree, via });
 const skip = (reason) => ({ action: 'skip', reason });
+const wait = (reason) => ({ action: 'wait', reason });
+const ENVIRONMENT_NAMES = { development: 'Development', staging: 'Staging', production: 'Production' };
 const refuse = (reason) => ({ action: 'refuse', reason });

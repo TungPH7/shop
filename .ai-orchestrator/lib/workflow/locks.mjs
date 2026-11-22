@@ -11,6 +11,12 @@ export const PARALLEL = ['build', 'fix', 'review', 'qa'];
 const DEV_COMMANDS = ['build', 'fix'];
 // Whether each run of a command puts its role on the lock first (claimRole).
 export const claimsRole = (command) => DEV_COMMANDS.includes(command);
+// The role a command names on its lock when it starts. A fix names none, so admit lets it in while its dev role is busy,
+// and claimRole waits for the role (T14 of C2: /ao-fix 84 stopped at once while fe-dev built SHOP-84). A build of a busy
+// role still stops at once: the WIP of the role on Jira decides it after any wait.
+export const roleOnLock = (command, role) => (command === 'fix' ? undefined : role);
+// Why a dev role takes no more work now (C2 spec section 6; T14 of C2, Low of the review of shop PR #87).
+export const roleBusyWhy = (role, most) => (most === 1 ? 'a dev agent builds one item at a time' : `runs.agents_per_role lets ${most} ${role} agents work at once`);
 const PROJECT = '_project';
 
 // Whether a command may start next to the live ones: { ok: true, name, slot } or { ok: false, reason }. live: the locks
@@ -43,10 +49,7 @@ export function admit({ live: all, command, key, role, environment, cap, agentsP
   if (DEV_COMMANDS.includes(command) && role) {
     const busy = live.filter((lock) => DEV_COMMANDS.includes(lock.command) && lock.role === role);
     const most = agentsPerRole[role] ?? 1;
-    if (busy.length >= most) {
-      const why = most === 1 ? 'a dev agent builds one item at a time' : `runs.agents_per_role lets ${most} ${role} agents work at once`;
-      return { ok: false, reason: `${role} is at work on ${busy.map(({ key: k, pid }) => `${k} (process ${pid})`).join(', ')}: ${why}` };
-    }
+    if (busy.length >= most) return { ok: false, reason: `${role} is at work on ${busy.map(({ key: k, pid }) => `${k} (process ${pid})`).join(', ')}: ${roleBusyWhy(role, most)}` };
   }
   if (live.length >= cap) return { ok: false, reason: `${live.length} runs are going already, the most runs.lanes_max allows: ${describe(live)}` };
   const taken = new Set(live.map(({ slot }) => slot));
@@ -158,7 +161,7 @@ export async function claimRole(dir, file, role, { fs, alive, sleep, poll = 30_0
     );
     if (!result.busy) return result;
     if (attempt === 0) onWait(result.busy);
-    if (attempt === most) return { ok: false, reason: `${role} stayed at work on ${result.busy.key} (process ${result.busy.pid}) while this command waited for it: a dev agent builds one item at a time` };
+    if (attempt === most) return { ok: false, reason: `${role} stayed at work on ${result.busy.key} (process ${result.busy.pid}) while this command waited for it: ${roleBusyWhy(role, limit)}` };
     await sleep(poll);
   }
   return { ok: false, reason: `${role} stayed busy` };
@@ -204,6 +207,18 @@ export async function releaseAgent(dir, file, { fs, alive, sleep }) {
     },
     { fs, alive, sleep },
   );
+}
+
+// What runs now, for whoever watches /ao-run (ao-step status --json; T14 of C2, finding 13): each live lock, with when
+// an agent log of its item was last written since the command started, or null. A watcher that guessed from the lock
+// files and the logs reported wrongly 8 times in T14, since the log folder of an item holds every run of it.
+// newestLogAt(key): the newest write of a .jsonl log of the item, in ms, or null.
+export function runningNow(live, newestLogAt) {
+  return live.map(({ command, key, role, slot, pid, startedAt, agent }) => {
+    const last = newestLogAt(key);
+    const since = Date.parse(startedAt);
+    return { command, key, role: role ?? null, slot, pid, startedAt, agent: agent === true, lastLogAt: last !== null && last !== undefined && last >= since ? new Date(last).toISOString() : null };
+  });
 }
 
 // Why a build run of a dev role may not start, from the WIP of the role on Jira, or null. keys: the items that hold it

@@ -50,7 +50,8 @@ acceptance criterion (Story DoD in .ai-orchestrator/docs/sdlc.md), and where eac
 
 ## Open Questions
 
-<!-- What still needs your decision before gate ① spec-approval. -->
+<!-- What still needs your decision before gate ① spec-approval. Number each question Q1, Q2… at the start of its line, with the
+answer you propose; ao-step counts the Q lines as the questions. Notes on answers and decisions are not numbered. -->
 
 ## Example
 

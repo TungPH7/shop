@@ -18,11 +18,13 @@ export function section(text, heading) {
   return lines.slice(from, to).join('\n').trim();
 }
 
-// The Task List entry of an item in plan.md: the list item whose title, after "Task 3: " or "Story 4: ", is the item's
-// summary (ba copies it from the plan), with its indented lines. null when no entry has that title.
+// The Task List entry of an item in plan.md: the list item whose title is the item's summary (ba copies it from the
+// plan), with its indented lines. null when no entry has that title. The title comes after "Task 3: " or "Story 4: ",
+// after "<KEY>: " as templates/plan.md writes it, or after both, as "SHOP-82 T1: " in the plan of SHOP-81 once ba
+// added the keys (T14 of C2, finding 10).
 export function planEntry(plan, summary) {
   const lines = plan.split('\n');
-  const title = (line) => line.match(/^(\s*)- \[[ x]\] (?:Task|Story|Bug|Spike) \d+: (.+?)(?: \(| ·|$)/);
+  const title = (line) => line.match(/^(\s*)- \[[ x]\] (?:[A-Z][A-Z0-9]*-\d+:? )?(?:(?:Task|Story|Bug|Spike|T|S) ?\d+: )?(.+?)(?: \(| ·|$)/);
   const from = lines.findIndex((line) => {
     const found = title(line);
     return found && norm(found[2]) === norm(summary);

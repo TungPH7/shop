@@ -49,6 +49,23 @@ export async function installationToken({ appId, privateKey, repo, permissions, 
   return { token, expiresAt };
 }
 
+// An installation token held for a command that runs agents (T14 of C2): GitHub fixes its life at one hour, and a build
+// of SHOP-82 ran 70 minutes, after which every read got 401. buy() resolves { token, expiresAt } (installationToken).
+// get() buys one when none is held or the one held ends within margin ms; renew() buys one at once, which ao-step does
+// after each run of an agent (Phiên 35 · Lượt 34: buying costs nothing). Give get to createGitHubClient as its token.
+export function renewableToken(buy, { now = Date.now, margin = 600_000 } = {}) {
+  let held = null;
+  const fresh = () => held !== null && (!held.expiresAt || Date.parse(held.expiresAt) - now() > margin);
+  const renew = async () => {
+    held = await buy();
+    return held.token;
+  };
+  return {
+    get: async () => (fresh() ? held.token : renew()),
+    renew,
+  };
+}
+
 // The account that commits for an App (dev-workflow spec 2.3): <slug>[bot], with the noreply address GitHub links to
 // it, which needs the bot's user id.
 export async function botIdentity({ slug, token, fetch = globalThis.fetch }) {

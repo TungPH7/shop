@@ -27,6 +27,9 @@ $ARGUMENTS
   answer, copy their reply word for word to `.ai/runs/<KEY>/answers.md`, where KEY is the Epic: add nothing, and do
   not restate the questions or the proposals. Then run the command below with `--answers .ai/runs/<KEY>/answers.md`
   added. Never put the answers in a shell command.
+- When their reply refers to advice you gave in this session, such as "đồng ý theo khuyên của Claude", copy that advice
+  too, word for word, after their reply, under the line `Lời khuyên được nhắc tới:` and quoted with `> `: the agents
+  never saw it, and the reply means nothing without it (T14 of C2).
 - On any other STOP, and no text after the key, tell the human the reason and the command or clicks it names, in
   Vietnamese, and stop.
 - On GO, run `node .ai-orchestrator/scripts/ao-step.mjs spec $0 --go` with the Bash tool in the background, with a

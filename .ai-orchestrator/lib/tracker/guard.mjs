@@ -4,7 +4,7 @@
 import { NON_AGENT_ROLES, WEB_ROLES } from '../rules/references.mjs';
 import { checkTransition } from '../transitions.mjs';
 import { extractKeys } from './conventions.mjs';
-import { githubGuards, jiraGuards, jiraTime, qaReportResult, readItem } from './facts.mjs';
+import { agentValues, githubGuards, jiraGuards, jiraTime, qaReportResult, readItem } from './facts.mjs';
 import { literalComment } from './stored-text.mjs';
 import { countRework, reworkStatus } from './rework.mjs';
 
@@ -131,7 +131,9 @@ function isProjectSite(cloudId, mapping) {
 // agent token could write to every space of the site). space is AO_JIRA_SPACE, set per project.
 // Returns { allow: true }, { allow: true, input } when the hook sends the call with that input instead, or
 // { allow: false, reason }.
-export function checkToolCall(input, { mapping, space }) {
+// contract: the contract of the kit, which names the Agent value of each role; with it, the comment of an agent other
+// than qa carries its own Agent value (third review of shop PR #81).
+export function checkToolCall(input, { mapping, space, contract }) {
   const deny = (reason) => ({ allow: false, reason: `jira: ${reason}` });
   const allow = { allow: true };
   const { tool_name: tool, tool_input: args = {} } = input;
@@ -182,7 +184,20 @@ export function checkToolCall(input, { mapping, space }) {
       // #81).
       if (args.commentId !== undefined) return deny('write a new comment: an agent other than qa edits none, since every agent writes with one Jira account and an edit could change the comment of another role');
       if (typeof args.commentBody !== 'string') return deny('commentBody is the text of the comment, as plain text');
-      const { html, text } = literalComment(args.commentBody);
+      // Every agent writes with one Jira account, and ao-step tells who wrote a comment by the Agent value it starts with:
+      // one signed as ba asks sa, one signed as sa answers a request to sa (third review of shop PR #81, High 08bc0732).
+      // The comment of an agent carries its own value, on a line of its own when it had none, and never another role's.
+      let body = args.commentBody;
+      if (contract) {
+        const values = agentValues(contract, mapping);
+        const own = values[input.agent_type];
+        const read = literalComment(body).text;
+        if (Object.entries(values).some(([role, value]) => role !== input.agent_type && read.startsWith(`${value}:`))) {
+          return deny(`start the comment with your own Agent value, ${own}: every agent writes with one Jira account, and ao-step tells who wrote a comment by its first words`);
+        }
+        if (own && !read.startsWith(`${own}:`)) body = `${own}:\n${body}`;
+      }
+      const { html, text } = literalComment(body);
       // A QA report is qa's alone (second review of shop PR #79): QA again checks only the criteria the newest one
       // failed, and the guards of QA fail and Accept read it, while every agent writes with the same Jira account.
       if (qaReportResult(text) !== null) return deny('only qa writes a QA report: QA reads the newest one to decide what it checks again, and Accept needs a PASS');

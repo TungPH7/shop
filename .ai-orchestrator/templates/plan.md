@@ -30,6 +30,8 @@ Shared groundwork, such as the auth module or the schema of the Epic, is an inde
 design system of an app, when design.md has a Design System item marked "mới" or the app has no
 docs/design-system/<app>.md: a Task fe-dev "Design system của <app>" before every Story with a screen of that app.
 The details of each item live in Jira, written from templates/story.md or templates/task.md.
+Two items of one dev role that could build at once build one after the other unless runs.agents_per_role of
+.ai-orchestrator/project.yaml gives that role more agents: say so under the phase, with the value it would take.
 After each title: the dev roles that build the item (be-dev, fe-dev, devops), with "(Sub-task)" when each role gets a
 Sub-task of a Story; the level of the item, light, standard or heavy (C1 spec section 2), with the reason when it is not
 standard; only for a hard item, its effort xhigh or max with the reason; and, when the item touches a screen of the
@@ -64,7 +66,8 @@ the docs branch, so that you approve them with the plan. Write "Không có." whe
 
 ## Open Questions
 
-<!-- What still needs your decision before gate ② plan-approval. -->
+<!-- What still needs your decision before gate ② plan-approval. Number each question Q1, Q2… at the start of its line, with the
+answer you propose; ao-step counts the Q lines as the questions. Notes on answers and decisions are not numbered. -->
 
 ## Example
 

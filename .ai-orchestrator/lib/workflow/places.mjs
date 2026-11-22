@@ -36,6 +36,17 @@ export function laneOf(run, { worktrees, command }) {
   return KEY.test(key ?? '') ? key : null;
 }
 
+// Whether the folder of git has the commit sha, fetched from origin when it lacks it: a worktree is added at a commit,
+// and /ao-qa SHOP-82 met "fatal: invalid reference" at d752638, which Development ran but the folder had not fetched
+// (T14 of C2). Resolves { ok, reason }.
+export function haveCommit(git, sha) {
+  const has = () => git('cat-file', '-e', `${sha}^{commit}`).status === 0;
+  if (has()) return { ok: true };
+  const fetched = git('fetch', '--quiet', 'origin');
+  if (fetched.status !== 0) return { ok: false, reason: `git fetch failed: ${fetched.stderr.trim()}` };
+  return has() ? { ok: true } : { ok: false, reason: `origin has no commit ${sha.slice(0, 7)} either` };
+}
+
 // Puts a checkout on a branch, as before a run; git(...args) runs in that checkout and resolves { status, stdout,
 // stderr }. A protected branch, such as develop, in a lane is checked out detached at its tip on origin: the project
 // folder holds the branch itself, and git keeps a branch to one worktree. Resolves { ok, reason }.

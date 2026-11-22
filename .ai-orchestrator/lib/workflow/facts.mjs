@@ -12,7 +12,7 @@ import { pathTier, requiredReviewRoles } from '../quality/review-tiers.mjs';
 import { waiverOnHead } from '../quality/waivers.mjs';
 import { parseBranch } from '../tracker/conventions.mjs';
 import { expectedOptions } from '../tracker/expected.mjs';
-import { adfText, changesRequestedOn, githubGuards, sameRepo, jiraGuards, qaEnvironment, readChecks, readLatestQaReport } from '../tracker/facts.mjs';
+import { adfText, changesRequestedOn, githubGuards, sameRepo, jiraGuards, qaEnvironment, readChecks, notQaSigners, readLatestQaReport, wipHolders } from '../tracker/facts.mjs';
 import { latestFlagComment } from '../tracker/flags.mjs';
 import { countRework } from '../tracker/rework.mjs';
 import { recordedLine } from './findings.mjs';
@@ -375,7 +375,7 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
   // /ao-qa reads it always: after a QA fail, a QA again at level standard checks only the criteria it failed (C1 spec
   // section 2).
   const reportNeeded = (command === 'build' && item.state === 'in-progress' && pr?.merged) || command === 'qa';
-  const qaReport = reportNeeded ? await readLatestQaReport(jira, item.key) : undefined;
+  const qaReport = reportNeeded ? await readLatestQaReport(jira, item.key, { notQa: notQaSigners(ctx.contract, ctx.mapping) }) : undefined;
   // /ao-qa records the Medium and Low of a merged PR in the findings Task of the Epic (C1 spec section 2): which Task,
   // and whether it names the PR already.
   const findings = command === 'qa' && epic && pr?.merged && pr.minorFindings?.length > 0 ? await readFindingsTask(jira, { epic: epic.key, space: ctx.space, label: ctx.mapping.work_labels.findings, pr: pr.number }) : undefined;
@@ -448,11 +448,15 @@ async function readWip(jira, item, { contract, mapping, agentsPerRole }) {
   const shaping = ['specifying', 'planning'].map((state) => mapping.workflows[workflowId].states[state].status);
   const space = item.key.slice(0, item.key.lastIndexOf('-'));
   const epics = await jira.searchAll(`project = "${space}" AND issuetype = "${epicType(contract)}" AND status in (${shaping.map((s) => `"${s}"`).join(', ')})`, ['status']);
+  // The guard wip-available of jira-guard, read with the items that hold the WIP, which the stop names (T14 of C2).
   const devAgent = {};
+  const holders = {};
   for (const role of new Set([item.role, ...item.subtasks.map(({ role }) => role)].filter(Boolean))) {
-    devAgent[role] = (await jiraGuards(jira, { item, actor: role, needed: ['wip-available'], contract, mapping, agentsPerRole })).includes('wip-available');
+    const held = await wipHolders(jira, { space, actor: role, contract, mapping, agentsPerRole });
+    devAgent[role] = held.keys.length < held.limit;
+    holders[role] = held.keys.filter((key) => key !== item.key);
   }
-  return { epicShaping: { used: epics.length, limit: limit('epic-shaping') }, devAgent };
+  return { epicShaping: { used: epics.length, limit: limit('epic-shaping') }, devAgent, holders };
 }
 
 // /ao-status without a key: every item of the space not done, the open PRs, and the runs in .ai/runs/.
@@ -480,9 +484,12 @@ async function readSpace({ jira, github, deploys, local, contract, mapping, rost
   // An Epic In Progress with its items: /ao-status says when it can be completed.
   for (const epic of items.filter(({ workType, state }) => workType === 'epic' && state === 'in-progress')) epic.children = await readChildren(jira, epic.key, { contract, mapping, roster, space });
   const pulls = (await github.getAll('/pulls', { state: 'open', sort: 'created', direction: 'asc' })).filter(sameRepo).map((pr) => ({ number: pr.number, title: pr.title, headRef: pr.head.ref, key: parseBranch(pr.head.ref)?.key ?? null, draft: Boolean(pr.draft) }));
+  // The PRs merged lately (T14 of C2): an item In Review whose PR is merged waits for its deploy, not for a fix. One page
+  // of the PRs closed last is enough: an item waits there for its deploy, minutes after its merge.
+  const merged = (await github.get('/pulls', { state: 'closed', sort: 'updated', direction: 'desc', per_page: 50 })).filter((pr) => sameRepo(pr) && pr.merged_at).map((pr) => ({ number: pr.number, key: parseBranch(pr.head.ref)?.key ?? null }));
   // The release lines of /ao-status need deployments, which only your gh login reads (release-workflow T12, T16).
   const release = deploys ? await readStatusRelease({ jira, deploys, contract, mapping, space }) : undefined;
-  return { items, pulls, runs: local.runStates(), ...(release && { release }) };
+  return { items, pulls, merged, runs: local.runStates(), ...(release && { release }) };
 }
 
 // The login of the deployer on GitHub: the bot of the App ao-deploy, whose slug is <owner>-ao-deploy (docs/github-apps-setup.md).

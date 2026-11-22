@@ -23,7 +23,7 @@ import { appUrls } from './qa.mjs';
 import { SCREENS, SEO_OFF, pendingRuns, seoScreens, seoWord, stageRoles, stageRuns } from './conditions.mjs';
 import { seoSection, seoTextProblems } from './seo-check.mjs';
 import { WEB_ROLES } from '../rules/references.mjs';
-import { answersPrompt, promptFor, resumePrompt, seoNote } from './prompts.mjs';
+import { answersPrompt, promptFor, resumePrompt, seoFileName, seoNote } from './prompts.mjs';
 import { openQuestions } from './runs.mjs';
 import { fullReviewEffort, reviewScope } from './security-scope.mjs';
 import { deltaEffort } from '../quality/review-tiers.mjs';
@@ -80,23 +80,25 @@ function withSeo(decision, facts, options) {
     const held = seoApprovalStop(facts, options);
     if (held) return { ...held, lines: decision.lines ?? [] };
   }
-  // The prompt carries the words of the comment you approved, as ao-step read them when it compared the marks: an agent
+  // The run carries the words of the comment you approved, as ao-step read them when it compared the marks: an agent
   // that read the comment on Jira during its run could read one seo changed since (second review of shop PR #81).
+  // ao-step writes them to the file the prompt names, so they never go on the command line of claude, whatever their
+  // length (third review of shop PR #81, Mediums 2 and 5).
   const comment = outside && item.seoMark?.id ? { id: item.seoMark.id, hash: item.seoMark.hash, text: item.seoComment ?? '' } : null;
-  if (comment && comment.text.length > SEO_TEXT_LIMIT) {
-    return { ...stop('you', `the comment ${comment.id} of SEO Specialist on ${item.key} is longer than the ${SEO_TEXT_LIMIT} characters a prompt carries`, `Ask seo for a shorter one with a comment "Cần seo:" on ${item.key}, then /ao-request ${item.key}`), lines: decision.lines ?? [] };
-  }
   const runs = decision.runs.map((run) => {
     const kind = kindOf(run);
-    return kind && run.prompt ? { ...run, prompt: `${run.prompt}
+    return kind && run.prompt
+      ? {
+          ...run,
+          prompt: `${run.prompt}
 
-${seoNote(kind, { key: item.key, epic, outside, comment })}` } : run;
+${seoNote(kind, { key: item.key, epic, outside, comment })}`,
+          ...(comment && { seoFile: { name: seoFileName(comment.hash), text: comment.text } }),
+        }
+      : run;
   });
   return { ...decision, runs };
 }
-// The longest comment of seo a prompt carries: the prompt goes on the command line of claude, which Windows caps at
-// 32767 characters.
-const SEO_TEXT_LIMIT = 12000;
 
 // What a STOP waits for (C2 spec section 4), so the dispatcher /ao-run reads it and never the words of next:
 //   you     you: a gate, a click, Accept, seo-ok, a flag, questions, a preview, or a choice only you make
@@ -452,8 +454,10 @@ const previewLine = ({ key, branch, apps = [] }) => `the preview of ${key} runs 
 function decideStatus(facts, options) {
   if (!facts.item) return spaceStatus(facts);
   const lines = [facts.item.workType === 'epic' ? epicLine(facts) : itemLine(facts)];
-  // A level label that does not count is said here too (second review of shop PR #79).
-  if (facts.item.levelIgnored) lines.push(levelLine(facts, options));
+  // The level, when it has a label or went up, and a level label that does not count (second review of shop PR #79; T14
+  // of C2: SHOP-86 was labelled light, and its QA ran an agent since its PR touched a protected path).
+  const level = levelLine(facts, options);
+  if (level) lines.push(level);
   const cost = (facts.run?.runs ?? []).reduce((total, r) => total + (r.costUsd ?? 0), 0);
   if (facts.run?.runs?.length) lines.push(`Runs: ${facts.run.runs.length}, ${usd(cost)} in all; the last: ${describeRun(facts.run.runs.at(-1))}`);
   if (facts.previewRunning) lines.unshift(previewLine(facts.previewRunning));
@@ -467,12 +471,14 @@ function decideStatus(facts, options) {
 function spaceStatus(facts) {
   // A draft PR counts too: it waits for your preview (human-loop spec 4.7).
   const prOf = new Map(facts.pulls.map(({ key, number, draft }) => [key, { number, draft }]));
+  // A merged PR: its item In Review waits for its deploy (T14 of C2).
+  const mergedOf = new Map((facts.merged ?? []).map(({ key, number }) => [key, { number, state: 'merged' }]));
   const costOf = new Map(facts.runs.map(({ key, runs = [] }) => [key, runs.reduce((total, r) => total + (r.costUsd ?? 0), 0)]));
   const lines = [];
   const yours = facts.previewRunning ? [previewLine(facts.previewRunning)] : [];
   for (const item of facts.items.filter(({ workType }) => workType !== 'sub-task')) {
     const pull = prOf.get(item.key);
-    const step = nextCommand(item, pull ? { ...pull, state: 'open' } : null);
+    const step = nextCommand(item, pull ? { ...pull, state: 'open' } : (mergedOf.get(item.key) ?? null));
     const next = step.text;
     const cost = costOf.get(item.key);
     lines.push(`${item.key} ${item.type} "${item.summary}": ${item.status}${pull?.draft ? `, draft PR #${pull.number}` : ''}${item.flagged ? ', flagged' : ''}${cost ? `, ${usd(cost)}` : ''} → ${next}`);
@@ -507,7 +513,7 @@ const closed = ({ state, fixVersions = [] }) => state === 'cancelled' || (state 
 
 // The command or click that moves an item on, from its state. pr: the item's newest PR ({ number, state, draft }), or
 // null. Only an open PR counts: an item In Progress whose PR is merged failed QA, and is built again on a new branch
-// (live-run-fixes spec 2.4).
+// (live-run-fixes spec 2.4). An item In Review whose PR is merged waits for its deploy (T14 of C2).
 export function nextFor(item, pr = null) {
   return nextCommand(item, pr).text;
 }
@@ -543,7 +549,12 @@ export function nextCommand(item, pr = null) {
       return open.draft ? waits('you', `/ao-preview ${key} or /ao-review ${open.number}`) : command('review', open.number);
     },
     // /ao-review decides whether the reports ask for /ao-fix (a STOP with then).
-    'in-review': () => (open ? command('review', open.number, `/ao-review ${open.number} or /ao-fix ${open.number}`) : waits('fix', 'its PR is closed: /ao-status')),
+    'in-review': () => {
+      if (open) return command('review', open.number, `/ao-review ${open.number} or /ao-fix ${open.number}`);
+      // jira-sync moves it to Ready for QA once the environment runs the merge (contract: qa-deployed).
+      if (pr?.state === 'merged' || pr?.merged) return waits('deploy', `PR #${pr.number} is merged: jira-sync moves ${key} to Ready for QA once its QA environment runs it`);
+      return waits('fix', 'its PR is closed: /ao-status');
+    },
     'ready-for-qa': () => command('qa', key),
     'in-qa': () => waits('you', `Accept or QA fail on ${key} after the QA report`),
     done: () => end('done'),
@@ -669,7 +680,10 @@ function decideBuild(facts, options) {
   const effortOf = (work) => work.effort ?? item.effort ?? options.roster.roles[work.role].effort;
   if (item.state === 'ready') {
     for (const role of new Set((todo.length > 0 ? todo : [item]).map(({ role: r }) => r))) {
-      if (facts.wip.devAgent[role] === false) return out(stop('item', `${role} is at its WIP limit dev-agent: it has an item In Progress already`, `/ao-status`));
+      // The items that hold it, when the facts name them (T14 of C2: SHOP-83 waited for your preview and held fe-dev).
+      const holders = facts.wip.holders?.[role] ?? [];
+      const which = holders.length === 0 ? 'it has an item In Progress already' : `${holders.join(', ')} ${holders.length === 1 ? 'is' : 'are'} In Progress. An item whose draft PR waits for your preview holds it too, until you /ao-preview or /ao-review it`;
+      if (facts.wip.devAgent[role] === false) return out(stop('item', `${role} is at its WIP limit dev-agent: ${which}`, `/ao-status`));
     }
   }
   // An ops Task (label ao-ops; kit followups, batch 4 item 14) is devops's, with no branch: no checkout to make, and

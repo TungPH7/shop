@@ -63,7 +63,7 @@ export function dispatcherEffects({ kitDir, projectDir, spawn, fs, alive, now = 
       const { code, stdout, stderr } = await ask(['status', '--json']);
       const board = lastJson(stdout);
       if (code !== 0 || !board) throw new Error(`ao-step status --json gave no board: ${lastLine(stderr || stdout)}`);
-      return { items: board.items ?? [], pulls: board.pulls ?? [] };
+      return { items: board.items ?? [], pulls: board.pulls ?? [], merged: board.merged ?? [] };
     },
     // A dry run that gives no decision is a command that cannot run as asked (waits fix).
     decide: async (command, arg) => {

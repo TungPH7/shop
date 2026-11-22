@@ -32,7 +32,7 @@ export async function jiraGuards(client, { key, item, actor, needed, contract, m
   const current = item ?? (await readItem(client, key));
   // Both QA guards read the same comments, once.
   let qaResult;
-  const latestQaResult = () => (qaResult ??= readLatestQaResult(client, current.key));
+  const latestQaResult = () => (qaResult ??= readLatestQaResult(client, current.key, { notQa: notQaSigners(contract, mapping) }));
   const check = {
     'dor-met': () => dorMet(current, contract, mapping),
     'wip-available': () => wipAvailable(client, current, actor, contract, mapping, agentsPerRole),
@@ -96,15 +96,31 @@ async function opsEvidence(client, key, contract, mapping) {
   });
 }
 
-async function readLatestQaResult(client, key) {
-  return (await readLatestQaReport(client, key))?.result ?? null;
+async function readLatestQaResult(client, key, options) {
+  return (await readLatestQaReport(client, key, options))?.result ?? null;
 }
 
+// The Agent value of each role, as the Agent field of Jira names it: { ba: 'Business Analyst', … }.
+export function agentValues(contract, mapping) {
+  const values = contract.work_item_fields.find(({ id }) => id === 'agent').values;
+  const names = expectedOptions(contract, mapping, 'agent');
+  return Object.fromEntries(values.map(({ id }, i) => [id, names[i]]));
+}
+// The Agent values of every role but qa: a comment that starts with one of them, then a colon, is that role's and no QA
+// report (third review of shop PR #81, High 08bc0732).
+export const notQaSigners = (contract, mapping) => Object.entries(agentValues(contract, mapping)).filter(([role]) => role !== 'qa').map(([, value]) => value);
+const signedByOneOf = (body, signers) => {
+  const text = plainText(typeof body === 'string' ? body : adfText(body)).trim();
+  return signers.some((value) => text.startsWith(`${value}:`));
+};
+
 // The newest QA report of an item: { result, at } with `at` in ISO time, or null (human-loop spec 5.2 reads when it was
-// written, to tell the runs of one rebuild after QA fail from those of another).
-export async function readLatestQaReport(client, key) {
+// written, to tell the runs of one rebuild after QA fail from those of another). notQa: notQaSigners; a comment one of
+// them signed is no report, whatever it holds.
+export async function readLatestQaReport(client, key, { notQa = [] } = {}) {
   const comments = await client.getAll(`/rest/api/3/issue/${encodeURIComponent(key)}/comment`, { orderBy: '-created' }, 'comments');
   const [newest] = comments
+    .filter(({ body }) => !signedByOneOf(body, notQa))
     .map(({ id, body, created }) => ({ id, body, result: qaReportResult(body), at: jiraTime(created) }))
     .filter(({ result }) => result)
     .sort((a, b) => b.at - a.at);
@@ -136,6 +152,9 @@ export function failedCriteria(body) {
   return [...new Set(failed)];
 }
 
+// The Agent value before a QA report heading on its line: a name of words, then a colon (contract/roles.yaml).
+const AGENT_BEFORE_REPORT = /^\p{L}[\p{L}/ .-]{0,39}:\s*(?:#+\s*)?(?=QA report\b)/iu;
+
 // Milliseconds of a Jira timestamp such as 2026-10-28T10:00:00.000+0700, whose offset has no colon.
 export function jiraTime(created) {
   return Date.parse(String(created).replace(/([+-]\d\d)(\d\d)$/, '$1:$2'));
@@ -143,9 +162,10 @@ export function jiraTime(created) {
 
 // PASS, FAIL or NOT TESTED from a comment written with templates/qa-report.md, as ADF or as markdown text; null for
 // any other comment, or a report whose Result is not filled in. NOT TESTED counts as a report, so it hides an older FAIL
-// (agent-roster spec 2.9).
+// (agent-roster spec 2.9). The heading may follow the Agent value of its writer on the same line, as the rules ask every
+// comment to start with it: "Tester/QA Engineer: # QA report: …" (T14 of C2, comment 10639 of SHOP-82).
 export function qaReportResult(body) {
-  const lines = plainText(typeof body === 'string' ? body : adfText(body)).split('\n').map((line) => line.replace(/^#+\s*/, '').trim());
+  const lines = plainText(typeof body === 'string' ? body : adfText(body)).split('\n').map((line) => line.replace(/^#+\s*/, '').replace(AGENT_BEFORE_REPORT, '').trim());
   if (!lines.some((line) => /^QA report\b/i.test(line))) return null;
   const at = lines.findIndex((line) => /^Result$/i.test(line));
   const result = lines.slice(at + 1).find((line) => line !== '');
@@ -170,6 +190,10 @@ const PASSED = ['success', 'neutral', 'skipped'];
 // PR #21), and that of pr-events.yml, which relays the events of the PR (Pilot 3). A failed relay must not send an item
 // back.
 const NOT_CI = ['jira-sync', 'pr-review-relay', 'pr-events-relay'];
+// The jobs of the kit that are check runs on the head of a branch but not its CI (T14 of C2): merge-gate and jira-sync
+// run on workflow_run, and GitHub puts their check runs on the head of the default branch, where merge-gate may wait for
+// QA up to 100 minutes; and audit, which a deploy workflow calls.
+export const NOT_BRANCH_CI = [...NOT_CI, 'merge-gate', 'audit'];
 const FAILED = ['failure', 'timed_out'];
 // Review states that decide; COMMENTED does not.
 const DECISIVE = ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'];
@@ -278,8 +302,9 @@ export function changesRequestedOn(reviews, sha) {
 
 // Green: at least one check, every check run finished and passed, and no commit status other than success. The check
 // runs of NOT_CI do not count.
-export async function readChecks(github, sha) {
-  const runs = (await github.getAll(`/commits/${sha}/check-runs`, {}, 'check_runs')).filter(({ name }) => !NOT_CI.includes(name));
+// ignore: the names of the check runs that are not CI (NOT_CI on the head of a PR, NOT_BRANCH_CI on the head of a branch).
+export async function readChecks(github, sha, { ignore = NOT_CI } = {}) {
+  const runs = (await github.getAll(`/commits/${sha}/check-runs`, {}, 'check_runs')).filter(({ name }) => !ignore.includes(name));
   const status = await github.get(`/commits/${sha}/status`);
   const statusState = status.total_count > 0 ? status.state : null;
   return {
