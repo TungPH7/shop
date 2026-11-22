@@ -190,11 +190,11 @@ public class AdminCategoryService {
 
   /**
    * Deletes a category, and does nothing when it is already gone, so the delete is idempotent
-   * (NFR12). Two statements in one transaction: the first reads the slug and the number of products
-   * for the log, and locks the category; the second is the {@code DELETE}, whose foreign key {@code
-   * products_category_fk} leaves the products of the category without one (NFR15). Each call is
-   * logged at INFO with the operation, the id, the slug, the number of products and the correlation
-   * id (NFR11).
+   * (NFR12). Three statements in one transaction: the first two lock the category and read its slug
+   * and the number of its products for the log ({@link CategoryQueryRepository#findForDelete}); the
+   * last is the {@code DELETE}, whose foreign key {@code products_category_fk} leaves the products
+   * of the category without one (NFR15). Each call is logged at INFO with the operation, the id,
+   * the slug, the number of products and the correlation id (NFR11).
    */
   @Transactional
   public void delete(UUID id) {

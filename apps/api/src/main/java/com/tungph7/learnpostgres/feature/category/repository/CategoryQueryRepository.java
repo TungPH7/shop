@@ -142,22 +142,32 @@ public class CategoryQueryRepository {
   }
 
   /**
-   * The slug and the number of products of a category about to be deleted, in one statement, for
-   * the log of the delete; empty when no category has this id.
+   * The slug and the number of products of a category about to be deleted, for the log of the
+   * delete; empty when no category has this id.
    *
-   * <p>{@code FOR UPDATE OF c} locks the category until the delete commits: an edit of a product
-   * that sets this category then waits on its foreign key check, so no product joins the category
+   * <p>{@code FOR UPDATE} locks the category until the delete commits: an edit of a product that
+   * sets this category then waits on its foreign key check, so no product joins the category
    * between this count and the delete (ADR-0004).
+   *
+   * <p>Two statements, the lock then the count. When the lock waits for an assign of a product that
+   * holds the category ({@code FOR KEY SHARE}), a count in the same statement would still read the
+   * snapshot taken before that wait, and miss the product. The count runs after the lock, with a
+   * snapshot of its own that sees it (SHOP-85, finding c450b3b0).
    */
   @Transactional
   public Optional<DeleteRow> findForDelete(UUID id) {
-    return jdbc.sql(
-            "SELECT c.slug::text AS slug, "
-                + PRODUCT_COUNT
-                + " AS product_count FROM app.categories c WHERE c.id = :id FOR UPDATE OF c")
+    return jdbc.sql("SELECT c.slug::text FROM app.categories c WHERE c.id = :id FOR UPDATE")
         .param("id", id)
-        .query((rs, rowNum) -> new DeleteRow(rs.getString("slug"), rs.getLong("product_count")))
-        .optional();
+        .query(String.class)
+        .optional()
+        .map(
+            slug ->
+                new DeleteRow(
+                    slug,
+                    jdbc.sql("SELECT count(*) FROM app.products p WHERE p.category_id = :id")
+                        .param("id", id)
+                        .query(Long.class)
+                        .single()));
   }
 
   private static AdminRow mapAdminRow(ResultSet rs, int rowNum) throws SQLException {

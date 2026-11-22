@@ -17,14 +17,18 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import javax.sql.DataSource;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -44,6 +48,7 @@ import com.tungph7.learnpostgres.AbstractContainerBaseTest;
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@ExtendWith(OutputCaptureExtension.class)
 class AdminProductCategoryIntegrationTest extends AbstractContainerBaseTest {
 
   private static final String URL = "/api/admin/products";
@@ -247,11 +252,11 @@ class AdminProductCategoryIntegrationTest extends AbstractContainerBaseTest {
 
   /**
    * The assign runs first and holds its transaction: the delete waits for it, then leaves the
-   * product without category.
+   * product without category, and its log counts the product the assign added (NFR11).
    */
   @Test
-  void delete_ofACategoryAssignedMeanwhile_waitsForTheAssignThenEmptiesTheProduct()
-      throws Exception {
+  void delete_ofACategoryAssignedMeanwhile_waitsForTheAssignThenEmptiesTheProduct(
+      CapturedOutput output) throws Exception {
     UUID phuKien = category("Phụ kiện", "VISIBLE");
     UUID product = product(null);
     CountDownLatch assigned = new CountDownLatch(1);
@@ -274,6 +279,9 @@ class AdminProductCategoryIntegrationTest extends AbstractContainerBaseTest {
     assign.get(10, TimeUnit.SECONDS);
     assertThat(categoryOf(product)).isNull();
     assertThat(categoryCount()).isZero();
+    assertThat(appLogLine(output, "Category deleted"))
+        .contains("id=" + phuKien)
+        .contains("productCount=1");
   }
 
   /** Both at once, many times: whichever wins, no product points to a deleted category. */
@@ -403,6 +411,16 @@ class AdminProductCategoryIntegrationTest extends AbstractContainerBaseTest {
   private long categoryCount() {
     return transaction.execute(
         tx -> jdbc.sql("SELECT count(*) FROM app.categories").query(Long.class).single());
+  }
+
+  /** The lines of the app log, not of Hibernate, that hold {@code text}. */
+  private static String appLogLine(CapturedOutput output, String text) {
+    return output
+        .getOut()
+        .lines()
+        .filter(line -> !line.contains("\"logger\":\"org.hibernate."))
+        .filter(line -> line.contains(text))
+        .collect(Collectors.joining("\n"));
   }
 
   private static void sleep(Duration duration) {
