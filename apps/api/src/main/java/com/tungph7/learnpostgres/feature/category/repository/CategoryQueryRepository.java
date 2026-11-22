@@ -56,13 +56,6 @@ public class CategoryQueryRepository {
       long version,
       long productCount) {}
 
-  /**
-   * What the delete of a category logs (NFR11).
-   *
-   * @param productCount every product of the category, on sale or hidden
-   */
-  public record DeleteRow(String slug, long productCount) {}
-
   /** One category as a shopper sees it: its name and its slug as stored. */
   public record StoreRow(String name, String slug) {}
 
@@ -142,32 +135,39 @@ public class CategoryQueryRepository {
   }
 
   /**
-   * The slug and the number of products of a category about to be deleted, for the log of the
-   * delete; empty when no category has this id.
+   * Locks a category about to be deleted, and reads its slug for the log of the delete; empty when
+   * no category has this id.
    *
-   * <p>{@code FOR UPDATE} locks the category until the delete commits: an edit of a product that
-   * sets this category then waits on its foreign key check, so no product joins the category
-   * between this count and the delete (ADR-0004).
-   *
-   * <p>Two statements, the lock then the count. When the lock waits for an assign of a product that
-   * holds the category ({@code FOR KEY SHARE}), a count in the same statement would still read the
-   * snapshot taken before that wait, and miss the product. The count runs after the lock, with a
-   * snapshot of its own that sees it (SHOP-85, finding c450b3b0).
+   * <p>{@code FOR UPDATE} holds the category until the delete commits: an edit of a product that
+   * sets this category then waits on its foreign key check, so no product joins the category before
+   * the delete (ADR-0004). An assign that already holds the category ({@code FOR KEY SHARE}) makes
+   * the lock wait until it commits.
    */
   @Transactional
-  public Optional<DeleteRow> findForDelete(UUID id) {
+  public Optional<String> lockForDelete(UUID id) {
     return jdbc.sql("SELECT c.slug::text FROM app.categories c WHERE c.id = :id FOR UPDATE")
         .param("id", id)
         .query(String.class)
-        .optional()
-        .map(
-            slug ->
-                new DeleteRow(
-                    slug,
-                    jdbc.sql("SELECT count(*) FROM app.products p WHERE p.category_id = :id")
-                        .param("id", id)
-                        .query(Long.class)
-                        .single()));
+        .optional();
+  }
+
+  /**
+   * Deletes a category, locked first by {@link #lockForDelete}, in one statement, and returns the
+   * number of its products, on sale or hidden, for the log (NFR11); empty when no category has this
+   * id.
+   *
+   * <p>The count is in the {@code RETURNING} of the {@code DELETE}. This statement starts once the
+   * lock is held, so its snapshot sees a product that an assign added while the lock waited, which
+   * a count in the statement of the lock misses (SHOP-85, finding c450b3b0). {@code RETURNING} is
+   * computed before the foreign key {@code products_category_fk} ({@code ON DELETE SET NULL})
+   * leaves the products without category, at the end of the same statement (NFR15).
+   */
+  @Transactional
+  public Optional<Long> delete(UUID id) {
+    return jdbc.sql("DELETE FROM app.categories c WHERE c.id = :id RETURNING " + PRODUCT_COUNT)
+        .param("id", id)
+        .query(Long.class)
+        .optional();
   }
 
   private static AdminRow mapAdminRow(ResultSet rs, int rowNum) throws SQLException {

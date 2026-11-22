@@ -29,7 +29,6 @@ import com.tungph7.learnpostgres.feature.category.dto.CreateCategoryRequest;
 import com.tungph7.learnpostgres.feature.category.dto.ItemList;
 import com.tungph7.learnpostgres.feature.category.dto.UpdateCategoryRequest;
 import com.tungph7.learnpostgres.feature.category.repository.CategoryQueryRepository;
-import com.tungph7.learnpostgres.feature.category.repository.CategoryQueryRepository.DeleteRow;
 import com.tungph7.learnpostgres.feature.category.repository.CategoryRepository;
 
 /**
@@ -190,29 +189,30 @@ public class AdminCategoryService {
 
   /**
    * Deletes a category, and does nothing when it is already gone, so the delete is idempotent
-   * (NFR12). Three statements in one transaction: the first two lock the category and read its slug
-   * and the number of its products for the log ({@link CategoryQueryRepository#findForDelete}); the
-   * last is the {@code DELETE}, whose foreign key {@code products_category_fk} leaves the products
-   * of the category without one (NFR15). Each call is logged at INFO with the operation, the id,
-   * the slug, the number of products and the correlation id (NFR11).
+   * (NFR12). Two statements in one transaction: the first locks the category and reads its slug
+   * ({@link CategoryQueryRepository#lockForDelete}); the second is the {@code DELETE}, which counts
+   * the products of the category for the log, then leaves them without category through the foreign
+   * key {@code products_category_fk} (NFR15, {@link CategoryQueryRepository#delete}). Each call is
+   * logged at INFO with the operation, the id, the slug, the number of products and the correlation
+   * id (NFR11).
    */
   @Transactional
   public void delete(UUID id) {
     String correlationId = correlation.currentId().orElse(NO_CORRELATION_ID);
-    Optional<DeleteRow> category = queryRepository.findForDelete(id);
-    if (category.isEmpty()) {
+    Optional<String> slug = queryRepository.lockForDelete(id);
+    Optional<Long> productCount = slug.flatMap(locked -> queryRepository.delete(id));
+    if (productCount.isEmpty()) {
       log.info(
           "Category already gone, nothing deleted: operation=delete id={} correlationId={}",
           id,
           correlationId);
       return;
     }
-    repository.deleteCategoryById(id);
     log.info(
         "Category deleted: operation=delete id={} slug={} productCount={} correlationId={}",
         id,
-        category.get().slug(),
-        category.get().productCount(),
+        slug.get(),
+        productCount.get(),
         correlationId);
   }
 
