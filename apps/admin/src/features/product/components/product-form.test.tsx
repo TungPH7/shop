@@ -215,8 +215,9 @@ describe('ProductForm in add mode', () => {
         if (text === '') continue;
         const control = field[key as keyof typeof field]();
         await user.clear(control);
-        // Long values are pasted: typing 5.001 characters one by one is slow.
-        if (text.length > 200) {
+        // Long values are pasted in one go: typing 151 or 5.001 characters one by one
+        // outlasts the test timeout under coverage instrumentation.
+        if (text.length > 100) {
           control.focus();
           await user.paste(text);
         } else {
