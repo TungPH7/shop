@@ -64,8 +64,8 @@ import com.tungph7.learnpostgres.AbstractContainerBaseTest;
  * <p>The plan of each statement depends on the statistics of the two tables. The class starts from
  * the stale ones that an earlier class can leave, with autovacuum paused on both tables until the
  * end, and analyzes the tables once the data is in. So the median does not depend on the order of
- * the classes or on when the daemon last ran: CI of develop at {@code e93bfc3} measured 351 ms for
- * {@code GET /api/categories}, where CI of the same tree in PR #83 measured 4 ms.
+ * the classes or on when the daemon last ran: on stale statistics, the lists of categories take
+ * more than 200 ms.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -127,14 +127,18 @@ class CategoryPerformanceIntegrationTest extends AbstractContainerBaseTest {
     transaction.executeWithoutResult(tx -> analyzeTheData());
   }
 
+  /**
+   * Deletes the data, then turns autovacuum back on in a transaction of its own, so it is on again
+   * even when the delete fails.
+   */
   @AfterAll
   void deleteTheData() {
-    transaction.executeWithoutResult(
-        tx -> {
-          // TRUNCATE, not DELETE: the next class starts from an empty table, not 10,000 dead rows.
-          jdbc.sql("TRUNCATE app.products, app.categories").update();
-          resumeAutovacuum();
-        });
+    try {
+      // TRUNCATE, not DELETE: the next class starts from an empty table, not 10,000 dead rows.
+      transaction.executeWithoutResult(tx -> truncateTheTables());
+    } finally {
+      transaction.executeWithoutResult(tx -> resumeAutovacuum());
+    }
   }
 
   @Test
@@ -440,6 +444,15 @@ SELECT app.gen_uuid_v7(),
         .update();
   }
 
+  /**
+   * Empties the two tables. {@code CASCADE} empties too any table whose foreign key points to them,
+   * such as a later table of order lines: PostgreSQL refuses a {@code TRUNCATE} of a table that
+   * another table references, even an empty one.
+   */
+  private void truncateTheTables() {
+    jdbc.sql("TRUNCATE app.products, app.categories CASCADE").update();
+  }
+
   private void deleteAll() {
     jdbc.sql("DELETE FROM app.products").update();
     jdbc.sql("DELETE FROM app.categories").update();
@@ -470,13 +483,13 @@ SELECT app.gen_uuid_v7(),
   }
 
   /**
-   * The statistics an earlier class can leave, those of the failed CI run of develop at {@code
-   * e93bfc3}: a table of products that held {@value #EARLIER_PRODUCTS} rows, all deleted and not
-   * vacuumed yet, analyzed while it held {@value #EARLIER_PRODUCTS_OF_ONE_CATEGORY} products of a
-   * single category. On them the planner takes the table of products for a few rows.
+   * The statistics an earlier class can leave: a table of products that held {@value
+   * #EARLIER_PRODUCTS} rows, all deleted and not vacuumed yet, analyzed while it held {@value
+   * #EARLIER_PRODUCTS_OF_ONE_CATEGORY} products of a single category. On them the planner takes the
+   * table of products for a few rows.
    */
   private void leaveTheStatisticsOfAnEarlierClass() {
-    jdbc.sql("TRUNCATE app.products, app.categories").update();
+    truncateTheTables();
     jdbc.sql(
             """
 INSERT INTO app.products (name, slug, description, price_vnd)
