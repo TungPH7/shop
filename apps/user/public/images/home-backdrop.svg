@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" fill="none" stroke="#000" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Tile of the home page backdrop (SHOP-87). Only its shape counts: CSS uses it as a mask over the border colour token. -->
+  <circle cx="40" cy="40" r="14"/>
+  <path d="M120 28v24M108 40h24"/>
+  <path d="M28 108l24 24M52 108l-24 24"/>
+  <path d="M120 106l14 24h-28z"/>
+  <path d="M0 80h16M144 80h16M80 0v16M80 144v16"/>
+  <circle cx="80" cy="80" r="2" fill="#000" stroke="none"/>
+</svg>

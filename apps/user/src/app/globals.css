@@ -22,6 +22,9 @@ body {
   background-color: var(--background);
   background-image: linear-gradient(135deg, var(--background-from), var(--background-to));
   background-attachment: fixed;
+  /* Its own stacking context, so a layer at z-index -1 (the home backdrop) is drawn over this gradient and under the
+     content, the bar and the footer (SHOP-87). */
+  isolation: isolate;
 }
 
 /* Page title, measured on the reference page: 38/39.5, 600, letter-spacing -0.025em; 28 under 768px. */
@@ -76,4 +79,21 @@ main {
   height: auto;
   border-radius: 8px;
   margin-bottom: 1rem;
+}
+
+/* The backdrop of the home page (SHOP-87): the tile of public/images/home-backdrop.svg as a mask of --border, so its
+   lines take the colour of the theme. Fixed and out of the flow, it moves nothing on the page (no layout shift) and
+   takes no click; it fades out towards the bottom. HomeView renders it as an empty, aria-hidden <div>. */
+.home-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--border);
+  mask-image: url('/images/home-backdrop.svg'), linear-gradient(to bottom, black, transparent 90%);
+  mask-size:
+    160px 160px,
+    100% 100%;
+  mask-repeat: repeat, no-repeat;
+  mask-composite: intersect;
 }

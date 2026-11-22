@@ -20,6 +20,8 @@ export function HomeView() {
 
   return (
     <main>
+      {/* Decorative backdrop behind the whole page (SHOP-87): an empty layer, styled by .home-backdrop of globals.css. */}
+      <div className="home-backdrop" aria-hidden="true" />
       {/* ⭐ Folder 20 — hero next/image ẢNH LOCAL (public/). `priority`: ảnh above-the-fold (LCP) → preload,
           KHÔNG lazy. width/height tường minh + .hero-banner (width:100%/height:auto) → giữ tỉ lệ = 0 CLS.
           SVG → next/image TỰ đặt `unoptimized` (vector không cần resize); phục vụ từ 'self' (hợp CSP). */}

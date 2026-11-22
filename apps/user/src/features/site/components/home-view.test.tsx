@@ -28,3 +28,11 @@ test('đổi sang tiếng Việt khi provider locale=vi', () => {
   expect(screen.getByText('Ngôn ngữ hiện tại (từ URL): vi')).toBeInTheDocument();
   expect(screen.getByText('Hỗ trợ 2 ngôn ngữ')).toBeInTheDocument();
 });
+
+test('vẽ ảnh nền trang trí phía sau nội dung, ẩn với trình đọc màn hình (SHOP-87)', () => {
+  const { container } = renderWithProviders(<HomeView />);
+  const backdrop = container.querySelector('.home-backdrop');
+  expect(backdrop).not.toBeNull();
+  expect(backdrop).toHaveAttribute('aria-hidden', 'true');
+  expect(backdrop).toBeEmptyDOMElement();
+});
