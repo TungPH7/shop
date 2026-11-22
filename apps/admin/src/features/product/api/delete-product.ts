@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
-import { productKeys } from '@/features/product/api/query-keys';
+import { refreshAfterProductWrite } from '@/features/product/api/refresh-after-product-write';
 import { api } from '@/lib/api/api';
 
 // DELETE /api/admin/products/{id} (API Contract of docs/specs/SHOP-7/plan.md), for S3
@@ -18,7 +18,6 @@ export function useDeleteProduct() {
     mutationFn: deleteProduct,
     // The dialog shows the error itself (S3.6): no global toast on top.
     meta: { skipGlobalError: true },
-    // Every page of the list, as the deleted product may shift the next ones.
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: productKeys.lists() }),
+    onSuccess: () => refreshAfterProductWrite(queryClient),
   });
 }

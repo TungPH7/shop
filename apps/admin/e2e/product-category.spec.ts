@@ -154,6 +154,34 @@ test.describe('US2 the Category field of the product form S4', () => {
     expect(await productCountOf(page, shirts.name)).toBe('0');
   });
 
+  test('AC9 the Categories page shows the new count after an add, without a reload', async ({
+    page,
+    request,
+  }) => {
+    const shirts = await addCategory(request, { name: 'Áo' });
+    // The Categories page loads its list once; the rest of the test moves by the links
+    // of the app, so the list of before stays in the cache.
+    expect(await productCountOf(page, shirts.name)).toBe('0');
+    const nav = page.getByRole('navigation', { name: 'Main navigation' });
+    const name = e2eName('Áo sơ mi', runId);
+
+    await nav.getByRole('link', { name: 'Products' }).click();
+    await page.getByRole('link', { name: 'Add product' }).first().click();
+    await page.getByRole('textbox', { name: /Product name/ }).fill(name);
+    await page.getByRole('textbox', { name: /^Price/ }).fill('300000');
+    await categoryField(page).selectOption({ label: shirts.name });
+    await page.getByRole('button', { name: 'Add product' }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Product added' })).toBeVisible();
+    products.push(...(await findProducts(request, name)));
+
+    await nav.getByRole('link', { name: 'Categories' }).click();
+    const row = page
+      .getByRole('table', { name: 'Category list' })
+      .locator('tbody tr')
+      .filter({ has: page.getByText(shirts.name, { exact: true }) });
+    await expect(row.getByRole('cell').nth(3)).toHaveText('1');
+  });
+
   test('AC10 a category deleted in another tab: nothing saved, the error under the field, what was typed kept', async ({
     page,
     request,

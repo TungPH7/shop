@@ -9,3 +9,11 @@ export const productKeys = {
   list: (filters: ProductListFilters) => [...productKeys.lists(), filters] as const,
   detail: (id: string) => [...productKeys.all, 'detail', id] as const,
 };
+
+/**
+ * The first segment of every key of the category feature, written out here so the
+ * product feature never imports it (plan of SHOP-81, Architecture Decisions 9). A
+ * category shows how many products it has, so a write of a product refreshes every
+ * query under it (AC9 of SHOP-81).
+ */
+export const categoriesKey = ['categories'] as const;

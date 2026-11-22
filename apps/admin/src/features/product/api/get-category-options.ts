@@ -1,5 +1,6 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
 
+import { categoriesKey } from '@/features/product/api/query-keys';
 import { type CategoryOption, categoryOptionListSchema } from '@/features/product/model/product';
 import { api } from '@/lib/api/api';
 
@@ -12,7 +13,7 @@ import { api } from '@/lib/api/api';
  * Starts with `categories`, as every key of the category feature does: an add, edit or
  * delete of a category refreshes these options too.
  */
-export const categoryOptionsKey = ['categories', 'options'] as const;
+export const categoryOptionsKey = [...categoriesKey, 'options'] as const;
 
 export async function getCategoryOptions(): Promise<CategoryOption[]> {
   const list = await api.get('/admin/categories', { schema: categoryOptionListSchema });

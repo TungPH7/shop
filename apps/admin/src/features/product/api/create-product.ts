@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { z } from 'zod';
 
-import { productKeys } from '@/features/product/api/query-keys';
+import { refreshAfterProductWrite } from '@/features/product/api/refresh-after-product-write';
 import { type CreateProductInput } from '@/features/product/model/product-form';
 import { api } from '@/lib/api/api';
 import { isApiError } from '@/lib/api/api-error';
@@ -116,6 +116,6 @@ export function useCreateProduct() {
     mutationFn: createProduct,
     // The form shows every error itself (S2.5, S2.6, S2.7): no global toast on top.
     meta: { skipGlobalError: true },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: productKeys.lists() }),
+    onSuccess: () => refreshAfterProductWrite(queryClient),
   });
 }
