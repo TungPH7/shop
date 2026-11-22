@@ -52,6 +52,8 @@ export type ProductInput = {
   description?: string | null;
   availability?: 'IN_STOCK' | 'OUT_OF_STOCK';
   status?: 'ACTIVE' | 'HIDDEN';
+  /** The id of a category of SHOP-81, visible or hidden; left out or null, no category (support/categories.ts). */
+  categoryId?: string | null;
 };
 
 /** `updatedAt` is the last edit the api stored: the `lastmod` of the product in the sitemap (AC28). */
@@ -89,6 +91,35 @@ export async function createProduct(
   expect(response.status(), await response.text()).toBe(201);
   const { id, name, slug, updatedAt } = (await response.json()) as CreatedProduct;
   return { id, name, slug, updatedAt };
+}
+
+/**
+ * Puts the product `id` in the category `categoryId`, or in none with `null`, as the form of admin does: it reads the
+ * product with its version, then sends every field back with `categoryId` (plan of SHOP-81, Architecture Decisions 7).
+ */
+export async function setProductCategory(
+  api: APIRequestContext,
+  id: string,
+  categoryId: string | null,
+): Promise<void> {
+  const read = await api.get(`/api/admin/products/${id}`);
+  expect(read.status(), await read.text()).toBe(200);
+  const { name, slug, description, price, compareAtPrice, status, availability, version } =
+    (await read.json()) as Record<string, unknown>;
+  const response = await api.put(`/api/admin/products/${id}`, {
+    data: {
+      name,
+      slug,
+      description,
+      price,
+      compareAtPrice,
+      status,
+      availability,
+      version,
+      categoryId,
+    },
+  });
+  expect(response.status(), await response.text()).toBe(200);
 }
 
 /** Deletes a product; the api answers 204 even when it is already gone. */

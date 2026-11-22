@@ -179,6 +179,9 @@ Không có `backdrop-filter`, hay `prefers-reduced-transparency: reduce`: `.card
 | `.product-page`, `.back-link`, `.product-detail`, `.product-detail__body`, `__name`, `__about`, `__description`, `.product-price`, `__label`, `__row`, `__value`, `__was` | Trang chi tiết S5 (SHOP-23) | Do `ProductDetail` (`src/features/product/components/product-detail.tsx`) đặt. `<main>` rộng tối đa 64rem; một thẻ kính hai cột 2fr 3fr (ô giữ chỗ 1:1 chiếm 40%), một cột dưới 768 px với ô 4:3. Tên h1 26/700 (22 dưới 768 px), `overflow-wrap: anywhere`. Giá trong `.well`: nhãn 12,5 `--muted-foreground`, giá 34/700 (26 dưới 768 px), giá gốc 13,5 `--hint` trong `<s>` kèm chữ ẩn, huy hiệu `.badge--bad .badge--plain`. Mô tả `white-space: pre-line`. Khung xương `ProductDetailSkeleton` cùng hình |
 | `.products-page`, `.product-grid`, `.product-card`, `__name`, `__price`, `__value`, `__was`, `__stock`, `__skeleton-tile`, `__skeleton-line`, `__skeleton-price`, `.product-empty`, `.load-more`, `__progress`, `__error` | Lưới (S4.5), thẻ sản phẩm (S4.6), thông báo không có sản phẩm (S4.7) và Xóa tìm kiếm (S4.8), dòng tiến độ (S4.9), nút Xem thêm (S4.10) | Do `ProductResults`, `ProductCard` và `LoadMoreButton` (`src/features/product/components/`) đặt. `<main class="products-page">` rộng bằng khung. Thẻ: `.card` là một liên kết, lưới ba hàng (ô 4:3, tên, giá) cách 12; tên 15/600 tối đa 2 dòng (`line-clamp`), `overflow-wrap: anywhere`; giá 17/700, giá gốc 13,5/500 `--hint` trong `<s>` kèm chữ ẩn "Giá gốc:", "-16%" `.badge--bad .badge--plain` kèm chữ ẩn "Giảm". Huy hiệu Hết hàng `.badge--warn` đứng cuối trong markup, để trình đọc màn hình đọc tên, giá, giá gốc, giảm rồi Hết hàng; CSS đặt nó đè góc trên trái ô (cách mép ô 10), với tint của warn chồng trên `--solid` để giữ tương phản trên màu nhóm ở giao diện sáng. Hover nâng 2 px và thêm viền trong 1 px `--border-strong`; `:focus-visible` vòng `--ring` chung. Dòng tiến độ 12,5 `--hint`, căn giữa trên nút `.btn--secondary .btn--sm`; dòng lỗi 12,5 `--danger-text`, `role=alert`. Khung xương: 8 thẻ cùng hình, danh sách `aria-busy="true"`. `.product-empty` (SHOP-30): cột căn giữa cách 12, chữ `--muted-foreground`, `overflow-wrap: anywhere` cho từ khóa dài; câu `role=status`, liên kết Xóa tìm kiếm bên dưới, chỉ khi đang tìm. axe không báo vi phạm ở S4, hai ngôn ngữ, sáng và tối (`apps/user/e2e/accessibility.spec.ts`) |
 | `.product-not-found`, `.product-not-found__card` | Trang không tìm thấy sản phẩm S6 (SHOP-24) | Do `ProductNotFound` (`src/features/product/components/product-not-found.tsx`) đặt. Một `.card` rộng tối đa 36rem ở giữa trang, cột dọc cách 16: tiêu đề `<h1>` chung của trang, dòng giải thích `--muted-foreground`, liên kết `.btn .btn--primary` về S4. Bố cục ở điện thoại không đổi. axe không báo vi phạm ở S6, hai ngôn ngữ, sáng và tối (`apps/user/e2e/product-not-found.spec.ts`) |
+| `.breadcrumb`, `__list`, `__item`, `__link`, `__current`, `__separator` | Breadcrumb (S5.2, S8.2 của SHOP-81; SHOP-84) | Do `Breadcrumb` (`src/components/ui/breadcrumb.tsx`) đặt; xem mục Breadcrumb. Chữ 13,5/600 (`--fs-md`), liên kết `--primary-text` cao tối thiểu 24 (WCAG 2.5.8), gạch chân khi hover; mục cuối `--muted-foreground`; dấu › `--hint`, `aria-hidden`. Một hàng, các mục cách nhau 8 (`--space-2`), xuống dòng khi hẹp, `overflow-wrap: anywhere`, nên 320 px không có thanh cuộn ngang. Cách phần dưới 8: tiêu đề của S5, hay liên kết "← Sản phẩm" của S8 |
+| `.category-title`, `.category-skeleton`, `__breadcrumb`, `__title`, `.product-filters--sort-only` | Trang danh mục S5 của SHOP-81 (SHOP-84) | Do trang `src/app/[locale]/categories/[slug]/page.tsx` và `ProductResults` đặt. Tiêu đề là `<h1>` chung của trang (38, 28 dưới 768 px), `overflow-wrap: anywhere` cho tên tới 60 ký tự. `.product-filters--sort-only`: trang danh mục không có ô tìm, nên ô chọn sắp xếp đứng một mình bên phải hàng (rộng hết hàng dưới 768 px); khung xương của nó chỉ có chỗ ô chọn. Lúc tải: `.category-skeleton` giữ chỗ breadcrumb (cao 24) và tiêu đề (một dòng h1), rồi khung xương của lưới, để lưới không bị đẩy xuống khi tên tới. Lưới, thẻ, dòng tiến độ, Xem thêm và `.product-empty` dùng lại class của S4; trạng thái trống có liên kết `.btn .btn--primary` "Xem tất cả sản phẩm" |
+| `.category-links`, `__label`, `__list`, `__link` | Hàng liên kết danh mục (S7.3, S7.4 của SHOP-81; SHOP-84) | Do `CategoryLinks` (`src/features/category/components/category-links.tsx`) đặt, dưới tiêu đề của S4 (cách 12) và trên hàng tìm và sắp xếp (cách 18), cùng `<Suspense>` với lưới nên hiện cùng lúc với lưới. `<nav aria-label="Danh mục">`: nhãn nhìn thấy 13,5/600 `--muted-foreground` (`aria-hidden`, vì `aria-label` đã nói), cùng hàng với các liên kết từ 768 px, một hàng riêng dưới 768 px; rồi `<ul>` các liên kết `.btn .btn--secondary .btn--sm` (cao tối thiểu 34, bo `--r-ctl`), cách nhau 8, xuống dòng khi hẹp; tên dài xuống dòng trong nút (`overflow-wrap: anywhere`). Không có danh mục nào, hay `api` lỗi: không có hàng, không để chỗ trống |
 | `.site-shell`, `.site-nav`, `.pill`, `.pill--brand`, `.pill__link`, `.nav-group`, `.nav-btn`, `.nav-btn--text`, `.nav-btn__icon`, `.nav-btn__label`, `.nav-account`, `.site-footer` | Viên thuốc điều hướng (S4.1), chân trang (S4.11) | Do `SiteNav`, các nút chuyển và `SiteFooter` đặt; xem mục Page Frame |
 
 Tên class giống `admin` (`apps/admin/src/styles/components.css` của SHOP-8), để một màn hình đọc như nhau ở hai app.
@@ -235,6 +238,25 @@ Không còn: thẻ sản phẩm S4.6 đã có class ở mục Classes (SHOP-25).
 
 - **Chữ:** `placeholderInitial(name)` bỏ mọi khoảng trắng, chuẩn hóa NFC, lấy ký tự đầu (theo code point, nên một chữ gõ kiểu tổ hợp như "a" + dấu sắc vẫn là "Á"), rồi `toLocaleUpperCase('vi')`. Tên rỗng cho chuỗi rỗng.
 - Ô là `<span aria-hidden="true">` có `data-group` và `data-variant`, nên dùng được trong một liên kết; tên sản phẩm phải có ở chữ của liên kết. Chữ cái 700, 40% chiều cao ô: `.tile` là container của chính nó, và chữ đặt bằng `cqi` (30cqi ở ô 4:3, 40cqi ở ô vuông).
+
+## Breadcrumb
+
+`src/components/ui/breadcrumb.tsx` (SHOP-84), dùng ở trang danh mục S5 và trang chi tiết S8 của SHOP-81. Nó nhận đúng danh sách mục mà `breadcrumbLd` nhận, nên breadcrumb nhìn thấy và JSON-LD `BreadcrumbList` không bao giờ lệch nhau (SPEC của SHOP-81, Code Style):
+
+```tsx
+const crumbs = [
+  { name: tSeo('home'), url: localizedUrl(locale, '/') },
+  { name: category.name, url: localizedUrl(locale, `/categories/${category.slug}`) },
+];
+
+<JsonLd data={breadcrumbLd(crumbs)} />
+<Breadcrumb items={crumbs} label={tBreadcrumb('label')} />
+```
+
+- `<nav aria-label>` ("Đường dẫn trang", en "Breadcrumb", khóa `Breadcrumb.label`) chứa `<ol>`.
+- Mọi mục trừ mục cuối là một `<a href>` thật của `next/link`, tới pathname của URL tuyệt đối (pathname đó đã có locale). Mục cuối là trang đang xem: chữ có `aria-current="page"`, không phải liên kết.
+- Tên luôn là chữ, không bao giờ là HTML (NFR10 của SHOP-81).
+- Kiểm tra: `breadcrumb.test.tsx`; `apps/user/e2e/category-seo.spec.ts` và `product-breadcrumb.spec.ts`, kể cả axe sáng và tối, và 320 px.
 
 ## Not Yet Built
 
