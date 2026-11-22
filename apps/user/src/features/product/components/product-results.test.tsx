@@ -18,8 +18,13 @@ const { getStoreProducts, locale, router } = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn(), refresh: vi.fn() },
 }));
 vi.mock('~/features/product/server/get-products', () => ({ getStoreProducts }));
+vi.mock('next/navigation', () => ({
+  notFound: () => {
+    throw new Error('NEXT_NOT_FOUND');
+  },
+}));
 vi.mock('next-intl/server', () => ({
-  getTranslations: (namespace: 'Products') =>
+  getTranslations: (namespace: 'Products' | 'Category') =>
     Promise.resolve(
       createTranslator({
         locale: locale.current,
@@ -36,7 +41,7 @@ vi.mock('~/i18n/navigation', () => ({
   getPathname: ({ href, locale }: { href: string; locale: string }) => `/${locale}${href}`,
 }));
 
-import { ProductResults, ProductResultsSkeleton } from './product-results';
+import { ProductResults } from './product-results';
 
 const product = (n: number): StoreProductSummary => ({
   id: `0193a2b5-0000-7000-8000-${n.toString(16).padStart(12, '0')}`,
@@ -235,22 +240,96 @@ describe('<ProductResults />', () => {
   });
 });
 
-describe('<ProductResultsSkeleton />', () => {
-  test('shows 8 skeleton cards in a busy list, with no words (S4.5, loading)', () => {
-    renderWithProviders(<ProductResultsSkeleton />, { locale: 'vi' });
+describe('<ProductResults /> of a category (S5 of SHOP-81)', () => {
+  const ao = { kind: 'category', slug: 'ao' } as const;
 
-    const grid = screen.getByRole('list', { name: 'Danh sách sản phẩm' });
-    expect(grid).toHaveAttribute('aria-busy', 'true');
-    expect(within(grid).getAllByRole('listitem')).toHaveLength(8);
-    expect(grid.textContent).toBe('');
+  async function renderCategory(
+    searchParams: Record<string, string | string[] | undefined>,
+    lang: 'vi' | 'en' = 'vi',
+  ) {
+    locale.current = lang;
+    const results = await ProductResults({
+      searchParams: Promise.resolve(searchParams),
+      source: ao,
+    });
+    return renderWithProviders(results, { locale: lang });
+  }
+
+  test('reads the products of the category in the order of the URL, with no keyword (AC13)', async () => {
+    getStoreProducts.mockResolvedValue(list(2, 2));
+
+    await renderCategory({ q: 'ao', sort: 'price-asc', page: '1' });
+
+    expect(getStoreProducts).toHaveBeenCalledWith({ q: '', sort: 'price-asc', page: 1 }, ao);
   });
 
-  test('keeps the place of the search and the sort while they load, with no field to type into yet', () => {
-    const { container } = renderWithProviders(<ProductResultsSkeleton />, { locale: 'vi' });
+  test('reads a wrong order of the URL, or relevance, as the newest first (AC13, AC14)', async () => {
+    getStoreProducts.mockResolvedValue(list(2, 2));
 
-    const row = container.querySelector('.product-filters');
-    expect(row).toHaveAttribute('aria-hidden', 'true');
-    expect(row?.querySelectorAll('.skeleton')).toHaveLength(2);
+    await renderCategory({ sort: 'relevance', page: 'x' });
+
+    expect(getStoreProducts).toHaveBeenCalledWith({ q: '', sort: 'newest', page: 1 }, ao);
+  });
+
+  test('shows the cards, the sort with no search, the progress line and Load more of the category (AC14)', async () => {
+    getStoreProducts.mockResolvedValue(list(24, 30));
+
+    const { user } = await renderCategory({ sort: 'price-asc' });
+
+    expect(
+      within(screen.getByRole('list', { name: 'Danh sách sản phẩm' })).getAllByRole('listitem'),
+    ).toHaveLength(24);
     expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Sắp xếp' })).toHaveValue('price-asc');
+    expect(screen.getByText('Đã xem 24 trên 30 sản phẩm')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Xem thêm' }));
+    expect(router.replace).toHaveBeenCalledWith('/categories/ao?sort=price-asc&page=2', {
+      scroll: false,
+    });
+  });
+
+  test('says the category has no product yet, links to every product and shows no sort (AC15, S5.9, S5.10)', async () => {
+    getStoreProducts.mockResolvedValue(list(0, 0));
+
+    await renderCategory({});
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Chưa có sản phẩm nào trong danh mục này.',
+    );
+    expect(screen.getByRole('link', { name: 'Xem tất cả sản phẩm' })).toHaveAttribute(
+      'href',
+      '/vi/products',
+    );
+    expect(screen.queryByRole('combobox')).toBeNull();
+    expect(screen.queryByRole('list')).toBeNull();
+  });
+
+  test('says it in English on the English page (AC15)', async () => {
+    getStoreProducts.mockResolvedValue(list(0, 0));
+
+    await renderCategory({}, 'en');
+
+    expect(screen.getByRole('status')).toHaveTextContent('No products in this category yet.');
+    expect(screen.getByRole('link', { name: 'View all products' })).toHaveAttribute(
+      'href',
+      '/en/products',
+    );
+  });
+
+  test('calls notFound when the category was hidden or deleted since the page read its name', async () => {
+    getStoreProducts.mockResolvedValue(null);
+
+    await expect(ProductResults({ searchParams: Promise.resolve({}), source: ao })).rejects.toThrow(
+      'NEXT_NOT_FOUND',
+    );
+  });
+
+  test('throws the error of the api to the error boundary, never the empty state (NFR20)', async () => {
+    const error = Object.assign(new Error('Request failed with status 503'), { kind: 'http' });
+    getStoreProducts.mockRejectedValue(error);
+
+    await expect(ProductResults({ searchParams: Promise.resolve({}), source: ao })).rejects.toBe(
+      error,
+    );
   });
 });

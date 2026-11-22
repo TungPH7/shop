@@ -25,9 +25,25 @@ export const storeProductSummarySchema = z.object({
 
 export type StoreProductSummary = z.infer<typeof storeProductSummarySchema>;
 
+/**
+ * The category of a product, as the product detail of the store gives it (plan of SHOP-81, API Contract): only a
+ * visible one, so the breadcrumb of S8 and its BreadcrumbList can name it (AC20).
+ */
+const productCategorySchema = z.object({
+  name: z.string(),
+  slug: z.string(),
+});
+
+export type ProductCategory = z.infer<typeof productCategorySchema>;
+
 export const storeProductSchema = storeProductSummarySchema.extend({
   description: z.string().nullable(),
   updatedAt: z.iso.datetime(),
+  /**
+   * `null` when the product has no category or its category is hidden, the same at the api (AC21, NFR8 of SHOP-81).
+   * Missing, as from the api of `v0.3.0` after a rollback, is no category too, never an error (NFR19 of SHOP-81).
+   */
+  category: productCategorySchema.nullable().default(null),
 });
 
 export type StoreProduct = z.infer<typeof storeProductSchema>;
@@ -49,14 +65,6 @@ export function pageSchema<T extends z.ZodType>(item: T) {
     offset: countSchema,
     limit: countSchema,
   });
-}
-
-/**
- * A slug the api can hold: `^[a-z0-9-]+$` since V3, compared without case (`citext`). Anything else, such as `..`, is no
- * product, so the DAL answers it without a request.
- */
-export function isStoreSlug(slug: string): boolean {
-  return /^[a-z0-9-]+$/i.test(slug);
 }
 
 const vnd = new Intl.NumberFormat('vi-VN', {

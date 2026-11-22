@@ -147,7 +147,8 @@
     "loadMoreError": "Couldn't load more. Please try again.",
     "empty": "No products yet.",
     "noResults": "No products found for “{q}”",
-    "clearSearch": "Clear search"
+    "clearSearch": "Clear search",
+    "categories": "Categories"
   },
   "ProductDetail": {
     "back": "Products",
@@ -166,6 +167,22 @@
   "ProductUnavailable": {
     "title": "We couldn't load this product right now",
     "description": "The store is having a problem. Please reload the page in a few minutes."
+  },
+  "Category": {
+    "titleLong": "{name} – See prices and stock status",
+    "titleShort": "{name} – Prices and stock",
+    "metaDescription1": "{name}: see prices, stock status and details for every product currently on sale in the shop.",
+    "metaDescription2": "Sort by price or newest, then pick the product you need.",
+    "empty": "No products in this category yet.",
+    "viewAll": "View all products"
+  },
+  "CategoryNotFound": {
+    "title": "Category not found",
+    "description": "This category doesn't exist or is no longer available.",
+    "viewAll": "View all products"
+  },
+  "Breadcrumb": {
+    "label": "Breadcrumb"
   },
   "ErrorDemo": {
     "title": "Error handling demo",

@@ -4,7 +4,6 @@ import {
   descriptionOf,
   discountPercent,
   formatPrice,
-  isStoreSlug,
   metaDescriptionOf,
   pageSchema,
   sitemapEntrySchema,
@@ -25,12 +24,31 @@ const planExample = {
 };
 
 describe('storeProductSchema', () => {
-  test('parses the example StoreProduct of the plan', () => {
-    expect(storeProductSchema.parse(planExample)).toEqual(planExample);
+  test('parses the example StoreProduct of the plan of SHOP-81, with its category', () => {
+    const product = { ...planExample, category: { name: 'Áo', slug: 'ao' } };
+
+    expect(storeProductSchema.parse(product)).toEqual(product);
+  });
+
+  test('reads a product with no category, or a hidden one, as category null (AC21)', () => {
+    expect(storeProductSchema.parse({ ...planExample, category: null }).category).toBeNull();
+  });
+
+  test('reads a product without the field category, as the api of v0.3.0 gives it, as no category (NFR19)', () => {
+    expect(storeProductSchema.parse(planExample)).toEqual({ ...planExample, category: null });
+  });
+
+  test('drops the fields of the category the page does not need', () => {
+    const parsed = storeProductSchema.parse({
+      ...planExample,
+      category: { name: 'Áo', slug: 'ao', status: 'VISIBLE', productCount: 3 },
+    });
+
+    expect(parsed.category).toEqual({ name: 'Áo', slug: 'ao' });
   });
 
   test('accepts a product without original price or description', () => {
-    const product = { ...planExample, compareAtPrice: null, description: null };
+    const product = { ...planExample, compareAtPrice: null, description: null, category: null };
 
     expect(storeProductSchema.parse(product)).toEqual(product);
   });
@@ -55,6 +73,8 @@ describe('storeProductSchema', () => {
     ['an id that is not a UUID', { id: '42' }],
     ['an updatedAt that is not an instant', { updatedAt: 'yesterday' }],
     ['a missing description', { description: undefined }],
+    ['a category without a slug', { category: { name: 'Áo' } }],
+    ['a category as a string', { category: 'ao' }],
   ])('rejects %s', (_, change) => {
     expect(storeProductSchema.safeParse({ ...planExample, ...change }).success).toBe(false);
   });
@@ -124,19 +144,6 @@ describe('discountPercent', () => {
 
   test('gives at least 1 for a tiny discount', () => {
     expect(discountPercent(999999998, 999999999)).toBe(1);
-  });
-});
-
-describe('isStoreSlug', () => {
-  test.each(['ao-thun-co-tron', 'AO-THUN-CO-TRON', 'combo-3-ao', '-a--b-'])(
-    'accepts %s',
-    (slug) => {
-      expect(isStoreSlug(slug)).toBe(true);
-    },
-  );
-
-  test.each(['', '..', 'ao thun', 'áo-thun', 'a/b', 'a%2Fb'])('rejects %j', (slug) => {
-    expect(isStoreSlug(slug)).toBe(false);
   });
 });
 

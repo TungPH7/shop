@@ -147,7 +147,8 @@
     "loadMoreError": "Không tải thêm được. Vui lòng thử lại.",
     "empty": "Chưa có sản phẩm nào.",
     "noResults": "Không tìm thấy sản phẩm nào cho “{q}”",
-    "clearSearch": "Xóa tìm kiếm"
+    "clearSearch": "Xóa tìm kiếm",
+    "categories": "Danh mục"
   },
   "ProductDetail": {
     "back": "Sản phẩm",
@@ -166,6 +167,22 @@
   "ProductUnavailable": {
     "title": "Tạm thời không tải được sản phẩm",
     "description": "Cửa hàng đang gặp sự cố. Vui lòng tải lại trang sau ít phút."
+  },
+  "Category": {
+    "titleLong": "{name} – Xem giá và tình trạng còn hàng",
+    "titleShort": "{name} – Xem giá, còn hàng",
+    "metaDescription1": "{name}: xem giá, tình trạng còn hàng và chi tiết từng sản phẩm đang bán tại cửa hàng.",
+    "metaDescription2": "Sắp xếp theo giá hoặc mới nhất, rồi chọn ngay sản phẩm bạn cần.",
+    "empty": "Chưa có sản phẩm nào trong danh mục này.",
+    "viewAll": "Xem tất cả sản phẩm"
+  },
+  "CategoryNotFound": {
+    "title": "Không tìm thấy danh mục",
+    "description": "Danh mục này không tồn tại hoặc không còn được hiển thị.",
+    "viewAll": "Xem tất cả sản phẩm"
+  },
+  "Breadcrumb": {
+    "label": "Đường dẫn trang"
   },
   "ErrorDemo": {
     "title": "Demo xử lý lỗi",

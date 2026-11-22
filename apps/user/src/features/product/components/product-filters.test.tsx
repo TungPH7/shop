@@ -157,3 +157,56 @@ describe('<ProductFilters />', () => {
     ).toEqual(['Newest', 'Price: low to high', 'Price: high to low', 'Most relevant']);
   });
 });
+
+describe('<ProductFilters /> of a category (S5.4 of SHOP-81)', () => {
+  const ao = { kind: 'category', slug: 'ao' } as const;
+
+  test('has no search, only the sort with its visible label (AC13)', () => {
+    const { container } = renderWithProviders(
+      <ProductFilters query={{ q: '', sort: 'newest', page: 1 }} source={ao} />,
+      { locale: 'vi' },
+    );
+
+    expect(screen.queryByRole('search')).toBeNull();
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Sắp xếp' })).toHaveValue('newest');
+    expect(container.querySelector('.product-filters')).toHaveClass('product-filters--sort-only');
+  });
+
+  test('offers Mới nhất, Giá thấp đến cao and Giá cao đến thấp, and no Liên quan nhất (AC13)', () => {
+    renderWithProviders(
+      <ProductFilters query={{ q: '', sort: 'price-desc', page: 1 }} source={ao} />,
+      { locale: 'vi' },
+    );
+
+    const select = screen.getByRole('combobox', { name: 'Sắp xếp' });
+    expect(select).toHaveValue('price-desc');
+    expect(
+      within(select)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Mới nhất', 'Giá thấp đến cao', 'Giá cao đến thấp']);
+  });
+
+  test('applies a sort at once on the page of the category, from its first 24 products (S5.4)', async () => {
+    const { user } = renderWithProviders(
+      <ProductFilters query={{ q: '', sort: 'newest', page: 2 }} source={ao} />,
+      { locale: 'vi' },
+    );
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Sắp xếp' }), 'Giá thấp đến cao');
+
+    expect(router.push).toHaveBeenCalledWith('/categories/ao?sort=price-asc', { scroll: false });
+  });
+
+  test('goes back to the newest first with no parameter (S5.4)', async () => {
+    const { user } = renderWithProviders(
+      <ProductFilters query={{ q: '', sort: 'price-asc', page: 1 }} source={ao} />,
+      { locale: 'en' },
+    );
+
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Sort by' }), 'Newest');
+
+    expect(router.push).toHaveBeenCalledWith('/categories/ao', { scroll: false });
+  });
+});

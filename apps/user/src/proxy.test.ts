@@ -212,3 +212,147 @@ describe('a product path with a dot', () => {
     expect(intl).not.toHaveBeenCalled();
   });
 });
+
+describe('a page load of the category page (SHOP-81)', () => {
+  /** Answers the HEAD of the category `slug` with `status`, and counts the calls. */
+  function categoryHeadAnswers(slug: string, status: number) {
+    const calls = { count: 0 };
+    server.use(
+      http.head(`${API}/api/categories/${slug}`, () => {
+        calls.count += 1;
+        return new HttpResponse(null, { status });
+      }),
+    );
+    return calls;
+  }
+
+  test('hands the request to next-intl when the api has the category (200)', async () => {
+    const calls = categoryHeadAnswers('ao', 200);
+    const request = pageLoad('/vi/categories/ao?sort=price-asc&page=2');
+
+    const response = await proxy(request);
+
+    expect(calls.count).toBe(1);
+    expect(intl).toHaveBeenCalledWith(request);
+    expect(response).toBe(forwarded);
+  });
+
+  test('asks the api about the slug as typed, which compares it without case (AC18)', async () => {
+    const calls = categoryHeadAnswers('AO', 200);
+
+    await proxy(pageLoad('/vi/categories/AO'));
+
+    expect(calls.count).toBe(1);
+  });
+
+  test.each(['vi', 'en'])(
+    'rewrites to /%s/category-not-found when the api answers 404, the same for a slug that never existed, a hidden and a deleted category (AC16)',
+    async (locale) => {
+      categoryHeadAnswers('khong-co', 404);
+
+      const response = await proxy(pageLoad(`/${locale}/categories/khong-co`));
+
+      expect(isRewrite(response)).toBe(true);
+      expect(getRewrittenUrl(response)).toBe(`${SITE}/${locale}/category-not-found`);
+      expect(response.headers.get('x-middleware-request-x-next-intl-locale')).toBe(locale);
+      expect(intl).not.toHaveBeenCalled();
+    },
+  );
+
+  // A `..` segment, even escaped as `%2E%2E`, is resolved away by the URL itself before the Proxy sees the path; an
+  // escaped `/` is not, and comes to the Proxy as part of the slug.
+  test.each(['..%2Fadmin%2Fcategories', '%2F', '%E0', '%C3%A1o'])(
+    'rewrites the slug %s to S6 without asking the api (NFR9)',
+    async (segment) => {
+      // MSW fails the test on any request without a handler (onUnhandledRequest: 'error').
+      const response = await proxy(pageLoad(`/vi/categories/${segment}`));
+
+      expect(getRewrittenUrl(response)).toBe(`${SITE}/vi/category-not-found`);
+      expect(intl).not.toHaveBeenCalled();
+    },
+  );
+
+  test('asks the api with HEAD only, within a time limit of 5 s (NFR7, NFR20)', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    const asked: { method: string }[] = [];
+    server.use(
+      http.all(`${API}/api/categories/ao`, ({ request }) => {
+        asked.push({ method: request.method });
+        return new HttpResponse(null, { status: 200 });
+      }),
+    );
+
+    await proxy(pageLoad('/vi/categories/ao'));
+
+    expect(asked.map(({ method }) => method)).toEqual(['HEAD']);
+    expect(timeout).toHaveBeenCalledWith(5000);
+  });
+
+  test.each([
+    ['vi', 'Tạm thời không tải được sản phẩm'],
+    ['en', "We couldn't load this product right now"],
+  ])(
+    'answers 503 with a short page in %s when the api answers 500 (NFR20)',
+    async (locale, title) => {
+      categoryHeadAnswers('ao', 500);
+
+      const response = await proxy(pageLoad(`/${locale}/categories/ao`));
+
+      expect(response.status).toBe(503);
+      expect(response.headers.get('Retry-After')).toBe('30');
+      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      const html = await response.text();
+      expect(html).toContain(`<html lang="${locale}">`);
+      expect(html).toContain(`<h1>${title.replace("'", '&#39;')}</h1>`);
+      expect(intl).not.toHaveBeenCalled();
+    },
+  );
+
+  test('answers 503 when the api does not answer within 5 s, never a 404 (NFR20)', async () => {
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(
+      AbortSignal.abort(new DOMException('The operation timed out.', 'TimeoutError')),
+    );
+    categoryHeadAnswers('ao', 200);
+
+    const response = await proxy(pageLoad('/en/categories/ao'));
+
+    expect(response.status).toBe(503);
+  });
+
+  test.each(['empty', 'script'])(
+    'a fetch of the browser (Sec-Fetch-Dest: %s), as a prefetch of a link of S7, goes to next-intl without asking the api',
+    async (dest) => {
+      const calls = categoryHeadAnswers('ao', 200);
+
+      const response = await proxy(pageLoad('/vi/categories/ao', { 'Sec-Fetch-Dest': dest }));
+
+      expect(calls.count).toBe(0);
+      expect(response).toBe(forwarded);
+    },
+  );
+
+  test.each(['/vi/categories', '/vi/categories/ao/products', '/fr/categories/ao'])(
+    '%s goes to next-intl without asking the api',
+    async (path) => {
+      const request = pageLoad(path);
+
+      const response = await proxy(request);
+
+      expect(intl).toHaveBeenCalledWith(request);
+      expect(response).toBe(forwarded);
+    },
+  );
+
+  test.each(['/vi/categories/ao', '/en/categories/ao.', '/vi/categories/ao.html'])(
+    'runs on the category page %s, even with a dot',
+    (path) => {
+      expect(unstable_doesMiddlewareMatch({ config, url: path })).toBe(true);
+    },
+  );
+
+  test('rewrites a category path with a dot to S6 without asking the api, since a slug has no dot', async () => {
+    const response = await proxy(pageLoad('/vi/categories/ao.'));
+
+    expect(getRewrittenUrl(response)).toBe(`${SITE}/vi/category-not-found`);
+  });
+});

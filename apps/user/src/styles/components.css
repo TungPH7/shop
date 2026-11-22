@@ -971,6 +971,143 @@ a.product-card:hover {
   color: var(--danger-text);
 }
 
+/* --- Breadcrumb S5.2 and S8.2 (src/components/ui/breadcrumb.tsx, SHOP-84) --------------------- */
+
+/* One row of 13.5/600 that wraps when narrow: the links in --primary-text, the current page in --muted-foreground,
+   the separators › in --hint, 8 apart. A long word wraps instead of overflowing, so 320px has no horizontal scroll. */
+.breadcrumb {
+  margin-bottom: var(--space-2);
+  font: var(--fw-semibold) var(--fs-md) / var(--lh-base) var(--font);
+}
+
+.breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-2);
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breadcrumb__item {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A target at least 24 high (WCAG 2.5.8). */
+.breadcrumb__link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  color: var(--primary-text);
+  text-decoration: none;
+}
+
+.breadcrumb__link:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb__current {
+  color: var(--muted-foreground);
+}
+
+.breadcrumb__separator {
+  color: var(--hint);
+}
+
+/* --- Category page S5 (src/app/[locale]/categories/[slug]/page.tsx, SHOP-84) ------------------ */
+
+/* S5.3: the h1 of the design system; a name of up to 60 characters wraps instead of overflowing. */
+.category-title {
+  overflow-wrap: anywhere;
+}
+
+/* S5.4: no search on a category page, so the sort alone, on the right of the row; across the row under 768px. */
+.product-filters--sort-only {
+  justify-content: flex-end;
+}
+
+/* While the category loads: the place of the breadcrumb (one row of 24) and of the title (one line of the h1), so the
+   grid stays where it is when they come. */
+.category-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.category-skeleton__breadcrumb {
+  width: 10rem;
+  height: 24px;
+}
+
+.category-skeleton__title {
+  width: 16rem;
+  max-width: 100%;
+  height: calc(var(--fs-title) * var(--lh-tight));
+}
+
+@media (width < 768px) {
+  .category-skeleton__title {
+    height: calc(var(--fs-title-sm) * var(--lh-tight));
+  }
+}
+
+/* --- Category links S7.3 and S7.4 (src/features/category/components/category-links.tsx, SHOP-84) ------ */
+
+/* Under the title and above the search and the sort: 12 from the title (its margin is 16, so 4 back) and 18 above the
+   search. The label 13.5/600 in --muted-foreground, on the row of the links from 768px, on a row of its own under it. */
+.category-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  margin: calc(var(--space-3) - var(--space-4)) 0 var(--space-4-5);
+}
+
+.category-links__label {
+  margin: 0;
+  color: var(--muted-foreground);
+  font: var(--fw-semibold) var(--fs-md) / var(--lh-base) var(--font);
+}
+
+/* One small secondary button per category, 8 apart, wrapping when narrow; every category, with no Load more. */
+.category-links__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.category-links__list > li {
+  min-width: 0;
+}
+
+/* A long name wraps inside its button instead of overflowing, so 320px has no horizontal scroll. */
+.category-links__link {
+  max-width: 100%;
+  height: auto;
+  min-height: 34px;
+  padding-block: var(--space-1);
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+@media (width < 768px) {
+  .category-links {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
 /* --- Fallbacks -------------------------------------------------------------- */
 
 /* No backdrop-filter, or the person asks for less transparency: solid surfaces. */

@@ -63,8 +63,9 @@ export default defineConfig({
         // a client component, rendered in global-error.test.tsx (SHOP-10). So do the error boundary of [locale], rendered
         // in error.test.tsx, and the pages of the catalog under products/, from page.test.tsx (SHOP-18), and product-not-found/,
         // where the Proxy rewrites a product the api does not have (SHOP-24). sitemap.ts stays in as well: it reads the
-        // products on sale, tested in sitemap.test.ts (SHOP-33).
-        'src/app/*locale*/!(products|product-not-found)/**/*',
+        // products on sale, tested in sitemap.test.ts (SHOP-33). So do the page of a category under categories/ and
+        // category-not-found/, where the Proxy rewrites a category the api does not have, each with its tests (SHOP-84).
+        'src/app/*locale*/!(products|product-not-found|categories|category-not-found)/**/*',
         'src/app/*locale*/!(layout|error).{ts,tsx}',
         'src/app/!(global-error|sitemap).{ts,tsx}',
         'src/instrumentation.ts', // boot glue (nhánh E2E cover) — không unit-worthy

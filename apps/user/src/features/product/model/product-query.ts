@@ -67,10 +67,35 @@ const productQuerySchema = z
 
 export type ProductQuery = { q: string; sort: ProductSort; page: number };
 
+/**
+ * Where a list of products comes from (plan of SHOP-81, Architecture Decisions 10): the whole catalog of S4
+ * (`/[locale]/products`), or the products on sale of one category of S5 (`/[locale]/categories/{slug}`), at the slug the
+ * api stored, so `/vi/categories/AO` and `/vi/categories/ao` are one list.
+ */
+export type ProductSource = { kind: 'catalog' } | { kind: 'category'; slug: string };
+
+export const CATALOG: ProductSource = { kind: 'catalog' };
+
 export function parseProductQuery(
   raw: Record<string, string | string[] | undefined>,
 ): ProductQuery {
   return parseSearchParams(productQuerySchema, raw);
+}
+
+/**
+ * The query of S5 of SHOP-81 (`/[locale]/categories/{slug}`) in the URL: `?sort=newest|price-asc|price-desc&page=N`, as
+ * on S4 but with no search (AC13). A keyword is dropped, so relevance, an order only of a search, and any wrong value
+ * fall back to the newest first and the first 24 products, never an error (AC14).
+ */
+export function parseCategoryProductQuery(
+  raw: Record<string, string | string[] | undefined>,
+): ProductQuery {
+  return parseProductQuery({ sort: raw.sort, page: raw.page });
+}
+
+/** The path of the list of `source`, without its locale: S4, or S5 of SHOP-81 at the stored slug of its category. */
+export function listPathOf(source: ProductSource): string {
+  return source.kind === 'category' ? `/categories/${source.slug}` : '/products';
 }
 
 /** The order of S4.4 when the URL names none: relevance while searching, else the newest first (SPEC, Sắp xếp). */
@@ -118,14 +143,18 @@ export function foldKeyword(q: string): string {
   return folded === '' ? '' : [...new Set(folded.split(' '))].join(' ');
 }
 
-/** The path of S4 for `query`, without its locale and without the defaults: for a link or the router. */
-export function productsHref({ q, sort, page }: ProductQuery): string {
+/**
+ * The path of the list of `source` (S4 by default) for `query`, without its locale and without the defaults: for a link
+ * or the router.
+ */
+export function productsHref({ q, sort, page }: ProductQuery, source = CATALOG): string {
   const params = new URLSearchParams();
   if (q !== '') params.set('q', q);
   if (sort !== defaultSort(q)) params.set('sort', sort);
   if (page !== DEFAULT_PAGE) params.set('page', String(page));
   const search = params.toString();
-  return search === '' ? '/products' : `/products?${search}`;
+  const path = listPathOf(source);
+  return search === '' ? path : `${path}?${search}`;
 }
 
 /**
@@ -146,9 +175,12 @@ export function chosenSortOf(query: ProductQuery): ProductSort | null {
   return query.sort === defaultSort(query.q) ? null : query.sort;
 }
 
-/** Where the sort S4.4 goes with `sort`: the first 24 products of the same search in that order. */
-export function sortHref(query: ProductQuery, sort: ProductSort): string {
-  return productsHref(parseProductQuery({ q: query.q, sort }));
+/**
+ * Where the sort S4.4 goes with `sort`: the first 24 products of the same search in that order, on the list of `source`
+ * (S4 by default, or S5.4 of SHOP-81).
+ */
+export function sortHref(query: ProductQuery, sort: ProductSort, source = CATALOG): string {
+  return productsHref(parseProductQuery({ q: query.q, sort }), source);
 }
 
 /** What S4 shows of `query`: products shown, products on sale, and whether every block needed was read. */
@@ -164,8 +196,9 @@ export type ProductsShown = { shown: number; totalItems: number; complete: boole
 export function nextProductsHref(
   query: ProductQuery,
   { shown, totalItems, complete }: ProductsShown,
+  source = CATALOG,
 ): string | null {
-  if (!complete) return productsHref(query);
+  if (!complete) return productsHref(query, source);
   if (shown >= totalItems) return null;
-  return productsHref({ ...query, page: Math.ceil(shown / PAGE_SIZE) + 1 });
+  return productsHref({ ...query, page: Math.ceil(shown / PAGE_SIZE) + 1 }, source);
 }

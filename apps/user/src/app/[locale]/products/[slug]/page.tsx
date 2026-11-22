@@ -5,12 +5,13 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 
 import { JsonLd } from '~/components/seo/json-ld';
+import { Breadcrumb } from '~/components/ui/breadcrumb';
 import { ProductDetail, ProductDetailSkeleton } from '~/features/product/components/product-detail';
 import { descriptionOf, metaDescriptionOf } from '~/features/product/model/product';
 import { getStoreProduct } from '~/features/product/server/get-product';
 import { localizedUrl } from '~/lib/seo/alternates';
 import { buildPageMetadata } from '~/lib/seo/metadata';
-import { productLd } from '~/lib/seo/structured-data';
+import { breadcrumbLd, productLd } from '~/lib/seo/structured-data';
 import { siteConfig } from '~/lib/site-config';
 
 type Params = Promise<{ locale: string; slug: string }>;
@@ -74,7 +75,28 @@ async function StoreProductView({ params }: { params: Params }) {
   setRequestLocale(locale);
   const product = await getStoreProduct(slug);
   if (!product) notFound();
-  const t = await getTranslations({ locale, namespace: 'Seo' });
+  const [t, tBreadcrumb] = await Promise.all([
+    getTranslations({ locale, namespace: 'Seo' }),
+    getTranslations({ locale, namespace: 'Breadcrumb' }),
+  ]);
+  const url = localizedUrl(locale, `/products/${product.slug}`);
+
+  // The breadcrumb of S8.2 of SHOP-81 and its JSON-LD BreadcrumbList, from the same crumbs (SPEC of SHOP-81, Code
+  // Style): Trang chủ › ‹category› › ‹product› (AC20), or Trang chủ › ‹product› when the api gives no category, as for
+  // a product with none or with a hidden one (AC21). The category comes from the product itself, with no request of its
+  // own, so the trail never differs from the rest of the page (NFR6). The Product block stays a block of its own.
+  const crumbs = [
+    { name: t('home'), url: localizedUrl(locale, '/') },
+    ...(product.category
+      ? [
+          {
+            name: product.category.name,
+            url: localizedUrl(locale, `/categories/${product.category.slug}`),
+          },
+        ]
+      : []),
+    { name: product.name, url },
+  ];
 
   return (
     <>
@@ -82,11 +104,14 @@ async function StoreProductView({ params }: { params: Params }) {
         data={productLd({
           name: product.name,
           description: descriptionOf(product.description) ?? t('siteDescription'),
-          url: localizedUrl(locale, `/products/${product.slug}`),
+          url,
           price: product.price,
           inStock: product.availability === 'IN_STOCK',
         })}
       />
+      <JsonLd data={breadcrumbLd(crumbs)} />
+      {/* Above the back link "← Sản phẩm" of S8.3, the first element of ProductDetail. */}
+      <Breadcrumb items={crumbs} label={tBreadcrumb('label')} />
       <ProductDetail product={product} />
     </>
   );

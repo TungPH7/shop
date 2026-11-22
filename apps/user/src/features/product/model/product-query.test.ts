@@ -4,8 +4,10 @@ import {
   apiSortOf,
   chosenSortOf,
   foldKeyword,
+  listPathOf,
   nextProductsHref,
   PAGE_SIZE,
+  parseCategoryProductQuery,
   parseProductQuery,
   productsHref,
   searchHref,
@@ -283,4 +285,80 @@ describe('nextProductsHref', () => {
 
 test('loads 24 products each time, a number 1, 2, 3 and 4 columns divide', () => {
   expect(PAGE_SIZE).toBe(24);
+});
+
+describe('the products of a category (SHOP-81)', () => {
+  const ao = { kind: 'category', slug: 'ao' } as const;
+
+  describe('parseCategoryProductQuery (AC14)', () => {
+    test('reads the newest first and the first 24 products with no parameter', () => {
+      expect(parseCategoryProductQuery({})).toEqual({ q: '', sort: 'newest', page: 1 });
+    });
+
+    test.each(['newest', 'price-asc', 'price-desc'] as const)('keeps the order %s', (sort) => {
+      expect(parseCategoryProductQuery({ sort, page: '2' })).toEqual({ q: '', sort, page: 2 });
+    });
+
+    test('drops a keyword, since a category page has no search (AC13)', () => {
+      expect(parseCategoryProductQuery({ q: 'áo thun', sort: 'price-asc' })).toEqual({
+        q: '',
+        sort: 'price-asc',
+        page: 1,
+      });
+    });
+
+    test('reads the first value of a repeated parameter, as the products page does', () => {
+      expect(
+        parseCategoryProductQuery({ sort: ['price-asc', 'price-desc'], page: ['2', '3'] }),
+      ).toEqual({ q: '', sort: 'price-asc', page: 2 });
+    });
+
+    test('reads relevance as the newest first, since there is no search (AC13)', () => {
+      expect(parseCategoryProductQuery({ sort: 'relevance' }).sort).toBe('newest');
+    });
+
+    test.each([
+      ['an unknown order', { sort: 'cheapest' }],
+      ['a page of 0', { page: '0' }],
+      ['a page that is not a number', { page: 'hai' }],
+      ['a page with a fraction', { page: '1.5' }],
+    ])('falls back to the default for %s instead of an error (AC14)', (_, raw) => {
+      expect(parseCategoryProductQuery(raw)).toEqual({ q: '', sort: 'newest', page: 1 });
+    });
+  });
+
+  test('listPathOf names the products page or the page of the category', () => {
+    expect(listPathOf({ kind: 'catalog' })).toBe('/products');
+    expect(listPathOf(ao)).toBe('/categories/ao');
+  });
+
+  test('productsHref of a category keeps its path and leaves the defaults out', () => {
+    expect(productsHref({ q: '', sort: 'newest', page: 1 }, ao)).toBe('/categories/ao');
+    expect(productsHref({ q: '', sort: 'price-asc', page: 2 }, ao)).toBe(
+      '/categories/ao?sort=price-asc&page=2',
+    );
+  });
+
+  test('sortHref of a category goes back to its first 24 products in the new order (S5.4)', () => {
+    expect(sortHref({ q: '', sort: 'newest', page: 3 }, 'price-desc', ao)).toBe(
+      '/categories/ao?sort=price-desc',
+    );
+  });
+
+  test('nextProductsHref of a category keeps its path and its order (AC14)', () => {
+    expect(
+      nextProductsHref(
+        { q: '', sort: 'price-asc', page: 1 },
+        { shown: 24, totalItems: 30, complete: true },
+        ao,
+      ),
+    ).toBe('/categories/ao?sort=price-asc&page=2');
+    expect(
+      nextProductsHref(
+        { q: '', sort: 'price-asc', page: 2 },
+        { shown: 30, totalItems: 30, complete: true },
+        ao,
+      ),
+    ).toBeNull();
+  });
 });
