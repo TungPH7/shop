@@ -19,7 +19,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
  *
  * @param category the category of the product when it is {@code VISIBLE}, as {@code StoreCategory}
  *     of the API Contract of SHOP-81; {@code null} when the product has none or its category is
- *     hidden, the same in both cases (AC21, NFR8)
+ *     hidden, the same in both cases (AC21, NFR8); {@code StoreProductOpenApiCustomizer} writes it
+ *     in {@code /v3/api-docs} as a {@code StoreCategory} or {@code null}
  */
 public record StoreProduct(
     UUID id,
