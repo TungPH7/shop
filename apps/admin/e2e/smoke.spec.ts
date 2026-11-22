@@ -1,4 +1,7 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+
+const WCAG_TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'];
 
 // Smoke: the app boots, navigation works, and language switches at runtime — the
 // real browser end-to-end (folder 14 i18n re-render proven in a real DOM). These
@@ -62,4 +65,40 @@ test.describe('app smoke', () => {
 
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });
+
+  // SHOP-88: the backdrop of the layout, public/layout-backdrop.svg, painted by
+  // .shell::before as a mask over --backdrop-line.
+  test('paints the SVG backdrop behind the content of the layout', async ({ page, request }) => {
+    const svg = await request.get('/layout-backdrop.svg');
+    expect(svg.ok()).toBe(true);
+    expect(svg.headers()['content-type']).toContain('image/svg+xml');
+
+    await page.goto('/');
+    const heading = page.getByRole('heading', { level: 1 });
+    await expect(heading).toBeVisible();
+
+    const shell = page.locator('.shell');
+    const before = { pseudo: 'before' } as const;
+    await expect(shell).toHaveCSS('mask-image', /\/layout-backdrop\.svg/, before);
+    await expect(shell).toHaveCSS('position', 'fixed', before);
+    await expect(shell).toHaveCSS('z-index', '-1', before);
+    await expect(shell).toHaveCSS('pointer-events', 'none', before);
+
+    // Nothing covers the content: a trial click checks that the page title and a link of
+    // the navigation are what a pointer at their centre reaches.
+    await heading.click({ trial: true });
+    await page.getByRole('link', { name: 'About' }).click({ trial: true });
+  });
+
+  for (const colorScheme of ['light', 'dark'] as const) {
+    test(`keeps WCAG AA with the backdrop in the ${colorScheme} theme`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme });
+      await page.goto('/');
+      await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+
+      const { violations } = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+
+      expect(violations).toEqual([]);
+    });
+  }
 });
