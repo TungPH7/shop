@@ -198,9 +198,15 @@ function checkCommand(command, role, gates, roster, depth = 0) {
   if (USER_VARIABLES.test(command)) return deny(USER_VARIABLES_REASON);
   // ${NAME:=value} and ${NAME=value} set NAME as they expand (second review of shop PR #81).
   const expanded = [...command.matchAll(EXPANSION_SET)].map(([, name]) => name);
-  // (( NAME = 1 )) and $(( NAME = 1 )) set NAME too (third review of shop PR #81).
-  for (const [, inside] of command.matchAll(ARITHMETIC)) expanded.push(...assignedIn(inside));
+  // (( NAME = 1 )) and $(( NAME = 1 )) set NAME too (third review of shop PR #81), and so does $[ NAME = 1 ].
+  for (const [, inside] of [...command.matchAll(ARITHMETIC), ...command.matchAll(OLD_ARITHMETIC)]) expanded.push(...assignedIn(inside));
+  // Bash runs arithmetic in more places: the subscript of an array, an operand of -eq and its kin in [[ ]], the value
+  // of a variable declared -i, and the value of a variable that arithmetic reads (review of shop PR #90, security, Low).
+  // So a variable of the session named before an assignment sign anywhere in the command counts as set, inside quotes
+  // too: those names are the session's own, and no command of a role writes them there.
+  expanded.push(...assignedIn(command).filter((name) => SESSION_VARIABLE.test(name)));
   if (expanded.some((name) => SESSION_VARIABLE.test(name))) return deny(IDENTITY);
+  if (arithmeticTexts(command).some((text) => BUILT_ASSIGNED.test(text))) return deny(BUILT_NAME);
   if (gates.approvedLibraries && expanded.some((name) => SOURCE_NAME.test(name))) return deny(installRefusal([{ refused: expanded.find((name) => SOURCE_NAME.test(name)), registry: true }], []));
   for (const words of segments(command)) {
     const result = checkWords(words, role, gates, roster, depth);
@@ -287,6 +293,23 @@ const shoptExportsAll = (args) => args.some((word) => /^allexport$/i.test(word))
 const ARITHMETIC = /\(\(([\s\S]*?)\)\)/g;
 const ASSIGNED = /([A-Za-z_]\w*)\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)|([A-Za-z_]\w*)\s*(?:\+\+|--)|(?:\+\+|--)\s*([A-Za-z_]\w*)/g;
 const assignedIn = (text) => [...text.matchAll(ASSIGNED)].map((found) => found[1] ?? found[2] ?? found[3]);
+// The other places where Bash runs arithmetic (review of shop PR #90, security, Low): $[ ], the old form of $(( ));
+// the subscript of an array, a[…] and ${a[…]}; and an operand next to -eq, -ne, -lt, -le, -gt or -ge in [[ ]].
+const OLD_ARITHMETIC = /\$\[([\s\S]*?)\]/g;
+const SUBSCRIPT = /[A-Za-z_]\w*\[([^\]]*)\]/g;
+const TEST_ARITHMETIC = /(\S+)\s+-(?:eq|ne|lt|le|gt|ge)\s+(\S+)/g;
+function arithmeticTexts(command) {
+  const texts = [ARITHMETIC, OLD_ARITHMETIC, SUBSCRIPT].flatMap((pattern) => [...command.matchAll(pattern)].map(([, inside]) => inside));
+  for (const [, test] of command.matchAll(/\[\[([\s\S]*?)\]\]/g)) for (const [, left, right] of test.matchAll(TEST_ARITHMETIC)) texts.push(left, right);
+  return texts;
+}
+// An assignment in arithmetic to a name read from a variable, as in $[ $n = 0 ]: the variable may hold the name of
+// one of the session.
+const BUILT_ASSIGNED = /\$\{?[A-Za-z_]\w*\}?\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)/;
+const BUILT_NAME = 'write out the name of the variable you set: gh-guard reads the name, and an arithmetic that sets a name built from a variable could set one of the session';
+// declare -i gives a variable the integer attribute: each value it gets then runs as arithmetic, which can set another
+// variable that gh-guard cannot see (review of shop PR #90, security, Low).
+const INTEGER_ATTRIBUTE = 'do not give a variable the integer attribute (declare -i): bash runs each value it gets as arithmetic, and gh-guard cannot tell which variable that sets';
 function namesByKeyword(program, words) {
   const names = [];
   if (['for', 'select'].includes(program) && words[1]) names.push(words[1]);
@@ -325,6 +348,7 @@ function checkWords(words, role, gates, roster, depth, env = words.env ?? []) {
     // A name built from a variable, or a reference to another (declare -n), sets a variable gh-guard cannot name.
     if (names.some((name) => /[$`]/.test(name))) return deny('write out the name of the variable you set or export: gh-guard reads the name, and a name built from a variable could be one of the session or of a package manager');
     if (['declare', 'typeset', 'local'].includes(program) && words.slice(1).some((word) => /^-[A-Za-z]*n/.test(word))) return deny('do not make a reference to a variable (declare -n): gh-guard cannot tell which variable it sets');
+    if (['declare', 'typeset', 'local'].includes(program) && words.slice(1).some((word) => /^-[A-Za-z]*i/.test(word))) return deny(INTEGER_ATTRIBUTE);
   }
   // A library installed by name, or downloaded and run by npx, must be on the approved list of project.yaml first, from
   // the project's registry and inside its range (C1 spec section 5, review of shop PR #79).

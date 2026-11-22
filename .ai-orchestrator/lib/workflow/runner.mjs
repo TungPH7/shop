@@ -68,17 +68,23 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
 
   // The number of the next run: one more than state.json and than any run this command reserved, so two runs at once
   // never share one.
+  // The highest number on record, not that of the last record: two runs at once go on record in the order they start
+  // their agents, and on SHOP-89 of shop security came before reviewer, so the QA after them took number 2 again and
+  // wrote over the run of security (T14 of C2).
   let reserved = 0;
   const reserve = () => {
-    reserved = Math.max(store.readState(key)?.runs.at(-1)?.n ?? 0, reserved) + 1;
+    reserved = Math.max(0, ...(store.readState(key)?.runs ?? []).map(({ n }) => n ?? 0), reserved) + 1;
     return reserved;
   };
   // Writes one record of state.json, its own by number: read, change, write, with nothing awaited between, so two runs
-  // at once never write over each other (C2 spec section 7).
+  // at once never write over each other (C2 spec section 7). The runs stay in the order of their numbers, so the last
+  // record is the newest run wherever it is read (withLoggedSession, carryOn), and a state.json an earlier kit left out
+  // of order is put right at its next write.
   const put = (record) => {
     const state = store.readState(key) ?? { key, runs: [] };
     const at = state.runs.findIndex(({ n }) => n === record.n);
-    store.writeState(key, { ...state, runs: at === -1 ? [...state.runs, record] : state.runs.map((r, i) => (i === at ? record : r)) });
+    const runs = at === -1 ? [...state.runs, record] : state.runs.map((r, i) => (i === at ? record : r));
+    store.writeState(key, { ...state, runs: runs.sort((a, b) => (a.n ?? 0) - (b.n ?? 0)) });
   };
 
   // One run of an agent, on a checkout already in place: { record, read, stop }, or { stop } when it could not start.

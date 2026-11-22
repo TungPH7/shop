@@ -11,8 +11,7 @@ import { acceptedRisks, findingCounts, findingId, openFindings, readReviewReport
 import { pathTier, requiredReviewRoles } from '../quality/review-tiers.mjs';
 import { waiverOnHead } from '../quality/waivers.mjs';
 import { parseBranch } from '../tracker/conventions.mjs';
-import { expectedOptions } from '../tracker/expected.mjs';
-import { adfText, changesRequestedOn, githubGuards, sameRepo, jiraGuards, qaEnvironment, readChecks, notQaSigners, readLatestQaReport, wipHolders } from '../tracker/facts.mjs';
+import { adfText, agentValues, changesRequestedOn, githubGuards, sameRepo, jiraGuards, qaEnvironment, readChecks, notQaSigners, readLatestQaReport, wipHolders } from '../tracker/facts.mjs';
 import { latestFlagComment } from '../tracker/flags.mjs';
 import { countRework } from '../tracker/rework.mjs';
 import { recordedLine } from './findings.mjs';
@@ -29,12 +28,9 @@ const GATES = ['spec-approval', 'plan-approval'];
 // The level of an item and the lower label left out (lib/workflow/levels.mjs, trustedLevel), as facts of the item.
 const levelFacts = ({ level, ignored }) => ({ level, levelIgnored: ignored });
 
-// role → the value of the Agent field, such as { ba: 'Business Analyst' }.
-export function agentNames(contract, mapping) {
-  const values = contract.work_item_fields.find(({ id }) => id === 'agent').values;
-  const names = expectedOptions(contract, mapping, 'agent');
-  return Object.fromEntries(values.map(({ id }, i) => [id, names[i]]));
-}
+// role → the value of the Agent field, such as { ba: 'Business Analyst' }: agentValues of lib/tracker/facts.mjs, so the
+// signature of a comment, the QA report readers and the requests read one rule (review of shop PR #90, reviewer, Low).
+export const agentNames = agentValues;
 
 // The dev role and the effort a work item's labels name (tracker/jira.yaml, work_labels): ao-fe-dev → fe-dev,
 // ao-effort-xhigh → xhigh. Only roles of the roster and efforts claude takes count; null when there is none.

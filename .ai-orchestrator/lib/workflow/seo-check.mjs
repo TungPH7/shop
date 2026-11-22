@@ -3,6 +3,7 @@
 // them word for word. The check names what has no place there: an address outside the hosts of the apps with seo: true
 // and schema.org, and a command. ao-step shows what it finds where you read seo's text: at gate ①, and where /ao-build
 // waits for your seo-ok. Pure.
+import { plainText } from '../tracker/stored-text.mjs';
 
 // The hosts structured data and the SEO of the apps name besides their own.
 const DOC_HOSTS = ['schema.org', 'www.schema.org'];
@@ -42,7 +43,9 @@ export function seoTextProblems(text, { hosts = [] } = {}) {
   const commands = [];
   const allowed = new Set([...hosts, ...DOC_HOSTS].map((host) => String(host).toLowerCase()));
   const named = new Set();
-  const lines = String(text ?? '').split(/\r?\n/);
+  // Read as ao-step reads a comment: fullwidth letters and signs as their plain form, since the hook keeps the words of
+  // an agent in NFC (review of shop PR #90, security, Low).
+  const lines = plainText(text).split('\n');
   lines.forEach((line, i) => {
     for (const address of line.match(/https?:\/\/[^\s"'<>`)\]}]+/g) ?? []) {
       let host;

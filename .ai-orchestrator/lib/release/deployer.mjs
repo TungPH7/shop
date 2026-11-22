@@ -101,6 +101,9 @@ async function tickEnvironment(ctx, env) {
     const decision = decideTarget({ environment: env, candidate, record: runsByEnvironment(state), approvers });
     // A head whose CI has not ended holds the environment, and is looked at again the next round: not seen.
     if (decision.action === 'wait') return log(`${env}: wait for ${sha.slice(0, 7)} on ${branch}: ${decision.reason}`);
+    // A head refused for red CI is looked at again too, since a run again of its CI may pass; it is refused once
+    // (review of shop PR #90, reviewer, Low).
+    if (decision.again && record.refused?.[branch] === sha) return;
     if (decision.action !== 'skip') return act(ctx, env, decision, { branch, sha });
     log(`${env}: skip ${sha.slice(0, 7)} on ${branch}: ${decision.reason}`);
     if (!dryRun) {
@@ -166,6 +169,7 @@ async function act(ctx, env, decision, { branch = null, sha, request = null }) {
     const id = request ?? (await createDeployment(github, env, sha, 'branch'));
     await status(github, id, 'error', { description: decision.reason });
     if (request) markRequest(state, request);
+    else if (decision.again) record.refused = { ...record.refused, [branch]: sha };
     else record.seen[branch] = sha;
     await save(state);
     return log(`${env}: refused ${short} from ${from}: ${decision.reason}`);

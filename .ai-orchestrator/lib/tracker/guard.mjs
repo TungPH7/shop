@@ -133,6 +133,10 @@ function isProjectSite(cloudId, mapping) {
 // { allow: false, reason }.
 // contract: the contract of the kit, which names the Agent value of each role; with it, the comment of an agent other
 // than qa carries its own Agent value (third review of shop PR #81).
+// Whether checkToolCall reads the contract for this call: only a tool of the atlassian MCP server does, for the comment
+// of an agent (review of shop PR #90, reviewer, Low). block-atlassian reads it only then.
+export const needsContract = (input) => String(input?.tool_name ?? '').startsWith(SERVER);
+
 export function checkToolCall(input, { mapping, space, contract }) {
   const deny = (reason) => ({ allow: false, reason: `jira: ${reason}` });
   const allow = { allow: true };
