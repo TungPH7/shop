@@ -1,6 +1,11 @@
-import NextLink from 'next/link';
-
+import { Link } from '~/i18n/navigation';
 import { type BreadcrumbLdItem } from '~/lib/seo/structured-data';
+
+/** One crumb: what `breadcrumbLd` takes, and the path without the locale, as the Link of next-intl takes it. */
+export type BreadcrumbItem = BreadcrumbLdItem & {
+  /** The path without the locale: '/', '/categories/ao'. */
+  href: string;
+};
 
 /**
  * The breadcrumb of the store (design.md of SHOP-81, S5.2 and S8.2): "Trang chủ › Áo › Áo thun cổ tròn". It takes the
@@ -8,20 +13,15 @@ import { type BreadcrumbLdItem } from '~/lib/seo/structured-data';
  * SHOP-81, Code Style). Styles: `.breadcrumb` in src/styles/components.css.
  *
  * - A `<nav>` named `label` ("Đường dẫn trang" / "Breadcrumb") holding an `<ol>`.
- * - Every crumb but the last is a real `<a href>`, which a search engine follows, to the path of its absolute URL: that
- *   path already holds the locale, so the link is next/link and not the Link of next-intl, which would add it again.
+ * - Every crumb but the last is a real `<a href>`, which a search engine follows, built by the Link of next-intl from
+ *   the path without the locale, as every link of the store (SPEC of SHOP-81, section SEO, S5, Internal links). The
+ *   pages put the breadcrumb inside their `<Suspense>`, where that Link may read the path (see StaticLink).
  * - The last crumb is the current page: text with `aria-current="page"`, not a link.
  * - The separators › are `aria-hidden`, so a screen reader does not read them.
  *
  * Names are text nodes, never HTML (NFR10). A synchronous view with no hook, so it renders in any server component.
  */
-export function Breadcrumb({
-  items,
-  label,
-}: {
-  items: readonly BreadcrumbLdItem[];
-  label: string;
-}) {
+export function Breadcrumb({ items, label }: { items: readonly BreadcrumbItem[]; label: string }) {
   const lastIndex = items.length - 1;
 
   return (
@@ -35,9 +35,9 @@ export function Breadcrumb({
               </span>
             ) : (
               <>
-                <NextLink className="breadcrumb__link" href={new URL(item.url).pathname}>
+                <Link className="breadcrumb__link" href={item.href}>
                   {item.name}
-                </NextLink>
+                </Link>
                 <span className="breadcrumb__separator" aria-hidden="true">
                   ›
                 </span>
@@ -48,4 +48,13 @@ export function Breadcrumb({
       </ol>
     </nav>
   );
+}
+
+/**
+ * The place of a breadcrumb of one row while its page loads: as high as the row, with its margin, so the content under
+ * it is not pushed down when the breadcrumb comes (SPEC of SHOP-81, section SEO, S8, Core Web Vitals). Styles:
+ * `.breadcrumb-skeleton` in src/styles/components.css.
+ */
+export function BreadcrumbSkeleton() {
+  return <span className="skeleton breadcrumb-skeleton" aria-hidden="true" />;
 }

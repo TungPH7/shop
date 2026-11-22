@@ -152,8 +152,8 @@ describe('the page', () => {
     const { ld, breadcrumb } = await partsOf(Promise.resolve({ locale: 'vi', slug: 'AO' }));
 
     const crumbs = [
-      { name: 'Trang chủ', url: 'https://site.example.test/vi' },
-      { name: 'Áo', url: 'https://site.example.test/vi/categories/ao' },
+      { name: 'Trang chủ', url: 'https://site.example.test/vi', href: '/' },
+      { name: 'Áo', url: 'https://site.example.test/vi/categories/ao', href: '/categories/ao' },
     ];
     expect(breadcrumb.type).toBe(Breadcrumb);
     expect(breadcrumb.props).toEqual({ items: crumbs, label: 'Đường dẫn trang' });
@@ -173,8 +173,8 @@ describe('the page', () => {
 
     expect(breadcrumb.props).toEqual({
       items: [
-        { name: 'Home', url: 'https://site.example.test/en' },
-        { name: 'Áo', url: 'https://site.example.test/en/categories/ao' },
+        { name: 'Home', url: 'https://site.example.test/en', href: '/' },
+        { name: 'Áo', url: 'https://site.example.test/en/categories/ao', href: '/categories/ao' },
       ],
       label: 'Breadcrumb',
     });

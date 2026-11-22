@@ -5,7 +5,7 @@ import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 
 import { JsonLd } from '~/components/seo/json-ld';
-import { Breadcrumb } from '~/components/ui/breadcrumb';
+import { Breadcrumb, type BreadcrumbItem, BreadcrumbSkeleton } from '~/components/ui/breadcrumb';
 import { ProductDetail, ProductDetailSkeleton } from '~/features/product/components/product-detail';
 import { descriptionOf, metaDescriptionOf } from '~/features/product/model/product';
 import { getStoreProduct } from '~/features/product/server/get-product';
@@ -57,11 +57,33 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 export default function ProductPage({ params }: { params: Params }) {
   return (
     <main className="product-page">
-      <Suspense fallback={<ProductDetailSkeleton />}>
+      <Suspense fallback={<ProductPageSkeleton />}>
         <StoreProductView params={params} />
       </Suspense>
     </main>
   );
+}
+
+/**
+ * What S8 shows while it reads the product: the place of the breadcrumb, then the skeleton of the card, so the card is not
+ * pushed down when the breadcrumb comes (SPEC of SHOP-81, section SEO, S8, Core Web Vitals).
+ */
+function ProductPageSkeleton() {
+  return (
+    <>
+      <BreadcrumbSkeleton />
+      <ProductDetailSkeleton />
+    </>
+  );
+}
+
+/** The crumb of the category of a product, at its page in the locale of the path (AC20). */
+function categoryCrumb(
+  locale: string,
+  { name, slug }: { name: string; slug: string },
+): BreadcrumbItem {
+  const href = `/categories/${slug}`;
+  return { name, url: localizedUrl(locale, href), href };
 }
 
 /**
@@ -85,17 +107,10 @@ async function StoreProductView({ params }: { params: Params }) {
   // Style): Trang chủ › ‹category› › ‹product› (AC20), or Trang chủ › ‹product› when the api gives no category, as for
   // a product with none or with a hidden one (AC21). The category comes from the product itself, with no request of its
   // own, so the trail never differs from the rest of the page (NFR6). The Product block stays a block of its own.
-  const crumbs = [
-    { name: t('home'), url: localizedUrl(locale, '/') },
-    ...(product.category
-      ? [
-          {
-            name: product.category.name,
-            url: localizedUrl(locale, `/categories/${product.category.slug}`),
-          },
-        ]
-      : []),
-    { name: product.name, url },
+  const crumbs: BreadcrumbItem[] = [
+    { name: t('home'), url: localizedUrl(locale, '/'), href: '/' },
+    ...(product.category ? [categoryCrumb(locale, product.category)] : []),
+    { name: product.name, url, href: `/products/${product.slug}` },
   ];
 
   return (
