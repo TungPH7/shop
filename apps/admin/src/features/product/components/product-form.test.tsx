@@ -146,6 +146,7 @@ describe('ProductForm in add mode', () => {
         compareAtPrice: null,
         status: 'ACTIVE',
         availability: 'IN_STOCK',
+        categoryId: null,
       },
     ]);
     expect(getSnapshot().map(({ kind, message }) => ({ kind, message }))).toEqual([
@@ -372,8 +373,12 @@ describe('ProductForm in add mode', () => {
 
   it('S2.5 says "Couldn\'t save" at once when the browser is offline, and posts nothing once it is back (NFR19)', async () => {
     const bodies = fakeApi(() => HttpResponse.error());
-    onlineManager.setOnline(false);
     const { user, queryClient } = renderForm();
+    // The options of the Category field load first, as Save waits for them (SHOP-81 S4.2).
+    await waitFor(() => {
+      expect(submit()).not.toHaveAttribute('aria-disabled');
+    });
+    onlineManager.setOnline(false);
     await user.type(field.name(), 'Áo');
     await user.type(field.price(), '450000');
 

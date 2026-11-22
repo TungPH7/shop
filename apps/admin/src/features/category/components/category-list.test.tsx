@@ -161,7 +161,7 @@ describe('CategoryList', () => {
     server.use(
       http.get('*/admin/categories', () =>
         fail
-          ? HttpResponse.json({ status: 500 }, { status: 500 })
+          ? HttpResponse.json({ status: 500 }, { status: 500, headers: { 'Retry-After': '0' } })
           : HttpResponse.json({ items: [shirts] }),
       ),
     );

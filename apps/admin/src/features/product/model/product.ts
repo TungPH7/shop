@@ -25,11 +25,14 @@ export const adminProductSummarySchema = z.object({
 export type AdminProductSummary = z.infer<typeof adminProductSummarySchema>;
 
 // One product with every field, as POST, GET and PUT of /api/admin/products/{id} answer.
-// `version` goes back with an edit (AC13).
+// `version` goes back with an edit (AC13). `categoryId` is its category, a hidden one
+// too, or null (plan of SHOP-81, API Contract); an api of before SHOP-81, which has no
+// such field, means none (NFR19).
 export const adminProductSchema = adminProductSummarySchema.extend({
   description: z.string().nullable(),
   compareAtPrice: z.number().int().positive().nullable(),
   version: z.number().int().nonnegative(),
+  categoryId: z.string().nullable().default(null),
 });
 export type AdminProduct = z.infer<typeof adminProductSchema>;
 
@@ -42,6 +45,19 @@ export const adminProductPageSchema = z.object({
   limit: z.number().int().positive(),
 });
 export type AdminProductPage = z.infer<typeof adminProductPageSchema>;
+
+// The options of the Category field of S2 (S4.2 of docs/specs/SHOP-81/design.md), from
+// GET /api/admin/categories: every category, hidden ones too, in the order of the api,
+// by name as Vietnamese sorts it (NFR17). The product feature reads only what the field
+// shows, so it owns this schema and never imports the category feature.
+export const categoryOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  status: z.enum(['VISIBLE', 'HIDDEN']),
+});
+export type CategoryOption = z.infer<typeof categoryOptionSchema>;
+
+export const categoryOptionListSchema = z.object({ items: z.array(categoryOptionSchema) });
 
 const priceNumber = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 0 });
 const NO_BREAK_SPACE = String.fromCodePoint(0xa0);

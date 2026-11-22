@@ -57,6 +57,8 @@ export async function createProduct(input: CreateProductInput): Promise<CreatedP
 export const PRODUCT_FORM_FIELDS = [
   'name',
   'slug',
+  // A 400 on it is a category deleted since the form loaded (S4.2 of SHOP-81, AC10).
+  'categoryId',
   'description',
   'price',
   'compareAtPrice',

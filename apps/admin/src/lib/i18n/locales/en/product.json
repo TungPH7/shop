@@ -65,6 +65,15 @@
       "hint": "Generated from the name. If taken, -2, -3… is added.",
       "changed": "The old link /products/{{slug}} will stop working."
     },
+    "category": {
+      "label": "Category",
+      "none": "No category",
+      "hiddenOption": "{{name}} (Hidden)",
+      "hint": "Hidden categories can be picked too, to prepare products before the category goes live.",
+      "loading": "Loading categories…",
+      "loadFailed": "Couldn't load the categories.",
+      "retry": "Try again"
+    },
     "description": {
       "label": "Description (optional)",
       "hint": "Line breaks are kept. HTML tags show as plain text."
@@ -111,7 +120,8 @@
       "priceMax": "Price can't exceed 999.999.999 ₫",
       "priceInvalid": "Enter the price as a number, like 250.000",
       "compareAtPriceGreater": "Compare-at price must be greater than the price",
-      "invalid": "This value isn't valid."
+      "invalid": "This value isn't valid.",
+      "categoryGone": "This category no longer exists. Pick another one."
     }
   }
 }

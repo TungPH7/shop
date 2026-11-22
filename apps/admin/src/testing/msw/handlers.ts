@@ -13,6 +13,8 @@ export const handlers = [
       role: { id: 1, name: 'admin', permissions: [] },
     }),
   ),
+  // The options of the Category field of the product form (SHOP-81 S4.2): none.
+  http.get('*/admin/categories', () => HttpResponse.json({ items: [] })),
   http.post('*/auth/login', () =>
     HttpResponse.json({ accessToken: 'test-access', refreshToken: 'test-refresh' }),
   ),

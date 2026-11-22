@@ -71,7 +71,9 @@ describe('CategoryEdit', () => {
     let fail = true;
     server.use(
       http.get('*/admin/categories/:id', () =>
-        fail ? problem(503, 'SERVICE_UNAVAILABLE') : HttpResponse.json(shirts),
+        fail
+          ? HttpResponse.json({ status: 503 }, { status: 503, headers: { 'Retry-After': '0' } })
+          : HttpResponse.json(shirts),
       ),
     );
     const { user } = renderEdit();

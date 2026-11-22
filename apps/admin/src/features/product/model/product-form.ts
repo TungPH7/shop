@@ -115,6 +115,8 @@ const productFieldsSchema = z.object({
   compareAtPrice: compareAtPriceSchema,
   status: productStatusSchema,
   availability: productAvailabilitySchema,
+  /** The id of the category picked, or '' for No category (S4.2 of SHOP-81). */
+  categoryId: z.string(),
 });
 
 type ProductFields = z.output<typeof productFieldsSchema>;
@@ -160,6 +162,8 @@ function productSchema<Slug extends string | null>(
           compareAtPrice: form.compareAtPrice,
           status: form.status,
           availability: form.availability,
+          // Always sent, No category as an explicit null (NFR19 of SHOP-81).
+          categoryId: form.categoryId === '' ? null : form.categoryId,
         }),
       )
   );
@@ -198,6 +202,11 @@ export interface CreateProductInput {
   compareAtPrice: number | null;
   status: ProductStatus;
   availability: ProductAvailability;
+  /**
+   * null: No category. Always sent, so an edit that picks No category takes the product
+   * out of its category: an absent field would keep it (plan of SHOP-81, AD 7).
+   */
+  categoryId: string | null;
 }
 
 /** The fields of an edit (US3): those of an add, the slug always sent. */
@@ -215,6 +224,7 @@ export const productFormDefaults: ProductFormValues = {
   compareAtPrice: '',
   status: 'ACTIVE',
   availability: 'IN_STOCK',
+  categoryId: '',
 };
 
 /**
@@ -232,5 +242,6 @@ export function productFormValuesOf(product: AdminProduct): ProductFormValues {
       product.compareAtPrice === null ? '' : formatPrice(product.compareAtPrice, { sign: false }),
     status: product.status,
     availability: product.availability,
+    categoryId: product.categoryId ?? '',
   };
 }

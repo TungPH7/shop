@@ -4,6 +4,7 @@ import {
   adminProductPageSchema,
   adminProductSchema,
   adminProductSummarySchema,
+  categoryOptionListSchema,
   formatPrice,
 } from '@/features/product/model/product';
 
@@ -24,6 +25,8 @@ const adminProduct = {
   description: 'Áo thun cotton 100%.\nCổ tròn, tay ngắn.',
   compareAtPrice: 250000,
   version: 1,
+  // The category of the product, in the API Contract of docs/specs/SHOP-81/plan.md.
+  categoryId: '019a9c41-2b3d-7e10-8f2a-3c4d5e6f7a8b',
 };
 
 describe('adminProductSummarySchema', () => {
@@ -104,9 +107,41 @@ describe('adminProductSchema', () => {
     expect(adminProductSchema.parse(plain)).toEqual(plain);
   });
 
+  it('accepts a product with no category (SHOP-81)', () => {
+    const plain = { ...adminProduct, categoryId: null };
+
+    expect(adminProductSchema.parse(plain)).toEqual(plain);
+  });
+
+  it('reads a product of an api of before SHOP-81, with no categoryId, as one with no category (NFR19)', () => {
+    const older: Partial<typeof adminProduct> = { ...adminProduct };
+    delete older.categoryId;
+
+    expect(adminProductSchema.parse(older)).toEqual({ ...older, categoryId: null });
+  });
+
   it('rejects a product without its version, which the edit sends back (AC13)', () => {
     const withoutVersion = { ...adminProduct, version: undefined };
 
     expect(adminProductSchema.safeParse(withoutVersion).success).toBe(false);
+  });
+});
+
+describe('categoryOptionListSchema', () => {
+  it('parses GET /api/admin/categories of SHOP-81, keeping what the Category field shows', () => {
+    const item = {
+      id: '019a9c41-2b3d-7e10-8f2a-3c4d5e6f7a8b',
+      name: 'Áo khoác',
+      slug: 'ao-khoac',
+      status: 'HIDDEN',
+      productCount: 3,
+      createdAt: '2026-11-22T02:10:00.000Z',
+      updatedAt: '2026-11-22T02:15:30.000Z',
+      version: 0,
+    };
+
+    expect(categoryOptionListSchema.parse({ items: [item] })).toEqual({
+      items: [{ id: item.id, name: 'Áo khoác', status: 'HIDDEN' }],
+    });
   });
 });

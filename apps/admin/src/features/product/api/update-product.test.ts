@@ -19,6 +19,7 @@ const input = {
   compareAtPrice: 250000,
   status: 'ACTIVE',
   availability: 'IN_STOCK',
+  categoryId: null,
   version: 1,
 } as const;
 

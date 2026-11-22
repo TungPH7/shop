@@ -18,6 +18,7 @@ const shirt: AdminProduct = {
   compareAtPrice: 250000,
   status: 'HIDDEN',
   availability: 'IN_STOCK',
+  categoryId: null,
   createdAt: '2026-11-16T02:10:00.000Z',
   updatedAt: '2026-11-16T02:15:30.000Z',
   version: 1,
