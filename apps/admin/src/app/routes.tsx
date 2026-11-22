@@ -45,6 +45,13 @@ export const routes: RouteObject[] = [
         },
       },
       {
+        path: paths.categories.path,
+        lazy: async () => {
+          const { CategoriesRoute } = await import('@/app/routes/categories/categories-route');
+          return { Component: CategoriesRoute };
+        },
+      },
+      {
         path: paths.about.path,
         lazy: async () => {
           const { AboutRoute } = await import('@/app/routes/about/about-route');

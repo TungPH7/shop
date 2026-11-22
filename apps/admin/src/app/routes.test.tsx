@@ -124,6 +124,17 @@ describe('routes', () => {
     ).toBeInTheDocument();
   });
 
+  it('opens the category list S1 of SHOP-81 on /categories without signing in', async () => {
+    server.use(http.get('*/admin/categories', () => HttpResponse.json({ items: [] })));
+    const router = createMemoryRouter(routes, { initialEntries: ['/categories'] });
+    renderWithRouter(router);
+
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Categories' }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText('No categories yet.')).toBeInTheDocument();
+  });
+
   it('still opens the About page', async () => {
     renderAt('/about');
 

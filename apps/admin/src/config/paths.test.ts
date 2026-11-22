@@ -27,6 +27,15 @@ describe('paths', () => {
     );
   });
 
+  it('has the category list S1, and the add and edit pages S2, of SHOP-81', () => {
+    expect(paths.categories.path).toBe('/categories');
+    expect(paths.categories.getHref()).toBe('/categories');
+    expect(paths.categoryNew.path).toBe('/categories/new');
+    expect(paths.categoryNew.getHref()).toBe('/categories/new');
+    expect(paths.categoryEdit.path).toBe('/categories/:categoryId/edit');
+    expect(paths.categoryEdit.getHref('a/b?c')).toBe('/categories/a%2Fb%3Fc/edit');
+  });
+
   it('escapes an id that is not a plain segment', () => {
     expect(paths.productEdit.getHref('a/b?c')).toBe('/products/a%2Fb%3Fc/edit');
   });

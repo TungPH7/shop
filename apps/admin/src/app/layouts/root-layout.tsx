@@ -10,9 +10,10 @@ import { paths } from '@/config/paths';
 import { useAuth } from '@/features/auth/hooks/use-auth';
 
 // App shell, S1.1 of docs/specs/SHOP-7/design.md: three pills. Left, the app name;
-// middle, the main navigation (NavLink sets aria-current="page" on the current
-// link, and components.css styles that attribute); right, the language and theme
-// switches and the account link. The app name is a link, not the h1: each page
+// middle, the main navigation, with Categories between Products and About (S1.1 of
+// docs/specs/SHOP-81/design.md; NavLink sets aria-current="page" on the current link,
+// on its add and edit pages too, and components.css styles that attribute); right,
+// the language and theme switches and the account link. The app name is a link, not the h1: each page
 // owns its single h1.
 // NuqsAdapter is mounted here (inside RouterProvider) so URL-state hooks work.
 // Strings come from the `common` namespace (bundled eagerly → no flash, folder 14).
@@ -36,6 +37,9 @@ export function RootLayout() {
             </NavLink>
             <NavLink className="pill__link" to={paths.products.getHref()}>
               {t('nav.products')}
+            </NavLink>
+            <NavLink className="pill__link" to={paths.categories.getHref()}>
+              {t('nav.categories')}
             </NavLink>
             <NavLink className="pill__link" to={paths.about.getHref()}>
               {t('nav.about')}
