@@ -28,6 +28,9 @@ import { openQuestions } from './runs.mjs';
 import { fullReviewEffort, reviewScope } from './security-scope.mjs';
 import { deltaEffort } from '../quality/review-tiers.mjs';
 import { waiverFor } from '../quality/waivers.mjs';
+import { reviewLabels, skipReason, skipScope } from '../quality/review-choice.mjs';
+import { readReviewReport } from '../quality/pull-request.mjs';
+import { afterMergeNote, afterMergeReport, afterMergeTodo, afterMergeTree } from './after-merge.mjs';
 import { planLibraries } from '../quality/dependencies.mjs';
 import { findingsStep, ownFindingsLine } from './findings.mjs';
 import { effectiveLevel } from './levels.mjs';
@@ -450,6 +453,29 @@ const requestLine = (request, key) =>
 // A preview that runs, for /ao-status (human-loop spec 4.3): the folder is on a PR branch until it stops.
 const previewLine = ({ key, branch, apps = [] }) => `the preview of ${key} runs on ${branch}${apps.length > 0 ? `: ${apps.map(({ name, url }) => `${name} ${url}`).join(', ')}` : ', its apps stopped'} → /ao-preview ${key} --stop`;
 
+// A line on the review choice of an item, when it skips review or a label to skip it does not count (SPEC-review-per-
+// item.md section 2), with the critical files its open PR changes; null otherwise.
+function reviewLine({ item, pr }, options = {}) {
+  if (!item?.review || !['story', 'task', 'bug'].includes(item.workType)) return null;
+  const names = reviewLabels(options.mapping);
+  if (item.review.ignored) return `Review of ${item.key}: on. The label ${item.review.ignored.label} was put by the agents' Jira account, which your main session uses too, so it does not count: put it on Jira itself`;
+  if (!item.review.skip) return null;
+  const critical = pr?.state === 'open' && skipScope(pr) ? criticalLine(pr) : null;
+  return `Review of ${item.key}: skipped (${skipReason(item.review, names)}); its PR into develop waits for your approval with no report, and a release of it for a review after merge${critical ? `. ${critical}` : ''}`;
+}
+
+// The review after merge of an Epic, for /ao-status (SPEC-review-per-item.md 6.3): the PRs of its items that skipped
+// review and wait for it, or what the reviews after merge found; null when no PR of its items skipped review.
+function afterMergeLine({ item, afterMerge }) {
+  if (!afterMerge) return null;
+  const todo = afterMergeTodo(afterMerge.pulls);
+  if (todo.length > 0) return `Review after merge: ${todo.map(({ number, key }) => `PR #${number} (${key})`).join(', ')} skipped review and wait for it → /ao-review ${item.key}`;
+  const marked = afterMerge.pulls.filter(({ skipped, mark }) => skipped && mark);
+  if (marked.length === 0) return null;
+  const fixes = [...new Set(marked.filter(({ mark }) => mark.blocking > 0).map(({ mark }) => mark.fix))];
+  return `Review after merge: done for ${marked.length} PR${marked.length === 1 ? '' : 's'}; ${fixes.length > 0 ? `its Critical and High wait for ${fixes.join(', ')}` : 'no Critical or High'}`;
+}
+
 // /ao-status: the item and what comes next, or every item of the space.
 function decideStatus(facts, options) {
   if (!facts.item) return spaceStatus(facts);
@@ -458,11 +484,15 @@ function decideStatus(facts, options) {
   // of C2: SHOP-86 was labelled light, and its QA ran an agent since its PR touched a protected path).
   const level = levelLine(facts, options);
   if (level) lines.push(level);
+  const review = reviewLine(facts, options);
+  if (review) lines.push(review);
   const cost = (facts.run?.runs ?? []).reduce((total, r) => total + (r.costUsd ?? 0), 0);
   if (facts.run?.runs?.length) lines.push(`Runs: ${facts.run.runs.length}, ${usd(cost)} in all; the last: ${describeRun(facts.run.runs.at(-1))}`);
   if (facts.previewRunning) lines.unshift(previewLine(facts.previewRunning));
   for (const request of facts.item.requests) lines.push(`Open request to ${requestLine(request, facts.item.key)}`);
   if (facts.item.workType === 'epic' && facts.itemRuns) lines.push(epicCostLine(facts));
+  const after = facts.item.workType === 'epic' ? afterMergeLine(facts) : null;
+  if (after) lines.push(after);
   const quiet = facts.pr?.state === 'open' ? findingsLine(facts.pr) : null;
   if (quiet) lines.push(quiet);
   return { status: true, lines, next: nextFor(facts.item, facts.pr) };
@@ -546,7 +576,9 @@ export function nextCommand(item, pr = null) {
     // A draft PR waits for your preview, which you may skip (human-loop spec 4.2).
     'in-progress': () => {
       if (!open) return command('build', key);
-      return open.draft ? waits('you', `/ao-preview ${key} or /ao-review ${open.number}`) : command('review', open.number);
+      // An item that skips review does not wait for your preview: /ao-review posts its trace, then gate ③ waits for you,
+      // and you may /ao-preview it before you approve (SPEC-review-per-item.md 3.4).
+      return open.draft && !item.review?.skip ? waits('you', `/ao-preview ${key} or /ao-review ${open.number}`) : command('review', open.number);
     },
     // /ao-review decides whether the reports ask for /ao-fix (a STOP with then).
     'in-review': () => {
@@ -628,6 +660,9 @@ function decideBuild(facts, options) {
   // The draft PR of a build waits for your preview (human-loop spec 4.2); red CI goes to /ao-fix first.
   if (pr?.state === 'open' && pr.draft) {
     if (pr.ci.failed) return out(stop('next', `CI is red on the draft PR #${pr.number} of ${key}`, `/ao-fix ${pr.number}`, { then: { command: 'fix', arg: pr.number } }));
+    // An item that skips review goes on to /ao-review, which posts its trace: gate ③ waits for you, and you may preview
+    // it before you approve (SPEC-review-per-item.md 3.4).
+    if (skipOf(facts, options)) return out(stop('next', `the draft PR #${pr.number} of ${key} skips review: /ao-review posts its trace`, `/ao-review ${pr.number}`, { then: { command: 'review', arg: pr.number } }));
     // facts.previewDir: where the preview is when the item has a lane (review of shop PR #21).
     return out(stop('you', `the draft PR #${pr.number} of ${key} waits for your preview${pr.ci.pending ? ' (CI still running)' : ''}: the screenshots and API samples of its dev agents are in ${facts.previewDir ?? `.ai/runs/${key}/preview/`}`, `/ao-preview ${key}, or /ao-review ${pr.number} to skip the preview`));
   }
@@ -815,9 +850,47 @@ function waiverOf({ item, pr }, options) {
   return waiverFor({ files: pr.files ?? [], gates: options.gates, label: item?.level ?? null, blockingFound: Boolean(pr.blockingEver), truncated });
 }
 
+// The review an item skips on the PR of a command (SPEC-review-per-item.md 3.1), or null: its choice says so, the PR is
+// its PR into develop, and no review of the PR found a Critical or High; never with /ao-review <PR> full. Returns
+// { reason, critical }: why, in words, and the critical files the PR changes.
+function skipOf({ item, pr }, options) {
+  if (options.full || !pr || !item?.review?.skip || !skipScope(pr) || pr.blockingEver) return null;
+  if (!['story', 'task', 'bug'].includes(item.workType)) return null;
+  return { reason: skipReason(item.review, reviewLabels(options.mapping)), critical: pr.critical ?? [] };
+}
+
+// The critical files a PR changes with no review, for gate ③ (spec 3.2), or null.
+const MAX_CRITICAL = 8;
+export function criticalLine(pr) {
+  const files = pr?.critical ?? [];
+  if (files.length === 0) return null;
+  const named = files.length > MAX_CRITICAL ? `${files.slice(0, MAX_CRITICAL).join(', ')} and ${files.length - MAX_CRITICAL} more` : files.join(', ');
+  return `PR #${pr.number} changes critical files with no review: ${named}. Read the diff of these files closely before you approve`;
+}
+
+// The trace of a skipped review on the head, which ao-step posts as the review App (spec 3.1).
+const skipAction = ({ item, pr }, skip) => ({ action: 'review-skip', key: item.key, number: pr.number, sha: pr.headSha, reason: skip.reason, critical: skip.critical });
+
+// A PR that skips review, its trace on the head: gate ③, as afterReviews says it for a PR with reports.
+function afterSkip({ pr, qaRunning = [] }, skip) {
+  if (pr.changesRequested) return stop('next', `changes are requested on the head of PR #${pr.number}`, `/ao-fix ${pr.number}`, { then: { command: 'fix', arg: pr.number } });
+  const yours = pr.protectedPaths.length > 0 ? `, then Squash and merge it yourself: it changes ${pr.protectedPaths.join(', ')}` : '; merge-gate merges it';
+  const environment = mergeEnvironment(pr);
+  const testing = environment ? qaRunning.find((lock) => lock.environment === environment) : null;
+  const wait = testing ? `. qa is testing ${testing.key} on ${environment} now (process ${testing.pid}): merge-gate merges after it ends, so the deploy does not cut it` : '';
+  const critical = skip.critical.length > 0 ? ', the critical files above all' : '';
+  return stop('you', `PR #${pr.number} skips review (${skip.reason}), and its trace is on the head ${pr.headSha.slice(0, 7)}: it waits for you at gate ③ merge-approval${wait}`, `Read the diff of PR #${pr.number}${critical}, approve it${yours}. To review it anyway: /ao-review ${pr.number} full`);
+}
+
+// The lines of a PR that skips review, with the critical files it changes.
+const withCritical = (lines, pr) => {
+  const line = criticalLine(pr);
+  return line ? [...lines, line] : lines;
+};
+
 function reviewRuns(facts, options) {
-  // A PR whose review is waived by rule owes none (C1 spec 3.4).
-  if (waiverOf(facts, options)) return [];
+  // A PR whose review is waived by rule owes none (C1 spec 3.4), nor one whose item skips review (SPEC-review-per-item.md).
+  if (waiverOf(facts, options) || skipOf(facts, options)) return [];
   const { pr, item } = facts;
   // head: kept in state.json, so a stopped review goes on only on the head it was reviewing (carryOn).
   // Each role its own worktree, so reviewer and security may run at once (C2 spec section 7).
@@ -914,8 +987,74 @@ function baseStop(pr, gates) {
   return branch.ok ? null : stop('fix', `PR #${pr.number} goes into ${pr.base}, but ${branch.reason.replace(/, not .*$/, '')}`, next);
 }
 
+// /ao-review <KEY> (SPEC-review-per-item.md section 4): reviewer and security on what the PRs of KEY's items that
+// skipped review changed on develop, then the posts of ao-step: one fix Task for the Critical and High, the mark on each
+// PR, the reports on KEY, the Medium and Low to the findings Task.
+const AFTER_MERGE = 'review-after-merge';
+function decideAfterMerge(facts, options) {
+  const { item, afterMerge: m } = facts;
+  const key = item.key;
+  const lines = [item.workType === 'epic' ? epicLine(facts) : itemLine(facts)];
+  if (!['epic', 'story', 'task', 'bug'].includes(item.workType)) {
+    return { ...stop('fix', `${key} is ${item.workType === 'sub-task' ? 'a Sub-task' : `a ${item.type}`}: /ao-review takes a PR number, an Epic, or a Story, Task or Bug`, item.parent ? `/ao-review ${item.parent.key}` : `/ao-status ${key}`), lines };
+  }
+  if (m.waiting.length > 0) lines.push(`Not merged yet, so not in this review: ${m.waiting.join(', ')}`);
+  const todo = afterMergeTodo(m.pulls);
+  if (todo.length === 0) {
+    const marked = m.pulls.filter(({ skipped, mark }) => skipped && mark);
+    const fixes = [...new Set(marked.filter(({ mark }) => mark.blocking > 0).map(({ mark }) => mark.fix))];
+    if (marked.length === 0) return { ...stop('fix', `no PR of ${key}${item.workType === 'epic' ? "'s items" : ''} merged into develop without review`, `/ao-status ${key}`), lines };
+    if (fixes.length > 0) return { ...stop('item', `every PR of ${key} that skipped review had its review after merge; its Critical and High wait for ${fixes.join(', ')}`, `/ao-build ${fixes[0]}`), lines };
+    return { ...stop('fix', `every PR of ${key} that skipped review had its review after merge, with no Critical or High`, `/ao-status ${key}`), lines };
+  }
+  lines.push(`To review after merge: ${todo.map(({ number, key: k }) => `PR #${number} (${k})`).join(', ')}; ${m.files.length} file${m.files.length === 1 ? '' : 's'}`);
+  if (!m.base || !m.head) return { ...stop('fix', `GitHub did not give the commit before the oldest merge, or the head of develop`, `/ao-review ${key} again`), lines };
+  const numbers = todo.map(({ number }) => number);
+  const note = afterMergeNote(numbers);
+  // The level of the highest item among them: heavy makes security run, as on a PR (C1 spec 3.2).
+  const level = todo.some(({ key: k }) => m.levels?.[k] === 'heavy') ? 'heavy' : 'standard';
+  const roles = stageRoles(options.contract, 'review').flatMap((role) => {
+    const { effort, reason } = fullReviewEffort({ role, files: m.files, gates: options.gates, rosterEffort: options.roster.roles[role].effort, level });
+    return effort === null ? [] : [{ role, effort, reason }];
+  });
+  const mine = (facts.run?.runs ?? []).filter((r) => r.command === 'review' && r.purpose === AFTER_MERGE && r.note === note);
+  const last = (role) => mine.filter((r) => r.role === role).at(-1);
+  // A run that stopped goes on in its session, with its worktree back at the head it was reviewing.
+  const stopped = roles.map(({ role }) => last(role)).filter((r) => r && STOPPED.includes(r.outcome) && r.session && r.head);
+  if (stopped.length > 0) {
+    return go(stopped.map((r) => ({ role: r.role, key, effort: r.effort, purpose: AFTER_MERGE, resume: r.session, prompt: resumePrompt(key, r.role), checkout: r.checkout, head: r.head, note, worktree: { name: afterMergeTree(key, r.role), sha: r.head } })), lines);
+  }
+  const done = roles.map(({ role }) => (last(role)?.outcome === 'done' ? last(role) : null));
+  if (done.every(Boolean)) {
+    const names = Object.fromEntries(done.map((r) => [r.role, afterMergeReport(key, r.role, r.head)]));
+    const unreadable = done.flatMap((r) => {
+      const text = m.reports?.[names[r.role]];
+      if (!text) return [`${r.role}: .ai/reviews/${names[r.role]} is missing`];
+      const report = readReviewReport(text, options.gates.github_apps.review.roles);
+      return report.ok && report.role === r.role ? [] : [`${r.role}: .ai/reviews/${names[r.role]} is not a readable ${r.role} report (${(report.problems ?? [`its Role line names ${report.role}`]).join('; ')})`];
+    });
+    if (unreadable.length > 0) return { ...stop('fix', `the review after merge of ${key} ran, but ${unreadable.join('; ')}`, `Fix the report by hand, then /ao-review ${key} again: it posts without another run`), lines };
+    const epic = item.workType === 'epic' ? key : item.parent?.type && /epic/i.test(item.parent.type) ? item.parent.key : null;
+    return go([{ action: 'after-merge-post', key, epic, head: done[0].head, base: m.base, pulls: numbers, items: todo.map(({ key: k }) => k), files: m.files, reports: names }], lines);
+  }
+  const runs = roles.filter((_, i) => !done[i]).map(({ role, effort, reason }) => ({
+    role,
+    key,
+    effort,
+    purpose: AFTER_MERGE,
+    prompt: promptFor(AFTER_MERGE, { key, role, base: m.base, head: m.head, files: m.files, pulls: todo }),
+    checkout: { branch: 'develop', pull: true },
+    worktree: { name: afterMergeTree(key, role), sha: m.head },
+    head: m.head,
+    note,
+    effortWhy: reason,
+  }));
+  return go(runs.length > 1 ? runs.map((r) => ({ ...r, together: true })) : runs, lines);
+}
+
 // /ao-review <PR>: reviewer, then security; it ends at gate ③ with both reports on the head.
 function decideReview(facts, options) {
+  if (facts.afterMerge) return decideAfterMerge(facts, options);
   const lines = facts.item ? [itemLine(facts)] : [];
   const early = prStop(facts, 'review', options);
   if (early) return { ...early, lines };
@@ -932,6 +1071,13 @@ function decideReview(facts, options) {
   if (waiver) {
     if (pr.waiverOnHead === waiver.id) return { ...stop('you', `PR #${pr.number} needs no review: every file is in the waiver ${waiver.id}, and ${facts.item.key} is at level ${waiver.level}; the waiver is on the head ${pr.headSha.slice(0, 7)}. It waits for you at gate ③ merge-approval`, `Read the diff of PR #${pr.number}, approve it; merge-gate merges it. To review it anyway: /ao-review ${pr.number} full`), lines };
     return go([{ action: 'review-waiver', key: facts.item.key, number: pr.number, sha: pr.headSha, waiver: waiver.id, level: waiver.level, files: waiver.files }], lines);
+  }
+  // An item that skips review (SPEC-review-per-item.md section 3): its trace on the head in place of the reports, then
+  // gate ③, unless you ask for a full review with /ao-review <PR> full. merge-gate and audit work the choice out again.
+  const skip = skipOf(facts, options);
+  if (skip) {
+    if (pr.skipOnHead === facts.item.key) return { ...afterSkip(facts, skip), lines: withCritical(lines, pr) };
+    return go([skipAction(facts, skip)], withCritical(lines, pr));
   }
   // A kit another project reviewed in full: ao-step posts the reports, with no agent (kit-copy-review spec 2.1). A report
   // an agent already put on the head stays. Any doubt falls through to the review by the agents.
@@ -976,7 +1122,7 @@ export function appRolesOf(apps = {}) {
 
 // The dev agent of the app a path is in, by appRoles of project.yaml ({ api: 'be-dev', user: 'fe-dev' }), or null for a
 // path outside apps/<app>/ or an app it does not name.
-function appRoleOf(where, appRoles = {}) {
+export function appRoleOf(where, appRoles = {}) {
   const match = /^`?apps\/([^/`]+)\//.exec(String(where ?? '').trim());
   return match ? (appRoles[match[1]] ?? null) : null;
 }
@@ -1085,6 +1231,9 @@ function decideFix(facts, options) {
     if (pr.ci.pending) return { ...stop('ci', `CI is still running on the head ${pr.headSha.slice(0, 7)} of PR #${pr.number}`, `/ao-fix ${pr.number} once CI is done`), lines };
     // A draft PR has no review yet: you look at it again, or review it (human-loop spec 4.4).
     if (pr.draft) return { ...stop('you', `the draft PR #${pr.number} of ${item.key} has nothing left to fix${asked ? ': your request is pushed' : ''}`, `/ao-preview ${item.key} to look at it again, or /ao-review ${pr.number}`), lines };
+    // An item that skips review: the trace on the new head, then gate ③ (SPEC-review-per-item.md section 3).
+    const skip = skipOf(facts, options);
+    if (skip) return pr.skipOnHead === item.key ? { ...afterSkip(facts, skip), lines: withCritical(lines, pr) } : go([skipAction(facts, skip)], withCritical(lines, pr));
     const runs = reviewRuns(facts, options);
     if (runs.length > 0) return go(runs, lines);
     // The stop rule of the fix loop (C1 spec 4.4): with no Critical or High open, Medium and Low wait.
@@ -1218,9 +1367,12 @@ function decideQa(facts, options) {
   // Each public app on its own host (project-scaffold part 2, spec 2.4): its URL for Playwright, from project.yaml.
   const apps = appUrls({ projectText: qa.running.projectText, environment: qa.environment, url: qa.running.url });
   if (apps.problem) return stop('fix', apps.problem, `Make the hosts of ${PROJECT_FILE} and of /etc/ao/deployer.yaml the same, then /ao-qa ${item.key}`);
+  // The findings of the PR of the findings Task itself stay on its reports: every road of the QA says so (review of shop
+  // PR #92, reviewer, Low).
+  const own = ownFindingsLine(facts);
   if (light) {
     const where = Object.keys(apps.apps).length > 0 ? Object.entries(apps.apps).map(([app, url]) => `${app} ${url}`).join(', ') : qa.running.url;
-    return qaLight(facts, options, { env, where, lines: [`${env} runs ${eight(qa.running.sha)}, which holds the merge of PR #${pr.number}`] });
+    return qaLight(facts, options, { env, where, lines: [`${env} runs ${eight(qa.running.sha)}, which holds the merge of PR #${pr.number}`, ...(own ? [own] : [])] });
   }
   // A QA again at level standard, after a FAIL: qa checks again only the criteria that failed, and the whole E2E suite
   // (C1 spec section 2). At level heavy, and after a NOT TESTED, it checks every criterion, as before.
@@ -1234,12 +1386,11 @@ function decideQa(facts, options) {
     ...(defect && { note: noteKey(defect) }),
   });
   const lines = [`${env} runs ${eight(qa.running.sha)}, which holds the merge of PR #${pr.number}`];
-  const own = ownFindingsLine(facts);
   if (own) lines.push(own);
   // The run goes on in its session, in a new worktree with the same URL and basic auth: carryOn would drop them.
   if (stopped) return go([{ ...qaRun, effort: stopped.effort ?? qaRun.effort, resume: stopped.session, prompt: resumePrompt(item.key, qaRun.role) }], lines);
   const resumed = carryOn('qa', facts, options);
-  if (resumed) return resumed;
+  if (resumed) return own ? { ...resumed, lines: [...(resumed.lines ?? []), own] } : resumed;
   // A new expectation: ba adds the criterion on Jira first, and qa then fails it (human-loop spec 5.1). The SPEC follows
   // on the next branch of the item (spec-sync, 5.2).
   if (defect && options.change === 'ac' && !noteDone(facts, 'qa', 'ac-add', defect)) {
@@ -1281,6 +1432,8 @@ function decideRelease(facts) {
     ...(r.after.length > 0 ? [`After the cut point, for ${nextVersion} or later: ${r.after.map(({ key, status }) => `${key} (${status})`).join(', ')}`] : []),
     ...(moved.length > 0 ? [`Moves from ${version} to ${nextVersion} on Jira: ${moved.join(', ')}`] : []),
     `Fix Versions on Jira: ${[version, nextVersion].map((name) => `${name} (${!known(name) ? 'missing' : known(name).released ? 'released' : 'unreleased'})`).join(', ')}`,
+    // Staging takes the release anyway; /ao-ship and merge-gate hold it before Production (SPEC-review-per-item.md 5.3).
+    ...((r.reviewGaps ?? []).length > 0 ? [`Skipped review, to review after merge before ${version} reaches Production: ${r.reviewGaps.join('; ')}`] : []),
   ];
   const lacking = [version, nextVersion].filter((name) => !known(name) || known(name).released);
   if (facts.arg && facts.arg !== r.version && !isNewMajor(facts.arg, r.version)) return stop('fix', `${facts.arg} is not the next release: that is ${r.version}, or a new major`, `/ao-release ${r.version} ${short}`, { lines });
@@ -1303,6 +1456,8 @@ function decideShip(facts, options) {
   const s = facts.ship;
   const v = s.version;
   if (!s.branch) return stop('fix', `release/${v} is not open`, '/ao-release');
+  // A PR that skipped review needs its review after merge before the release PR can merge (SPEC-review-per-item.md 5.3).
+  if (s.reviewGaps?.length > 0) return stop('you', `${v} brings PRs that skipped review and wait for their review after merge: ${s.reviewGaps.join('; ')}`, `Review them after merge with /ao-review <their Epic or item>, then run /ao-ship ${v} again`);
   if (s.bugs.length > 0) {
     return stop('you', `${s.bugs.length} Bug${s.bugs.length > 1 ? 's' : ''} Critical or High ${s.bugs.length > 1 ? 'are' : 'is'} open with Fix Version ${v}: ${s.bugs.map(({ key, severity }) => `${key} (${severity})`).join(', ')}`, `Fix them on bugfix/<BUG> branches into ${s.branch.name}, through review and gate ③, then run /ao-ship ${v} again`);
   }

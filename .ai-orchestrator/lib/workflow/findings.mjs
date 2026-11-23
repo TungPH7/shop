@@ -4,9 +4,10 @@
 
 // The comment that records the findings of PR `pr` of item `key`: its first line names the PR, which is how ao-step
 // tells it recorded them already. findings: [{ role, severity, where, finding, id, asked? }].
-export function findingsComment({ key, pr, findings }) {
+// source: where they come from, when not from one PR: a review after merge (SPEC-review-per-item.md 4.5.4).
+export function findingsComment({ key, pr, findings, source }) {
   const lines = findings.map(({ role, severity, where, finding, id, asked }) => `- ${severity}${asked ? ` (${asked} không có dòng tái hiện)` : ''} ${id}, ${role}: ${oneLine(where)}: ${oneLine(finding)}`);
-  return [`Finding chưa sửa của PR #${pr} (${key}):`, '', ...lines].join('\n');
+  return [`Finding chưa sửa của ${source ?? `PR #${pr} (${key})`}:`, '', ...lines].join('\n');
 }
 
 export const recordedLine = (pr) => `Finding chưa sửa của PR #${pr} `;

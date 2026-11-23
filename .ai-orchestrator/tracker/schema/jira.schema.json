@@ -36,7 +36,7 @@
     },
     "work_labels": {
       "type": "object",
-      "required": ["role_prefix", "effort_prefix", "level_prefix", "findings", "ops", "env_auth", "seo"],
+      "required": ["role_prefix", "effort_prefix", "level_prefix", "findings", "ops", "env_auth", "seo", "review_on", "review_skip"],
       "additionalProperties": false,
       "properties": {
         "role_prefix": { "type": "string", "pattern": "^[a-z][a-z0-9]*-$" },
@@ -45,7 +45,9 @@
         "findings": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
         "ops": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
         "env_auth": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-        "seo": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
+        "seo": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "review_on": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "review_skip": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
       }
     },
     "board": {

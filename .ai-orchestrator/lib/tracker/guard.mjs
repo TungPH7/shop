@@ -170,6 +170,19 @@ export function checkToolCall(input, { mapping, space, contract }) {
       return deny(`only you change the level label (${level}*) of an item: it sets how much review and QA the item gets`);
     }
   }
+  // The labels that review or skip the review of an item (SPEC-review-per-item.md 2.3), on the same terms: ba puts them
+  // when it creates the items of the plan you approved, and no agent adds or removes one afterwards. A whole label list
+  // written to flag an item passes, as above: merge-gate and audit leave out a change of the agents' account towards
+  // skipping review (lib/quality/review-choice.mjs).
+  const review = [mapping.work_labels.review_on, mapping.work_labels.review_skip].filter(Boolean);
+  if (input.agent_type && review.length > 0) {
+    if (name === 'createJiraIssue' && input.agent_type !== 'ba' && review.some((label) => namesLabel(args, label))) {
+      return deny(`only ba, from the plan you approved, and you put ${review.join(' or ')} on an item: it decides whether the item is reviewed`);
+    }
+    if (['editJiraIssue', 'transitionJiraIssue'].includes(name) && review.some((label) => updatesLabel(args, label))) {
+      return deny(`only you put or take off ${review.join(' or ')} on an item: it decides whether the item is reviewed`);
+    }
+  }
   // The comment of an agent other than qa goes as literalComment builds it, as HTML with every sign escaped (second
   // review of shop PR #81): Jira keeps it word for word, so the hook reads what ao-step will read, where it used to guess
   // what Jira makes of markdown and HTML, and guessed wrong. These agents write a comment with the comment tool alone,
@@ -244,6 +257,13 @@ function namesLabel(value, label) {
   // The label as a whole word of the field, in a list or in one string such as "ao-ops ao-env-auth".
   const word = new RegExp(`(?:^|[^a-z0-9-])${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[^a-z0-9-])`, 'i');
   return Object.entries(value).some(([key, inner]) => (key === 'labels' ? word.test(JSON.stringify(inner)) : namesLabel(inner, label)));
+}
+
+// Whether an update block adds, removes or sets the label, as a whole word: update.labels with add, remove or set.
+function updatesLabel(value, label) {
+  if (!value || typeof value !== 'object') return false;
+  const word = new RegExp(`(?:^|[^a-z0-9-])${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|[^a-z0-9-])`, 'i');
+  return Object.entries(value).some(([key, inner]) => (key === 'update' && inner && typeof inner === 'object' && 'labels' in inner ? word.test(JSON.stringify(inner.labels)) : updatesLabel(inner, label)));
 }
 
 // A label that starts with `prefix`, as a whole word of a labels field at any depth.

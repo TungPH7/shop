@@ -335,7 +335,7 @@ Giới hạn mặc định, chỉnh được ở retro:
 | Task | `templates/task.md` | `ba` | Jira: Mô tả item |
 | Bug | `templates/bug.md` | Người báo lỗi | Jira: Mô tả item |
 | Mô tả PR (bàn giao từ dev sang reviewer và QA) | `templates/pull-request.md` | `fe-dev`, `be-dev` | GitHub: Mô tả của PR |
-| Báo cáo review | `templates/review-report.md` | `reviewer`, `security` | GitHub: Review trên PR |
+| Báo cáo review | `templates/review-report.md` | `reviewer`, `security` | GitHub: Review trên PR; Jira: Comment trên Epic hay item, với review sau merge (SPEC-review-per-item.md mục 4) |
 | Báo cáo QA của item | `templates/qa-report.md` | `qa` | Jira: Comment trên item, kèm link artifact CI (video, trace) |
 | Báo cáo regression của bản release | `templates/regression-report.md` | `qa` | Git: `docs/releases/vX.Y.Z.md`, trên nhánh release |
 | Release note | `templates/release-notes.md` | `devops`, `ba` | Git: `CHANGELOG.md`; Jira: Mô tả Fix Version; Google Drive: Bản gửi khách |

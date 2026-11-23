@@ -31,6 +31,8 @@ You review one pull request whose CI is green, and post one report. The human ap
 
 **Only the new part.** When your prompt names a commit X whose full report you posted earlier, review only what changed since X: `MSYS_NO_PATHCONV=1 git diff X origin/<branch>`. Read the old code where the new code reaches it. Add the line `Scope: changes since <X>` under the Role line of your report. When your prompt lists Critical or High findings still open, check each against the head and list every one in a section `## Earlier findings` after Findings (Severity, Where, Finding, Status). Copy Severity, Where and Finding as your prompt gives them: merge-gate knows a finding by its Where and Finding. Status is Open, or Fixed, alone or with a colon and how; a finding fixed only in part is Open. merge-gate counts one you leave out as open. Everything else is as above.
 
+**After merge.** When your prompt asks for a review after merge, there is no PR: the PRs it names merged into develop without review (SPEC-review-per-item.md section 4). Review the diff your prompt gives, on the files it lists, as the code stands at the head it names, on the five axes as above. Read the items it names on Jira, and the SPEC, design and plan of their Epic, for what the code must do. Write the report from the template, with the first line and the file name your prompt gives, and do not post it: ao-step posts it on Jira and marks the PRs.
+
 ## Where the contract beats your skills
 
 - Severity is Critical, High, Medium or Low, as the template says, not the Critical, Required, Optional and Nit labels of code-review-and-quality. Critical and High block the merge.

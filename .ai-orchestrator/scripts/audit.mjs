@@ -22,6 +22,7 @@ import { createGitHubClient, originRepo, readGitHubToken } from '../lib/tracker/
 import { bearerAuth, createJiraClient } from '../lib/tracker/jira-client.mjs';
 import { readMapping } from '../lib/tracker/mapping.mjs';
 import { itemLevel } from '../lib/workflow/levels.mjs';
+import { itemReview } from '../lib/quality/review-choice.mjs';
 
 const kit = fileURLToPath(new URL('..', import.meta.url));
 const projectDir = process.env.GITHUB_WORKSPACE ?? process.cwd();
@@ -56,8 +57,9 @@ try {
   const docs = jiraToken
     ? (() => {
         const reader = createJiraClient({ cloudId: mapping.cloud_id, authorization: bearerAuth(jiraToken) });
-        // levelOf: the level an item's label names, for a review waived by rule (C1 spec 3.4).
-        return { jira: reader, passage: gatePassage(readContract(join(kit, 'contract')), mapping, gates.docs_pull_requests.gate), levelOf: itemLevel(reader, mapping) };
+        // levelOf: the level an item's label names, for a review waived by rule (C1 spec 3.4); reviewOf: whether the
+        // item skipped review (SPEC-review-per-item.md section 2).
+        return { jira: reader, passage: gatePassage(readContract(join(kit, 'contract')), mapping, gates.docs_pull_requests.gate), levelOf: itemLevel(reader, mapping), reviewOf: itemReview(reader, mapping) };
       })()
     : undefined;
   const { ok } = await runAudit({

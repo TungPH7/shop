@@ -29,6 +29,7 @@ import { createGitHubClient, originRepo, readGitHubToken } from '../lib/tracker/
 import { bearerAuth, createJiraClient } from '../lib/tracker/jira-client.mjs';
 import { readMapping } from '../lib/tracker/mapping.mjs';
 import { itemLevel } from '../lib/workflow/levels.mjs';
+import { itemReview } from '../lib/quality/review-choice.mjs';
 import { waitForQa } from '../lib/workflow/qa-signal.mjs';
 
 const kit = fileURLToPath(new URL('..', import.meta.url));
@@ -62,8 +63,9 @@ try {
   // One Jira client for both: it writes only the flag of a PR you merge yourself, and not in a dry run.
   const jira = jiraToken ? createJiraClient({ cloudId: mapping.cloud_id, authorization: bearerAuth(jiraToken), write: !values['dry-run'] }) : undefined;
   const space = setting('AO_JIRA_SPACE', settings);
-  // levelOf: the level an item's label names, for a review waived by rule (C1 spec 3.4).
-  const docs = jira ? { jira, passage: gatePassage(readContract(join(kit, 'contract')), mapping, gates.docs_pull_requests.gate), space, levelOf: itemLevel(jira, mapping) } : undefined;
+  // levelOf: the level an item's label names, for a review waived by rule (C1 spec 3.4); reviewOf: whether the item
+  // skips review (SPEC-review-per-item.md section 2).
+  const docs = jira ? { jira, passage: gatePassage(readContract(join(kit, 'contract')), mapping, gates.docs_pull_requests.gate), space, levelOf: itemLevel(jira, mapping), reviewOf: itemReview(jira, mapping) } : undefined;
   const notify = { jira, mapping, space };
   const github = createGitHubClient({ repo, token });
   // ao/qa on the head of the base, which ao-step sets with your gh login while qa tests it (C2 spec section 9): merge-gate

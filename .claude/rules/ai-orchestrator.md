@@ -67,7 +67,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 | Task | `.ai-orchestrator/templates/task.md` | `ba` | Jira: Mô tả item |
 | Bug | `.ai-orchestrator/templates/bug.md` | whoever reports it | Jira: Mô tả item |
 | Mô tả PR (bàn giao từ dev sang reviewer và QA) | `.ai-orchestrator/templates/pull-request.md` | `fe-dev`, `be-dev` | GitHub: Mô tả của PR |
-| Báo cáo review | `.ai-orchestrator/templates/review-report.md` | `reviewer`, `security` | GitHub: Review trên PR |
+| Báo cáo review | `.ai-orchestrator/templates/review-report.md` | `reviewer`, `security` | GitHub: Review trên PR; Jira: Comment trên Epic hay item, với review sau merge (SPEC-review-per-item.md mục 4) |
 | Báo cáo QA của item | `.ai-orchestrator/templates/qa-report.md` | `qa` | Jira: Comment trên item, kèm link artifact CI (video, trace) |
 | Báo cáo regression của bản release | `.ai-orchestrator/templates/regression-report.md` | `qa` | Git: `docs/releases/vX.Y.Z.md` (trên nhánh release) |
 | Release note | `.ai-orchestrator/templates/release-notes.md` | `devops`, `ba` | Git: `CHANGELOG.md`; Jira: Mô tả Fix Version; Google Drive: Bản gửi khách |
