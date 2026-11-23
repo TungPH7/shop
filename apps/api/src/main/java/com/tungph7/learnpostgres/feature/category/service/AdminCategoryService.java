@@ -278,7 +278,10 @@ public class AdminCategoryService {
 
   private static Category newCategory(CreateCategoryRequest request, String slug) {
     return new Category(
-        request.name(), slug, request.status() != null ? request.status() : CategoryStatus.VISIBLE);
+        request.name(),
+        slug,
+        request.status() != null ? request.status() : CategoryStatus.VISIBLE,
+        0);
   }
 
   /**

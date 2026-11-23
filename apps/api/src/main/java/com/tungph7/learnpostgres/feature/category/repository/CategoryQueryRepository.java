@@ -18,9 +18,11 @@ import com.tungph7.learnpostgres.feature.category.domain.Category.CategoryStatus
  * Decisions 6), as {@code ProductQueryRepository} does for products.
  *
  * <p>Each list is one statement, whose count does not grow with the number of categories or
- * products (NFR2), and sorts by {@code name, id}: the collation {@code app.vi_ci} of the column
- * gives the Vietnamese order, and the id breaks the ties (NFR17). The SQL reads {@code
- * app.products} directly and imports nothing of {@code feature/product} (Architecture Decisions 5).
+ * products (NFR2). The admin list and the store list sort by {@link #DISPLAY_ORDER} (NFR11 of
+ * SHOP-95): the collation {@code app.vi_ci} of the name gives the Vietnamese order at the same
+ * number (NFR17), and the id breaks the ties. The sitemap keeps the order of ids. The SQL reads
+ * {@code app.products} directly and imports nothing of {@code feature/product} (Architecture
+ * Decisions 5).
  */
 @Repository
 public class CategoryQueryRepository {
@@ -39,6 +41,13 @@ public class CategoryQueryRepository {
       " AND EXISTS (SELECT 1 FROM app.products p"
           + " WHERE p.category_id = c.id AND p.status = 'ACTIVE')";
 
+  /**
+   * The one order of the category lists people see (SHOP-95: NFR11, ADR-0006): display order, then
+   * name in the collation {@code app.vi_ci} of the column, then id. The display order is an {@code
+   * integer}, so 9 comes before 10.
+   */
+  private static final String DISPLAY_ORDER = " ORDER BY c.display_order, c.name, c.id";
+
   private final JdbcClient jdbc;
 
   public CategoryQueryRepository(JdbcClient jdbc) {
@@ -51,6 +60,7 @@ public class CategoryQueryRepository {
       String name,
       String slug,
       CategoryStatus status,
+      int displayOrder,
       Instant createdAt,
       Instant updatedAt,
       long version,
@@ -69,7 +79,8 @@ public class CategoryQueryRepository {
 
   /**
    * The {@code VISIBLE} categories that have at least one {@code ACTIVE} product, in the order of
-   * names (AC17): the links of the product list of the store, in one statement (NFR2).
+   * {@link #DISPLAY_ORDER} (AC17 of SHOP-81, AC7 of SHOP-95): the links of the product list of the
+   * store, in one statement (NFR2).
    */
   @Transactional(readOnly = true)
   public List<StoreRow> findStoreList() {
@@ -77,7 +88,7 @@ public class CategoryQueryRepository {
             "SELECT c.name, c.slug::text AS slug FROM app.categories c"
                 + VISIBLE_ONLY
                 + HAS_A_PRODUCT_ON_SALE
-                + " ORDER BY c.name, c.id")
+                + DISPLAY_ORDER)
         .query((rs, rowNum) -> new StoreRow(rs.getString("name"), rs.getString("slug")))
         .list();
   }
@@ -119,17 +130,19 @@ public class CategoryQueryRepository {
   }
 
   /**
-   * Every category, visible or hidden, in the order of names, with the number of its products on
-   * sale or hidden (AC1). The number is a {@code count(*)} subquery of the same statement, counted
-   * when read and never stored (NFR18), and read in the index {@code idx_products_category_id}.
+   * Every category, visible or hidden, in the order of {@link #DISPLAY_ORDER} (AC5 of SHOP-95),
+   * with the number of its products on sale or hidden (AC1). The number is a {@code count(*)}
+   * subquery of the same statement, counted when read and never stored (NFR18), and read in the
+   * index {@code idx_products_category_id}.
    */
   @Transactional(readOnly = true)
   public List<AdminRow> findAdminList() {
     return jdbc.sql(
-            "SELECT c.id, c.name, c.slug::text AS slug, c.status, c.created_at, c.updated_at,"
-                + " c.version, "
+            "SELECT c.id, c.name, c.slug::text AS slug, c.status, c.display_order, c.created_at,"
+                + " c.updated_at, c.version, "
                 + PRODUCT_COUNT
-                + " AS product_count FROM app.categories c ORDER BY c.name, c.id")
+                + " AS product_count FROM app.categories c"
+                + DISPLAY_ORDER)
         .query(CategoryQueryRepository::mapAdminRow)
         .list();
   }
@@ -176,6 +189,7 @@ public class CategoryQueryRepository {
         rs.getString("name"),
         rs.getString("slug"),
         CategoryStatus.valueOf(rs.getString("status")),
+        rs.getInt("display_order"),
         rs.getTimestamp("created_at").toInstant(),
         rs.getTimestamp("updated_at").toInstant(),
         rs.getLong("version"),

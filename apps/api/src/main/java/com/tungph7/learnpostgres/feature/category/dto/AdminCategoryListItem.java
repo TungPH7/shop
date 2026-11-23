@@ -12,6 +12,7 @@ import com.tungph7.learnpostgres.feature.category.repository.CategoryQueryReposi
  * One category of the admin list: {@code AdminCategoryListItem} of the API Contract of the plan of
  * SHOP-81, {@code AdminCategory} with the number of its products.
  *
+ * @param displayOrder always there, 0–9999 (plan of SHOP-95, API Contract)
  * @param productCount every product of the category, on sale or hidden (AC1, AC8)
  */
 public record AdminCategoryListItem(
@@ -19,6 +20,7 @@ public record AdminCategoryListItem(
     String name,
     String slug,
     CategoryStatus status,
+    int displayOrder,
     long productCount,
     @ApiInstant Instant createdAt,
     @ApiInstant Instant updatedAt,
@@ -31,6 +33,7 @@ public record AdminCategoryListItem(
         row.name(),
         row.slug(),
         row.status(),
+        row.displayOrder(),
         row.productCount(),
         row.createdAt().truncatedTo(ChronoUnit.MILLIS),
         row.updatedAt().truncatedTo(ChronoUnit.MILLIS),

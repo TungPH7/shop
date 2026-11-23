@@ -10,13 +10,17 @@ import com.tungph7.learnpostgres.feature.category.domain.Category.CategoryStatus
 
 /**
  * A category as the admin API returns it: {@code AdminCategory} of the API Contract of the plan of
- * SHOP-81. {@code version} is sent back when the category is edited (NFR12).
+ * SHOP-81, with {@code displayOrder} of the plan of SHOP-95. {@code version} is sent back when the
+ * category is edited (NFR12).
+ *
+ * @param displayOrder always there, 0–9999; 0 for a category of before SHOP-95 (ADR-0006)
  */
 public record AdminCategory(
     UUID id,
     String name,
     String slug,
     CategoryStatus status,
+    int displayOrder,
     @ApiInstant Instant createdAt,
     @ApiInstant Instant updatedAt,
     long version) {
@@ -28,6 +32,7 @@ public record AdminCategory(
         category.getName(),
         category.getSlug(),
         category.getStatus(),
+        category.getDisplayOrder(),
         toMillis(category.getCreatedAt()),
         toMillis(category.getUpdatedAt()),
         category.getVersion());

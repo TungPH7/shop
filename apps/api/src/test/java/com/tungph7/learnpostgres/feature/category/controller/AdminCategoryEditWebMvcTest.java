@@ -80,6 +80,7 @@ class AdminCategoryEditWebMvcTest {
         .andExpect(jsonPath("$.name").value("Áo nam"))
         .andExpect(jsonPath("$.slug").value("ao"))
         .andExpect(jsonPath("$.status").value("HIDDEN"))
+        .andExpect(jsonPath("$.displayOrder").value(7))
         .andExpect(jsonPath("$.version").value(3));
   }
 
@@ -266,6 +267,7 @@ class AdminCategoryEditWebMvcTest {
         "Áo nam",
         "ao",
         CategoryStatus.HIDDEN,
+        7,
         Instant.parse("2026-11-22T02:10:00Z"),
         Instant.parse("2026-11-22T02:15:30Z"),
         version);

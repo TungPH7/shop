@@ -83,6 +83,7 @@ class AdminCategoryControllerWebMvcTest {
         .andExpect(jsonPath("$.name").value("Áo khoác"))
         .andExpect(jsonPath("$.slug").value("ao-khoac"))
         .andExpect(jsonPath("$.status").value("VISIBLE"))
+        .andExpect(jsonPath("$.displayOrder").value(5))
         .andExpect(jsonPath("$.createdAt").value("2026-11-22T02:10:00.000Z"))
         .andExpect(jsonPath("$.updatedAt").value("2026-11-22T02:15:30.000Z"))
         .andExpect(jsonPath("$.version").value(0));
@@ -96,7 +97,7 @@ class AdminCategoryControllerWebMvcTest {
 
     assertThat(fieldNames(json.readTree(body)))
         .containsExactlyInAnyOrder(
-            "id", "name", "slug", "status", "createdAt", "updatedAt", "version");
+            "id", "name", "slug", "status", "displayOrder", "createdAt", "updatedAt", "version");
   }
 
   @Test
@@ -231,6 +232,7 @@ class AdminCategoryControllerWebMvcTest {
                         "Áo khoác",
                         "ao-khoac",
                         CategoryStatus.VISIBLE,
+                        4,
                         3,
                         Instant.parse("2026-11-22T02:10:00Z"),
                         Instant.parse("2026-11-22T02:15:30Z"),
@@ -245,6 +247,7 @@ class AdminCategoryControllerWebMvcTest {
             .andExpect(jsonPath("$.items[0].name").value("Áo khoác"))
             .andExpect(jsonPath("$.items[0].slug").value("ao-khoac"))
             .andExpect(jsonPath("$.items[0].status").value("VISIBLE"))
+            .andExpect(jsonPath("$.items[0].displayOrder").value(4))
             .andExpect(jsonPath("$.items[0].productCount").value(3))
             .andExpect(jsonPath("$.items[0].createdAt").value("2026-11-22T02:10:00.000Z"))
             .andExpect(jsonPath("$.items[0].updatedAt").value("2026-11-22T02:15:30.000Z"))
@@ -256,7 +259,15 @@ class AdminCategoryControllerWebMvcTest {
     assertThat(fieldNames(json.readTree(body))).containsExactly("items");
     assertThat(fieldNames(json.readTree(body).get("items").get(0)))
         .containsExactlyInAnyOrder(
-            "id", "name", "slug", "status", "productCount", "createdAt", "updatedAt", "version");
+            "id",
+            "name",
+            "slug",
+            "status",
+            "displayOrder",
+            "productCount",
+            "createdAt",
+            "updatedAt",
+            "version");
   }
 
   @Test
@@ -283,6 +294,7 @@ class AdminCategoryControllerWebMvcTest {
         "Áo khoác",
         "ao-khoac",
         CategoryStatus.VISIBLE,
+        5,
         Instant.parse("2026-11-22T02:10:00Z"),
         Instant.parse("2026-11-22T02:15:30Z"),
         0);

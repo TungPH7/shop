@@ -79,8 +79,11 @@ class StoreCategoryControllerWebMvcTest {
             .getContentAsString();
 
     assertThat(fieldNames(json.readTree(body))).containsExactly("items");
-    assertThat(fieldNames(json.readTree(body).get("items").get(0)))
-        .containsExactlyInAnyOrder("name", "slug");
+    for (JsonNode item : json.readTree(body).get("items")) {
+      assertThat(fieldNames(item))
+          .as("NFR6 of SHOP-95: no display order for shoppers")
+          .containsExactlyInAnyOrder("name", "slug");
+    }
   }
 
   // ============================================================
@@ -154,7 +157,9 @@ class StoreCategoryControllerWebMvcTest {
     when(service.sitemap())
         .thenReturn(
             new ItemList<>(
-                List.of(new CategorySitemapEntry("ao", Instant.parse("2026-11-21T08:00:00Z")))));
+                List.of(
+                    new CategorySitemapEntry("ao", Instant.parse("2026-11-21T08:00:00Z")),
+                    new CategorySitemapEntry("quan", Instant.parse("2026-11-22T08:00:00Z")))));
 
     String body =
         mockMvc
@@ -166,8 +171,11 @@ class StoreCategoryControllerWebMvcTest {
             .getResponse()
             .getContentAsString();
 
-    assertThat(fieldNames(json.readTree(body).get("items").get(0)))
-        .containsExactlyInAnyOrder("slug", "updatedAt");
+    for (JsonNode item : json.readTree(body).get("items")) {
+      assertThat(fieldNames(item))
+          .as("NFR6 of SHOP-95: no display order in the sitemap")
+          .containsExactlyInAnyOrder("slug", "updatedAt");
+    }
   }
 
   private static List<String> fieldNames(JsonNode node) {

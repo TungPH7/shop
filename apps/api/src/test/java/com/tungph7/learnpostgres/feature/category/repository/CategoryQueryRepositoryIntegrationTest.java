@@ -1,9 +1,11 @@
 package com.tungph7.learnpostgres.feature.category.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import javax.sql.DataSource;
 
@@ -18,6 +20,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import com.tungph7.learnpostgres.AbstractContainerBaseTest;
 import com.tungph7.learnpostgres.feature.category.domain.Category.CategoryStatus;
 import com.tungph7.learnpostgres.feature.category.repository.CategoryQueryRepository.AdminRow;
+import com.tungph7.learnpostgres.feature.category.repository.CategoryQueryRepository.SitemapRow;
+import com.tungph7.learnpostgres.feature.category.repository.CategoryQueryRepository.StoreRow;
 
 /**
  * The hand-written queries of {@link CategoryQueryRepository} on schema V7 (Testcontainers
@@ -100,6 +104,110 @@ class CategoryQueryRepositoryIntegrationTest extends AbstractContainerBaseTest {
   }
 
   // ============================================================
+  // The display order (SHOP-95: AC5, AC6, AC7, AC8, NFR11)
+  // ============================================================
+
+  @Test
+  void findAdminList_returnsTheDisplayOrderOfEachCategory() {
+    category("Áo", "VISIBLE", 7);
+    category("Quần", "VISIBLE");
+
+    assertThat(repository.findAdminList())
+        .extracting(AdminRow::name, AdminRow::displayOrder)
+        .containsExactly(tuple("Quần", 0), tuple("Áo", 7));
+  }
+
+  @Test
+  void findAdminList_sortsTheCategoriesOfAc5ByDisplayOrderThenName_hiddenOnesIncluded() {
+    theFourCategoriesOfAc5();
+
+    assertThat(repository.findAdminList())
+        .extracting(AdminRow::name)
+        .containsExactly("Quần", "Bao tay", "Đầm", "Áo");
+  }
+
+  @Test
+  void findStoreList_sortsTheCategoriesOfAc7ByDisplayOrderThenName() {
+    for (UUID id : theFourCategoriesOfAc5()) {
+      product("ACTIVE", id);
+    }
+    jdbc.sql("UPDATE app.categories SET status = 'VISIBLE'").update();
+
+    assertThat(repository.findStoreList())
+        .extracting(StoreRow::name)
+        .containsExactly("Quần", "Bao tay", "Đầm", "Áo");
+  }
+
+  @Test
+  void findStoreList_leavesOutTheHiddenCategoryOfAc5_andKeepsTheOrderOfTheOthers() {
+    for (UUID id : theFourCategoriesOfAc5()) {
+      product("ACTIVE", id);
+    }
+
+    assertThat(repository.findStoreList())
+        .extracting(StoreRow::name)
+        .containsExactly("Quần", "Bao tay", "Áo");
+  }
+
+  @Test
+  void bothLists_sortTheThreeCategoriesOfAc8WithoutNumberByName() {
+    for (String name : List.of("Quần", "Bao tay", "Áo khoác")) {
+      product("ACTIVE", category(name, "VISIBLE"));
+    }
+
+    assertThat(repository.findAdminList())
+        .extracting(AdminRow::name, AdminRow::displayOrder)
+        .containsExactly(tuple("Áo khoác", 0), tuple("Bao tay", 0), tuple("Quần", 0));
+    assertThat(repository.findStoreList())
+        .extracting(StoreRow::name)
+        .containsExactly("Áo khoác", "Bao tay", "Quần");
+  }
+
+  @Test
+  void bothLists_compareTheDisplayOrderAsANumber_nineBeforeTen() {
+    product("ACTIVE", category("Áo", "VISIBLE", 10));
+    product("ACTIVE", category("Quần", "VISIBLE", 9));
+
+    assertThat(repository.findAdminList()).extracting(AdminRow::name).containsExactly("Quần", "Áo");
+    assertThat(repository.findStoreList()).extracting(StoreRow::name).containsExactly("Quần", "Áo");
+  }
+
+  @Test
+  void bothLists_sortTheNamesOfNfr17AtTheSameNumberInTheVietnameseOrder() {
+    List<String> expected =
+        List.of("An toàn", "Áo khoác", "Ăn vặt", "Bao tay", "Dép", "Đầm", "quần");
+    category("Zzz trước", "VISIBLE", 1);
+    for (String name : List.of("quần", "Đầm", "Ăn vặt", "Dép", "An toàn", "Bao tay", "Áo khoác")) {
+      product("ACTIVE", category(name, "VISIBLE", 3));
+    }
+
+    assertThat(repository.findAdminList())
+        .extracting(AdminRow::name)
+        .containsExactlyElementsOf(
+            Stream.concat(Stream.of("Zzz trước"), expected.stream()).toList());
+    assertThat(repository.findStoreList())
+        .extracting(StoreRow::name)
+        .containsExactlyElementsOf(expected);
+  }
+
+  @Test
+  void findSitemap_staysInTheOrderOfIds_whateverTheDisplayOrder() {
+    UUID first = category("Áo", "VISIBLE", 9);
+    UUID second = category("Quần", "VISIBLE", 0);
+    product("ACTIVE", second);
+    product("ACTIVE", first);
+    List<String> slugsById =
+        jdbc.sql("SELECT slug::text FROM app.categories WHERE id IN (?, ?) ORDER BY id")
+            .params(first, second)
+            .query(String.class)
+            .list();
+
+    assertThat(repository.findSitemap())
+        .extracting(SitemapRow::slug)
+        .containsExactlyElementsOf(slugsById);
+  }
+
+  // ============================================================
   // The delete, and what it logs
   // ============================================================
 
@@ -148,6 +256,28 @@ class CategoryQueryRepositoryIntegrationTest extends AbstractContainerBaseTest {
         .params(name, "slug-" + sequence, status)
         .query(UUID.class)
         .single();
+  }
+
+  private UUID category(String name, String status, int displayOrder) {
+    sequence++;
+    return jdbc.sql(
+            "INSERT INTO app.categories (name, slug, status, display_order)"
+                + " VALUES (?, ?, ?, ?) RETURNING id")
+        .params(name, "slug-" + sequence, status, displayOrder)
+        .query(UUID.class)
+        .single();
+  }
+
+  /**
+   * "Áo" 2, "Bao tay" 1, "Đầm" 1 and "Quần" 0, "Đầm" hidden (AC5, AC6, AC7 of SHOP-95), added in an
+   * order that is neither of names nor of numbers.
+   */
+  private List<UUID> theFourCategoriesOfAc5() {
+    return List.of(
+        category("Đầm", "HIDDEN", 1),
+        category("Áo", "VISIBLE", 2),
+        category("Quần", "VISIBLE", 0),
+        category("Bao tay", "VISIBLE", 1));
   }
 
   private void product(String status, UUID categoryId) {
