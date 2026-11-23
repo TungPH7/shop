@@ -14,6 +14,7 @@ const shirts: AdminCategory = {
   name: 'Áo',
   slug: 'ao',
   status: 'HIDDEN',
+  displayOrder: 0,
   createdAt: '2026-11-22T02:10:00.000Z',
   updatedAt: '2026-11-22T02:10:00.000Z',
   version: 1,

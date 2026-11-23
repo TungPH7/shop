@@ -31,7 +31,7 @@ export const categoryKeys = {
 
 const pathOf = (id: string) => `${BASE}/${encodeURIComponent(id)}`;
 
-/** Every category, in the order of the api: by name as Vietnamese sorts it (NFR17). */
+/** Every category, in the order of the api: by display order, then by name (AC5). */
 export async function getCategories(): Promise<AdminCategoryListItem[]> {
   const list = await api.get(BASE, { schema: adminCategoryListSchema });
   return list.items;
@@ -85,13 +85,27 @@ export function isCategoryMissing(error: unknown): boolean {
   );
 }
 
-/** The fields of the form that show an error of the api under them, in their order on it. */
-export const CATEGORY_FORM_FIELDS = ['name', 'slug'] as const;
+/**
+ * The fields of the form that show an error of the api under them, in their order on it:
+ * the display order of S2.3 last (plan of SHOP-95, Architecture Decisions 9).
+ */
+export const CATEGORY_FORM_FIELDS = ['name', 'slug', 'displayOrder'] as const;
 export type CategoryFormField = (typeof CATEGORY_FORM_FIELDS)[number];
+
+/**
+ * The message, a key of `form.errors`, under a field a 400 of the api names. Name and
+ * slug have the general one; every wrong display order has one reason, so it says it
+ * (S2.3 of docs/specs/SHOP-95/design.md, state api-invalid).
+ */
+export const CATEGORY_FIELD_API_ERRORS = {
+  name: 'invalid',
+  slug: 'invalid',
+  displayOrder: 'displayOrderInvalid',
+} as const satisfies Record<CategoryFormField, string>;
 
 /** How the form shows a failed save ("Cách admin hiện lỗi" of the API Contract). */
 export type CategoryFormFailure =
-  /** 400: "This value isn't valid." under each field the api names, the first focused. */
+  /** 400: the message of CATEGORY_FIELD_API_ERRORS under each field the api names, the first focused. */
   | { kind: 'fields'; fields: CategoryFormField[] }
   /** 409 CATEGORY_NAME_DUPLICATED: under the name, focused (S2.5, AC4). */
   | { kind: 'nameTaken' }

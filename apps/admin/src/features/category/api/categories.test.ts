@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import {
+  CATEGORY_FIELD_API_ERRORS,
   categoryFailureOf,
   createCategory,
   deleteCategory,
@@ -24,6 +25,7 @@ const shirts: AdminCategory = {
   name: 'Áo',
   slug: 'ao',
   status: 'VISIBLE',
+  displayOrder: 2,
   createdAt: '2026-11-22T02:10:00.000Z',
   updatedAt: '2026-11-22T02:15:30.000Z',
   version: 1,
@@ -57,6 +59,14 @@ describe('getCategories', () => {
 
     await expect(getCategories()).rejects.toMatchObject({ kind: 'validation' });
   });
+
+  it('NFR12 fails to load a list without the display order, from an api of before the Epic', async () => {
+    const legacy: Record<string, unknown> = { ...rows[0] };
+    delete legacy['displayOrder'];
+    server.use(http.get('*/admin/categories', () => HttpResponse.json({ items: [legacy] })));
+
+    await expect(getCategories()).rejects.toMatchObject({ kind: 'validation' });
+  });
 });
 
 describe('getCategory', () => {
@@ -72,6 +82,14 @@ describe('getCategory', () => {
     await expect(getCategory('a/b?c')).resolves.toEqual(shirts);
     expect(path).toMatch(/\/admin\/categories\/a%2Fb%3Fc$/);
   });
+
+  it('NFR12 fails to load a category without the display order, never showing 0 for it', async () => {
+    const legacy: Record<string, unknown> = { ...shirts };
+    delete legacy['displayOrder'];
+    server.use(http.get('*/admin/categories/*', () => HttpResponse.json(legacy)));
+
+    await expect(getCategory(id)).rejects.toMatchObject({ kind: 'validation' });
+  });
 });
 
 describe('createCategory', () => {
@@ -83,7 +101,7 @@ describe('createCategory', () => {
         return HttpResponse.json({ id }, { status: 201 });
       }),
     );
-    const input = { name: 'Áo khoác nữ', slug: null, status: 'VISIBLE' } as const;
+    const input = { name: 'Áo khoác nữ', slug: null, status: 'VISIBLE', displayOrder: 5 } as const;
 
     await expect(createCategory(input)).resolves.toBeUndefined();
     expect(bodies).toEqual([input]);
@@ -98,9 +116,12 @@ describe('createCategory', () => {
       }),
     );
 
-    const error = await createCategory({ name: 'Áo', slug: null, status: 'VISIBLE' }).catch(
-      (caught: unknown) => caught,
-    );
+    const error = await createCategory({
+      name: 'Áo',
+      slug: null,
+      status: 'VISIBLE',
+      displayOrder: 0,
+    }).catch((caught: unknown) => caught);
 
     expect(isApiError(error) && error.status).toBe(503);
     expect(calls).toBe(1);
@@ -117,7 +138,13 @@ describe('updateCategory', () => {
         return HttpResponse.json({ ...shirts, version: 2 });
       }),
     );
-    const input = { name: 'Áo nam', slug: 'ao', status: 'VISIBLE', version: 1 } as const;
+    const input = {
+      name: 'Áo nam',
+      slug: 'ao',
+      status: 'VISIBLE',
+      displayOrder: 3,
+      version: 1,
+    } as const;
 
     await expect(updateCategory({ id, input })).resolves.toBeUndefined();
     expect(bodies).toEqual([input]);
@@ -133,7 +160,10 @@ describe('updateCategory', () => {
     );
 
     await expect(
-      updateCategory({ id, input: { name: 'Áo', slug: 'ao', status: 'VISIBLE', version: 1 } }),
+      updateCategory({
+        id,
+        input: { name: 'Áo', slug: 'ao', status: 'VISIBLE', displayOrder: 0, version: 1 },
+      }),
     ).rejects.toMatchObject({ kind: 'network' });
     expect(calls).toBe(1);
   });
@@ -233,6 +263,36 @@ describe('categoryFailureOf', () => {
     });
 
     expect(categoryFailureOf(error, 'A B')).toEqual({ kind: 'fields', fields: ['name', 'slug'] });
+  });
+
+  it('AC3 names the display order of a 400 after the name and the slug, as on the form', () => {
+    const error = httpError(400, 'VALIDATION_FAILED', {
+      errors: [
+        { field: 'displayOrder', message: 'must be at most 9999' },
+        { field: 'name', message: 'must not be blank' },
+      ],
+    });
+
+    expect(categoryFailureOf(error, 'ao')).toEqual({
+      kind: 'fields',
+      fields: ['name', 'displayOrder'],
+    });
+  });
+
+  it('AC3 names the display order alone for a 400 of it only', () => {
+    const error = httpError(400, 'VALIDATION_FAILED', {
+      errors: [{ field: 'displayOrder', message: 'must be a whole number' }],
+    });
+
+    expect(categoryFailureOf(error, 'ao')).toEqual({ kind: 'fields', fields: ['displayOrder'] });
+  });
+
+  it('gives each field of a 400 its message: one reason for every wrong display order (S2.3)', () => {
+    expect(CATEGORY_FIELD_API_ERRORS).toEqual({
+      name: 'invalid',
+      slug: 'invalid',
+      displayOrder: 'displayOrderInvalid',
+    });
   });
 
   it.each([

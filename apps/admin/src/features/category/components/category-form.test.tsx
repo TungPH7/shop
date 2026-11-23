@@ -21,6 +21,7 @@ const saved: AdminCategory = {
   name: 'Áo',
   slug: 'ao',
   status: 'VISIBLE',
+  displayOrder: 2,
   createdAt: '2026-11-22T02:10:00.000Z',
   updatedAt: '2026-11-22T02:10:00.000Z',
   version: 3,
@@ -113,7 +114,9 @@ describe('CategoryForm in add mode', () => {
     await user.click(screen.getByRole('button', { name: 'Add category' }));
 
     expect(await screen.findByText('The category list')).toBeInTheDocument();
-    expect(bodies).toEqual([{ name: 'Áo khoác nữ', slug: null, status: 'VISIBLE' }]);
+    expect(bodies).toEqual([
+      { name: 'Áo khoác nữ', slug: null, status: 'VISIBLE', displayOrder: 0 },
+    ]);
     expect(getSnapshot().map(({ kind, message }) => ({ kind, message }))).toEqual([
       { kind: 'success', message: 'Category added' },
     ]);
@@ -131,7 +134,9 @@ describe('CategoryForm in add mode', () => {
     await user.click(screen.getByRole('button', { name: 'Add category' }));
 
     await screen.findByText('The category list');
-    expect(bodies).toEqual([{ name: 'Áo khoác', slug: 'ao-nam', status: 'HIDDEN' }]);
+    expect(bodies).toEqual([
+      { name: 'Áo khoác', slug: 'ao-nam', status: 'HIDDEN', displayOrder: 0 },
+    ]);
   });
 
   it.each([
@@ -309,7 +314,9 @@ describe('CategoryForm in edit mode', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(await screen.findByText('The category list')).toBeInTheDocument();
-    expect(bodies).toEqual([{ name: 'Áo nam', slug: 'ao', status: 'VISIBLE', version: 3 }]);
+    expect(bodies).toEqual([
+      { name: 'Áo nam', slug: 'ao', status: 'VISIBLE', displayOrder: 2, version: 3 },
+    ]);
     expect(getSnapshot().map(({ message }) => message)).toEqual(['Category saved']);
   });
 
@@ -332,7 +339,9 @@ describe('CategoryForm in edit mode', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await screen.findByText('The category list');
-    expect(bodies).toEqual([{ name: 'Áo', slug: 'ao-nam', status: 'VISIBLE', version: 3 }]);
+    expect(bodies).toEqual([
+      { name: 'Áo', slug: 'ao-nam', status: 'VISIBLE', displayOrder: 2, version: 3 },
+    ]);
   });
 
   it('AC6 sends the Hidden status', async () => {
@@ -343,7 +352,9 @@ describe('CategoryForm in edit mode', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await screen.findByText('The category list');
-    expect(bodies).toEqual([{ name: 'Áo', slug: 'ao', status: 'HIDDEN', version: 3 }]);
+    expect(bodies).toEqual([
+      { name: 'Áo', slug: 'ao', status: 'HIDDEN', displayOrder: 2, version: 3 },
+    ]);
   });
 
   it.each(['', 'Ao', 'áo', 'ao nam', '-ao'])('AC3 does not save the slug %j', async (slug) => {
