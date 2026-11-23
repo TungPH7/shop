@@ -1,10 +1,17 @@
 // The review after merge (SPEC-review-per-item.md section 4): /ao-review <KEY> reviews at once the PRs of an Epic's items,
 // or of one item, that merged into develop without review. What ao-step reads for it, what it posts after the runs of
 // reviewer and security, and the words it posts. Pure.
+import { createHash } from 'node:crypto';
 
 // The note a run of the review after merge keeps on its record: the PRs it reviews, so that a run of the same set
 // counts and one of another set does not.
 export const afterMergeNote = (numbers) => `after-merge:${[...numbers].sort((a, b) => a - b).join(',')}`;
+// The PRs of a note, back.
+export const noteNumbers = (note) => (/^after-merge:([\d,]+)$/.exec(note ?? '')?.[1] ?? '').split(',').filter(Boolean).map(Number);
+
+// The hash of a report, which ao-step keeps on the record of the run that wrote it, and checks before it posts: another
+// role with .ai/** may write the file in between (review of shop PR #93, security Medium 1).
+export const reportHash = (text) => createHash('sha256').update(text ?? '', 'utf8').digest('hex');
 
 // The PRs a review after merge takes (spec 4.2): merged into develop, skipped review on their last head, no mark yet.
 // pulls: [{ number, key, merged, skipped, mark }].
@@ -66,8 +73,9 @@ export function fixTask({ key, head, findings, pulls, roleOf }) {
 // The Sub-task of one role of a fix Task in several apps.
 export const fixSubtask = (role, key) => ({ summary: `${role === 'be-dev' ? 'BE' : role === 'fe-dev' ? 'FE' : role}: sửa phần của ${role} trong review sau merge ${key}`, description: `Sửa các finding của bảng trong Task cha nằm ở app của ${role}.` });
 
-// The first line of the comment on KEY, by which a second run finds it.
-export const reportLine = (key, head) => `Review sau merge ${key} ở ${head.slice(0, 7)}`;
+// The first line of the comment on KEY, by which a second run finds it. It starts with ao-step, the signer of the kit's
+// own comments, so that the reports in it, written by agents, never pass for a QA report (review of shop PR #93).
+export const reportLine = (key, head) => `ao-step: Review sau merge ${key} ở ${head.slice(0, 7)}`;
 
 // The comment on KEY in Jira (spec 4.5.3): the PRs, the part reviewed, the fix, and each report in full.
 export function reportComment({ key, head, base, pulls, files, fix, reports }) {

@@ -145,13 +145,15 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
     let stopped;
     let runNotes = [];
     let afterStop;
+    // What ao-step read after the run that the record keeps, such as the hash of the report of a review after merge.
+    let afterRecord;
     try {
       ({ lines, stopped, superseded } = await agent(notes.length > 0 ? { ...next, prompt: [next.prompt, ...notes].join('\n\n') } : next, { log: logName }));
       // With the start of the run: qa attaches only what it wrote since (live-run-fixes spec 2.5).
       // A superseded qa run attaches nothing: what it saw was a version that no longer runs.
       if (after && !superseded) {
         const done = await after({ ...next, startedAt }, { tree, facts });
-        ({ notes: runNotes = [], stop: afterStop } = Array.isArray(done) ? { notes: done } : (done ?? {}));
+        ({ notes: runNotes = [], stop: afterStop, record: afterRecord } = Array.isArray(done) ? { notes: done } : (done ?? {}));
       }
     } finally {
       if (tree) {
@@ -175,6 +177,7 @@ export async function runGo({ command, arg, options, gather, decide = decideStep
       cumulative: read.cumulative,
       denials: read.denials.length,
       endedAt: new Date(now()).toISOString(),
+      ...afterRecord,
       ...(stopped && { stoppedAfterResult: true }),
       ...(wipNotes.length + runNotes.length + (superseded ? 1 : 0) > 0 && { notes: [...wipNotes, ...runNotes, ...(superseded ? [superseded] : [])] }),
       text: read.text.length > TEXT_MAX ? `${read.text.slice(0, TEXT_MAX)} … [cut at ${TEXT_MAX} characters; the whole answer is in ${logName}]` : read.text,

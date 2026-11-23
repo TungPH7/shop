@@ -30,7 +30,7 @@ import { deltaEffort } from '../quality/review-tiers.mjs';
 import { waiverFor } from '../quality/waivers.mjs';
 import { reviewLabels, skipReason, skipScope } from '../quality/review-choice.mjs';
 import { readReviewReport } from '../quality/pull-request.mjs';
-import { afterMergeNote, afterMergeReport, afterMergeTodo, afterMergeTree } from './after-merge.mjs';
+import { afterMergeNote, afterMergeReport, afterMergeTodo, afterMergeTree, noteNumbers, reportHash } from './after-merge.mjs';
 import { planLibraries } from '../quality/dependencies.mjs';
 import { findingsStep, ownFindingsLine } from './findings.mjs';
 import { effectiveLevel } from './levels.mjs';
@@ -453,12 +453,21 @@ const requestLine = (request, key) =>
 // A preview that runs, for /ao-status (human-loop spec 4.3): the folder is on a PR branch until it stops.
 const previewLine = ({ key, branch, apps = [] }) => `the preview of ${key} runs on ${branch}${apps.length > 0 ? `: ${apps.map(({ name, url }) => `${name} ${url}`).join(', ')}` : ', its apps stopped'} → /ao-preview ${key} --stop`;
 
+// A change of a review label that does not count, in words (review of shop PR #93: the label really changed, and which
+// way).
+const ignoredReviewText = ({ label, change }) => {
+  const shared = "the agents' Jira account, which your main session uses too";
+  if (change === 'removed') return `The label ${label} was taken off by ${shared}, so it still counts: take it off on Jira itself`;
+  if (change === 'made') return `The label ${label} came with the item, which ${shared} made after gate ② of its Epic or outside an Epic, so you never approved it: put it on Jira itself`;
+  return `The label ${label} was put by ${shared}, so it does not count: put it on Jira itself`;
+};
+
 // A line on the review choice of an item, when it skips review or a label to skip it does not count (SPEC-review-per-
 // item.md section 2), with the critical files its open PR changes; null otherwise.
 function reviewLine({ item, pr }, options = {}) {
   if (!item?.review || !['story', 'task', 'bug'].includes(item.workType)) return null;
   const names = reviewLabels(options.mapping);
-  if (item.review.ignored) return `Review of ${item.key}: on. The label ${item.review.ignored.label} was put by the agents' Jira account, which your main session uses too, so it does not count: put it on Jira itself`;
+  if (item.review.ignored) return `Review of ${item.key}: ${item.review.skip ? 'skipped' : 'on'}. ${ignoredReviewText(item.review.ignored)}`;
   if (!item.review.skip) return null;
   const critical = pr?.state === 'open' && skipScope(pr) ? criticalLine(pr) : null;
   return `Review of ${item.key}: skipped (${skipReason(item.review, names)}); its PR into develop waits for your approval with no report, and a release of it for a review after merge${critical ? `. ${critical}` : ''}`;
@@ -1009,7 +1018,17 @@ function decideAfterMerge(facts, options) {
   }
   lines.push(`To review after merge: ${todo.map(({ number, key: k }) => `PR #${number} (${k})`).join(', ')}; ${m.files.length} file${m.files.length === 1 ? '' : 's'}`);
   if (!m.base || !m.head) return { ...stop('fix', `GitHub did not give the commit before the oldest merge, or the head of develop`, `/ao-review ${key} again`), lines };
-  const numbers = todo.map(({ number }) => number);
+  // A post that stopped after it marked some PRs goes on with the review of the same PRs: those it marked carry the mark
+  // of this KEY at the head that review read (review of shop PR #93, reviewer Medium 2).
+  const markedHere = (number, head) => m.pulls.some((p) => p.number === number && p.mark?.key === key && p.mark.head === head);
+  const earlier = (facts.run?.runs ?? [])
+    .filter((r) => r.command === 'review' && r.purpose === AFTER_MERGE && r.outcome === 'done')
+    .reverse()
+    .find((r) => {
+      const listed = noteNumbers(r.note);
+      return listed.length > todo.length && todo.every(({ number }) => listed.includes(number)) && listed.every((n) => todo.some(({ number }) => number === n) || markedHere(n, r.head));
+    });
+  const numbers = earlier ? noteNumbers(earlier.note) : todo.map(({ number }) => number);
   const note = afterMergeNote(numbers);
   // The level of the highest item among them: heavy makes security run, as on a PR (C1 spec 3.2).
   const level = todo.some(({ key: k }) => m.levels?.[k] === 'heavy') ? 'heavy' : 'standard';
@@ -1024,18 +1043,26 @@ function decideAfterMerge(facts, options) {
   if (stopped.length > 0) {
     return go(stopped.map((r) => ({ role: r.role, key, effort: r.effort, purpose: AFTER_MERGE, resume: r.session, prompt: resumePrompt(key, r.role), checkout: r.checkout, head: r.head, note, worktree: { name: afterMergeTree(key, r.role), sha: r.head } })), lines);
   }
-  const done = roles.map(({ role }) => (last(role)?.outcome === 'done' ? last(role) : null));
+  // A run counts when its report is still in .ai/reviews/; one gone from there runs again (review of shop PR #93).
+  const fileOf = (r) => afterMergeReport(key, r.role, r.head);
+  const done = roles.map(({ role }) => (last(role)?.outcome === 'done' && m.reports?.[fileOf(last(role))] !== undefined ? last(role) : null));
   if (done.every(Boolean)) {
-    const names = Object.fromEntries(done.map((r) => [r.role, afterMergeReport(key, r.role, r.head)]));
+    const names = Object.fromEntries(done.map((r) => [r.role, fileOf(r)]));
+    // The report must be what the run wrote: the hash ao-step kept at its end. Nobody fixes one by hand any more.
+    const changed = done.filter((r) => !r.report?.sha256 || reportHash(m.reports[names[r.role]]) !== r.report.sha256);
+    if (changed.length > 0) {
+      const which = changed.map((r) => `${r.role}: .ai/reviews/${names[r.role]} is not the report ${r.role} wrote${r.report?.sha256 ? ': it changed after its run ended' : ': its run kept no hash of it'}`);
+      return { ...stop('you', `the review after merge of ${key} ran, but ${which.join('; ')}`, `Read what changed in it; to post a new one, delete it, then /ao-review ${key} again: its role runs again`), lines };
+    }
     const unreadable = done.flatMap((r) => {
-      const text = m.reports?.[names[r.role]];
-      if (!text) return [`${r.role}: .ai/reviews/${names[r.role]} is missing`];
-      const report = readReviewReport(text, options.gates.github_apps.review.roles);
+      const report = readReviewReport(m.reports[names[r.role]], options.gates.github_apps.review.roles);
       return report.ok && report.role === r.role ? [] : [`${r.role}: .ai/reviews/${names[r.role]} is not a readable ${r.role} report (${(report.problems ?? [`its Role line names ${report.role}`]).join('; ')})`];
     });
-    if (unreadable.length > 0) return { ...stop('fix', `the review after merge of ${key} ran, but ${unreadable.join('; ')}`, `Fix the report by hand, then /ao-review ${key} again: it posts without another run`), lines };
+    if (unreadable.length > 0) return { ...stop('fix', `the review after merge of ${key} ran, but ${unreadable.join('; ')}`, `Delete the report, then /ao-review ${key} again: its role runs again`), lines };
     const epic = item.workType === 'epic' ? key : item.parent?.type && /epic/i.test(item.parent.type) ? item.parent.key : null;
-    return go([{ action: 'after-merge-post', key, epic, head: done[0].head, base: m.base, pulls: numbers, items: todo.map(({ key: k }) => k), files: m.files, reports: names }], lines);
+    const items = numbers.map((n) => m.pulls.find((p) => p.number === n)?.key).filter(Boolean);
+    const hashes = Object.fromEntries(done.map((r) => [r.role, r.report.sha256]));
+    return go([{ action: 'after-merge-post', key, epic, head: done[0].head, base: m.base, pulls: numbers, items, files: m.files, reports: names, hashes }], lines);
   }
   const runs = roles.filter((_, i) => !done[i]).map(({ role, effort, reason }) => ({
     role,

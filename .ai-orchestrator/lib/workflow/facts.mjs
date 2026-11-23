@@ -9,7 +9,7 @@ import { docsRule } from '../quality/gates.mjs';
 import { approved, botLogin, protectedPaths, releasePullsOf, releaseReviewMissing } from '../quality/merge-gate.mjs';
 import { acceptedRisks, findingCounts, findingId, openFindings, readReviewReport, stillBlocking } from '../quality/pull-request.mjs';
 import { criticalNames, pathTier, requiredReviewRoles } from '../quality/review-tiers.mjs';
-import { newestMark, reviewChoice, reviewLabels, skipOnHead, skippedReview } from '../quality/review-choice.mjs';
+import { madeFacts, newestMark, reviewChoice, reviewLabels, skipOnHead, skippedReview } from '../quality/review-choice.mjs';
 import { touchedPaths } from '../quality/diff-paths.mjs';
 import { waiverOnHead } from '../quality/waivers.mjs';
 import { parseBranch } from '../tracker/conventions.mjs';
@@ -65,7 +65,7 @@ export async function readWorkItem(jira, key, ctx) {
   const { contract, mapping, roster } = ctx;
   const path = `/rest/api/3/issue/${encodeURIComponent(key)}`;
   const agentField = await fieldId(jira, mapping.fields.agent.jira_field);
-  const { key: found, fields } = await jira.get(path, { fields: ['summary', 'issuetype', 'status', 'labels', 'parent', 'subtasks', 'issuelinks', agentField].join(',') });
+  const { key: found, fields } = await jira.get(path, { fields: ['summary', 'issuetype', 'status', 'labels', 'parent', 'subtasks', 'issuelinks', 'creator', 'created', agentField].join(',') });
   const histories = await jira.getAll(`${path}/changelog`);
   const comments = await jira.getAll(`${path}/comment`, {}, 'comments');
   const { workType, state } = locate(fields.issuetype.name, fields.status.name, contract, mapping);
@@ -90,8 +90,9 @@ export async function readWorkItem(jira, key, ctx) {
     // PR #79). levelIgnored: the lower label left out, which /ao-status and the review name.
     ...levelFacts(trustedLevel(labels, histories, { agentAccount: agentsAccount(mapping), prefix: mapping.work_labels.level_prefix })),
     // Whether the item skips review (SPEC-review-per-item.md section 2), as merge-gate works it out: its labels, with a
-    // change of the agents' account towards skipping left out, and the default of project.yaml (ctx.reviewDefault).
-    review: reviewChoice({ labels, histories, agentAccount: agentsAccount(mapping), names: reviewLabels(mapping), projectDefault: ctx.reviewDefault }),
+    // change of the agents' account towards skipping left out, and the default of project.yaml (ctx.reviewDefault). A skip
+    // set when the agents' account made the item counts only from a plan you approved (review of shop PR #93).
+    review: reviewChoice({ labels, histories, agentAccount: agentsAccount(mapping), names: reviewLabels(mapping), projectDefault: ctx.reviewDefault, made: await madeFacts(jira, { fields, labels, names: reviewLabels(mapping), agentAccount: agentsAccount(mapping) }, mapping) }),
     // An ops Task, and the basic auth you gave devops for it (kit followups, batch 4 item 14).
     ops: labels.includes(mapping.work_labels.ops),
     envAuth: labels.includes(mapping.work_labels.env_auth),
@@ -631,8 +632,25 @@ export async function readCutFacts({ jira, github, deploys, history, contract, m
   // The PRs up to the cut point that skipped review and still wait for their review after merge (SPEC-review-per-item.md
   // 5.3): gate ④ names them, though the release branch goes to Staging anyway.
   const upTo = cut ? commits.slice(0, commits.findIndex(({ sha }) => sha === cut.sha) + 1).map(({ sha }) => sha) : [];
-  const reviewGaps = github && apps && upTo.length > 0 ? releaseReviewMissing(await releasePullsOf(github, upTo, { apps, bases: ['develop'] })) : [];
+  const reviewGaps = github && apps && upTo.length > 0 ? releaseReviewMissing(await withEpics(jira, await releasePullsOf(github, upTo, { apps, bases: ['develop'] }), contract)) : [];
   return { latestTag: newest, version: nextRelease(tags), commits: commits.length, cut, included: withInfo(included), after: withInfo(after), cancelled: withInfo(cancelled), versions: facts.versions, releaseBranches: facts.releaseBranches, reviewGaps };
+}
+
+// The Epic of each PR that still waits for its review after merge, so that gate ④ and /ao-ship name the command to
+// type (the trial of review per item, SHOP-95: the line read /ao-review <its Epic>). An item Jira does not give keeps none.
+async function withEpics(jira, pulls, contract) {
+  const epicType = contract.work_types.find(({ id }) => id === 'epic').jira_issue_type;
+  const out = [];
+  for (const pull of pulls) {
+    if (!pull.skipped || pull.mark) {
+      out.push(pull);
+      continue;
+    }
+    const found = await maybe(() => jira.get(`/rest/api/3/issue/${encodeURIComponent(pull.key)}`, { fields: 'parent' }));
+    const parent = found?.fields?.parent;
+    out.push(parent?.fields?.issuetype?.name === epicType ? { ...pull, epic: parent.key } : pull);
+  }
+  return out;
 }
 
 const NOTES = ['changelog.md', 'pr-description.md', 'fix-version.md'];
@@ -672,7 +690,7 @@ export async function readShipFacts({ jira, github, deploys, local, contract, ma
   // The PRs the release brings that skipped review and still wait for their review after merge (SPEC-review-per-item.md
   // 5.3): /ao-ship stops before gate ⑤, where merge-gate would hold the release PR for them.
   const compare = branch && apps ? await maybe(() => github.get(`/compare/main...${branch.name}`)) : null;
-  const reviewGaps = !compare ? [] : releaseReviewMissing((compare.total_commits ?? 0) >= 250 ? null : await releasePullsOf(github, (compare.commits ?? []).map(({ sha }) => sha), { apps, bases: ['develop', branch.name] }));
+  const reviewGaps = !compare ? [] : releaseReviewMissing((compare.total_commits ?? 0) >= 250 ? null : await withEpics(jira, await releasePullsOf(github, (compare.commits ?? []).map(({ sha }) => sha), { apps, bases: ['develop', branch.name] }), contract));
   return {
     reviewGaps,
     version,

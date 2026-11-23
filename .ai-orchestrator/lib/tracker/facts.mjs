@@ -108,6 +108,8 @@ export function agentValues(contract, mapping) {
 }
 // The Agent values of every role but qa: a comment that starts with one of them, then a colon, is that role's and no QA
 // report (third review of shop PR #81, High 08bc0732).
+// The signer of the comments ao-step writes on an item.
+export const KIT_SIGNER = 'ao-step';
 export const notQaSigners = (contract, mapping) => Object.entries(agentValues(contract, mapping)).filter(([role]) => role !== 'qa').map(([, value]) => value);
 const signedByOneOf = (body, signers) => {
   const text = plainText(typeof body === 'string' ? body : adfText(body)).trim();
@@ -120,7 +122,9 @@ const signedByOneOf = (body, signers) => {
 export async function readLatestQaReport(client, key, { notQa = [] } = {}) {
   const comments = await client.getAll(`/rest/api/3/issue/${encodeURIComponent(key)}/comment`, { orderBy: '-created' }, 'comments');
   const [newest] = comments
-    .filter(({ body }) => !signedByOneOf(body, notQa))
+    // ao-step signs its own comments, such as the reports of a review after merge, which agents wrote (review of shop PR
+    // #93); the hook keeps agents from signing as ao-step.
+    .filter(({ body }) => !signedByOneOf(body, [...notQa, KIT_SIGNER]))
     .map(({ id, body, created }) => ({ id, body, result: qaReportResult(body), at: jiraTime(created) }))
     .filter(({ result }) => result)
     .sort((a, b) => b.at - a.at);
