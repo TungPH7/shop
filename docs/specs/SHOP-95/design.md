@@ -11,7 +11,7 @@
 | S1 | Danh sách danh mục (admin) | `/categories` | US1 Quản trị viên đặt thứ tự hiển thị của danh mục | ASCII | admin |
 | S2 | Form thêm và sửa danh mục (admin) | `/categories/new`, `/categories/:categoryId/edit` | US1 Quản trị viên đặt thứ tự hiển thị của danh mục | ASCII | admin |
 
-Đề xuất của `ux`, viết khi làm việc một mình nên chưa có câu trả lời của bạn; mỗi điểm cần bạn xác nhận nằm ở Open Questions, kèm câu trả lời đề xuất:
+Quyết định ngày 2026-11-23, khi bạn đồng ý cả bốn đề xuất của `ux` (Claude chọn theo đề xuất, vì bạn đã giao cổng ① của Epic này cho Claude):
 
 - **Không có ảnh, nên cả hai màn hình là ASCII.** Thư mục `.ai/design-inbox/SHOP-95/` không có, và không màu hay kích thước nào đọc từ ảnh. Hai màn hình dựng trên design system của `admin` ở `docs/design-system/admin.md`: cùng thẻ kính, bảng, ô nhập, nút, giao diện sáng và tối. Ảnh Figma hay mockup chỉ cần khi bạn muốn một bố cục khác với trang của SHOP-81; khi đó bỏ ảnh vào `.ai/design-inbox/SHOP-95/` và `ux` đổi màn hình đó thành Figma hay Image.
 - **Chỉ hai màn hình, cả hai là của SHOP-81 có thêm một khối.** S1 là bảng danh mục (SHOP-81 S1) có thêm cột thứ tự, và S2 là form thêm và sửa danh mục (SHOP-81 S2) có thêm ô thứ tự. Khi viết "SHOP-81 S2.5", đó là khối của design SHOP-81, không phải S2 của file này. Chúng chỉ vẽ phần đổi; phần còn lại ghi "không đổi" kèm mã khối của SHOP-81.
@@ -21,10 +21,12 @@
   - AC7 và phần trang `/vi/products` của AC8: các liên kết danh mục của khách (SHOP-81 S7.4) chỉ đổi thứ tự.
 - **Với `seo`:** cả S1 và S2 thuộc `admin`, mà `admin` có `seo: false` trong `project.yaml`, và Epic không có màn hình của `user`. Không màn hình nào của file này cần mục SEO.
 - **Hai quyết định bố cục:**
-  - Cột thứ tự đứng sau Số sản phẩm và trước Thao tác, để Tên vẫn là cột đầu và số sản phẩm vẫn là ô thứ 4 của dòng (Open Questions, Q1).
+  - Cột thứ tự đứng sau Số sản phẩm và trước Thao tác (S1.3, S1.4), để Tên vẫn là cột đầu và số sản phẩm vẫn là ô thứ 4 của dòng: `apps/admin/e2e/product-category.spec.ts` đọc số sản phẩm bằng `row.getByRole('cell').nth(3)`. Thêm cột nào cũng làm helper `expectCells` của `apps/admin/e2e/categories.spec.ts` fail, vì nó kiểm đúng 5 ô của dòng (8 lần gọi). Vì vậy item 2 thêm ô thứ tự vào `expectCells`, một chỗ sửa chung cho 8 lần gọi; `sa` ghi việc đó vào plan, và `ba` sửa câu trong SPEC thành "mọi E2E của SHOP-81 vẫn pass mà không sửa, trừ helper `expectCells`".
   - Ô thứ tự đứng cuối các ô của form, sau Trạng thái: nó phụ so với tên, slug và trạng thái, và thứ tự Tab, cùng việc đưa focus về "ô sai đầu tiên" của SHOP-81 S2.9, giữ nguyên cho ba ô có sẵn.
 - **`admin` thiết kế cho máy tính, từ 1024 px**, như SHOP-81 và SHOP-7: không có bố cục điện thoại. Dưới 640 px form vẫn một cột như SHOP-81 S2.3.
-- **Chữ của giao diện** viết ở YAML dưới đây, bản `vi` và bản `en`. SPEC không nêu chữ nào của ô và cột này: nhãn, gợi ý, hai lỗi và tiêu đề cột do `ux` viết (Open Questions, Q4), và đổi chữ chỉ sửa file i18n.
+- **Cách kiểm AC8 tách theo item.** Nửa "cả ba có thứ tự 0" của AC8 trên trang Danh mục của `admin` chỉ thấy được khi có cột S1.3 và S1.4, tức ở item 2, trong lúc item 1 (`be-dev`) chưa có cột. Vì vậy: item 1 kiểm số 0 qua `GET /api/admin/categories` và thứ tự theo tên ở `/vi/products`; item 2 kiểm cột hiện "0" ở S1.4. `sa` ghi cách chia này vào plan.
+- **Số thứ tự hiện bằng chữ số thường, không có dấu phân cách hàng nghìn**, ở cột S1.4 và ô S2.3: 1000, không phải 1.000, vì quản trị viên gõ lại đúng số đó và "1.000" của tiếng Việt dễ đọc nhầm là số lẻ, trong lúc 1.5 là lỗi. Cột Số sản phẩm vẫn theo `Intl`.
+- **Chữ của giao diện** viết ở YAML dưới đây, bản `vi` và bản `en`. SPEC không nêu chữ nào của ô và cột này: nhãn "Thứ tự hiển thị" (en "Display order"; không dùng "Order" vì dễ nhầm với đơn hàng), gợi ý, hai lỗi và tiêu đề cột do `ux` viết ở S1.3 và S2.3, và đổi chữ chỉ sửa `category.json` của hai ngôn ngữ.
 
 ## Flow
 
@@ -88,14 +90,14 @@ blocks:
     content:
       vi: "Thứ tự hiển thị"
       en: "Display order"
-    behavior: "Cột mới, đứng sau Số sản phẩm và trước Thao tác, căn phải như Số sản phẩm (class `.table__num`). Chữ tiêu đề cột 12/600 `--muted` như các cột khác. Không phải nút và không có mũi tên sắp xếp: bảng không xếp lại khi bấm (SPEC, Scope: Out)"
+    behavior: "Cột mới, đứng sau Số sản phẩm và trước Thao tác, để số sản phẩm vẫn là ô thứ 4 của dòng; helper `expectCells` của E2E SHOP-81 thêm ô thứ tự. Căn phải như Số sản phẩm (class `.table__num`). Chữ tiêu đề cột 12/600 `--muted` như các cột khác. Không phải nút và không có mũi tên sắp xếp: bảng không xếp lại khi bấm (SPEC, Scope: Out)"
     a11y: "`<th scope=col>` như các cột khác, nên trình đọc màn hình đọc “Thứ tự hiển thị, 2” cho ô của dòng. Cùng chữ với nhãn của ô nhập S2.3"
     ac: [AC1, AC5]
   4:
     name: Ô thứ tự của dòng
     type: text
     content: "Số nguyên từ 0 tới 9999 của danh mục, như “0”, “1”, “2”: chữ số thường, không dấu phân cách hàng nghìn, ở cả vi và en (1000, không phải 1.000), vì quản trị viên gõ lại đúng số này ở S2.3 và “1.000” dễ đọc nhầm thành số lẻ ở tiếng Việt. Khác với cột Số sản phẩm, ô này không đi qua `Intl`"
-    behavior: "Mọi dòng có số, kể cả danh mục chưa ai đặt: hiện “0”, không để trống hay gạch ngang (AC8). Hai danh mục cùng số hiện cùng số và xếp theo tên (AC5: Bao tay và Đầm cùng 1). Chỉ `admin` thấy số này, khách không thấy (SPEC, Category Rules)"
+    behavior: "Mọi dòng có số, kể cả danh mục chưa ai đặt: hiện “0”, không để trống hay gạch ngang (AC8). Phần của AC8 mà item 2 kiểm là cột này hiện “0”; số 0 và thứ tự theo tên của danh mục chưa đặt số kiểm ở item 1, qua `api` và `/vi/products`. Hai danh mục cùng số hiện cùng số và xếp theo tên (AC5: Bao tay và Đầm cùng 1). Chỉ `admin` thấy số này, khách không thấy (SPEC, Category Rules)"
     a11y: "Số là chữ thường của ô, không dựa vào màu hay biểu tượng"
     ac: [AC1, AC2, AC5, AC8]
   5:
@@ -194,7 +196,9 @@ Cả hai màn hình là ASCII, nên không có ảnh để đọc token. Epic n�
 
 ## Open Questions
 
-- Q1. Cột Thứ tự hiển thị đứng sau Số sản phẩm, trước Thao tác (S1.3, S1.4). Lý do: `apps/admin/e2e/product-category.spec.ts` đọc số sản phẩm bằng `row.getByRole('cell').nth(3)`, nên chèn cột trước nó làm hai test của SHOP-81 lệch. Nhưng SPEC (Testing Strategy, Success Criteria) nói "mọi E2E của SHOP-81 vẫn pass mà không sửa", mà helper `expectCells` của `apps/admin/e2e/categories.spec.ts` kiểm đúng 5 ô của dòng (`toHaveText([...cells, /Edit/])`, 8 lần gọi), nên thêm cột nào cũng làm nó fail. Đề xuất: giữ vị trí này; item 2 thêm ô thứ tự vào `expectCells`, một chỗ sửa chung cho 8 lần gọi; `sa` ghi việc đó vào plan và `ba` sửa câu trong SPEC thành "trừ helper `expectCells`".
-- Q2. S1.2 và S1.4 mang AC8, nhưng nửa "cả ba có thứ tự 0" của AC8 trên trang Danh mục của `admin` chỉ thấy được khi có cột S1.3 và S1.4, tức là ở item 2. SPEC đề xuất AC8 thuộc item 1 (`be-dev`, chưa có cột). Đề xuất: `sa` tách cách kiểm AC8: item 1 kiểm số 0 qua `GET /api/admin/categories` và thứ tự theo tên ở `/vi/products`; item 2 kiểm cột hiện "0" ở S1.4. Hay đưa cả AC8 sang item 2.
-- Q3. Cột và ô thứ tự hiện số không có dấu phân cách hàng nghìn (S1.4, S2.3): 1000, không phải 1.000, vì quản trị viên gõ lại đúng số đó và "1.000" của tiếng Việt dễ đọc nhầm là số lẻ, trong lúc 1.5 là lỗi. Cột Số sản phẩm vẫn theo `Intl`. Đề xuất: giữ chữ số thường. Nếu muốn giống cột Số sản phẩm, S1.4 đổi thành theo `Intl` và S2.3 vẫn điền chữ số thường.
-- Q4. Chữ ngoài SPEC do `ux` viết, ở YAML của S1.3 và S2.3: tiêu đề cột và nhãn ô "Thứ tự hiển thị" (en "Display order"; không dùng "Order" vì dễ nhầm với đơn hàng), gợi ý "Số nguyên từ 0 đến 9999. Số nhỏ hiện trước; cùng số thì xếp theo tên.", lỗi trống "Nhập thứ tự hiển thị" và lỗi sai "Thứ tự là số nguyên từ 0 đến 9999". Đề xuất: giữ; đổi chữ chỉ sửa `category.json` của hai ngôn ngữ.
+Không có. Ngày 2026-11-23 bạn đồng ý cả bốn đề xuất của `ux`, và mỗi câu trả lời đã thành quyết định ở mục của nó:
+
+- Vị trí cột thứ tự và helper `expectCells` của E2E SHOP-81: ghi chú dưới bảng Screens ("Hai quyết định bố cục") và S1.3.
+- Cách kiểm AC8 tách theo item: ghi chú dưới bảng Screens ("Cách kiểm AC8 tách theo item") và S1.4.
+- Số thứ tự không có dấu phân cách hàng nghìn: ghi chú dưới bảng Screens, S1.4 và S2.3.
+- Chữ ngoài SPEC của cột và ô thứ tự: ghi chú dưới bảng Screens, và YAML của S1.3 và S2.3.
