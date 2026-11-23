@@ -186,7 +186,7 @@ Mỗi item ghi:
 
 ### Phase 1: Nền
 
-- [ ] Story 1: Danh mục xếp theo số thứ tự: cột thứ tự, API quản trị và các danh sách · be-dev · level heavy: V8 nâng `app.categories` đang có dữ liệu và nằm trong `db/migration/`, một đường dẫn critical; một lỗi ở lệnh sửa làm mất số mà quản trị viên đã đặt · review: skip
+- [ ] SHOP-96 Story 1: Danh mục xếp theo số thứ tự: cột thứ tự, API quản trị và các danh sách · be-dev · level heavy: V8 nâng `app.categories` đang có dữ liệu và nằm trong `db/migration/`, một đường dẫn critical; một lỗi ở lệnh sửa làm mất số mà quản trị viên đã đặt · review: skip
   - AC4, AC6, AC7, AC8 (Architecture Decisions 2); phía `api` của AC1, AC2, AC3 và AC5. Không có khối nào của `design.md`: các màn hình mà Story này đổi thứ tự là S4.2 và S7.4 của SHOP-81, và chúng không đổi giao diện. TW1, TW2, TW3. NFR1–NFR3, NFR5 (phần `user`), NFR6–NFR15.
   - **Bước 1, migration:** V8 và các test ở mục Database Changes, kể cả lần chạy test danh mục và sản phẩm không sửa trên V8. File: `apps/api/src/main/resources/db/migration/V8__add_category_display_order.sql` (mới).
   - **Bước 2, đọc và xếp:** entity `Category` map `display_order` (`int`, constructor nhận thêm số); `AdminRow` có `displayOrder`; hằng thứ tự của Architecture Decisions 4 cho danh sách quản trị và danh sách của khách; `AdminCategory` và `AdminCategoryListItem` trả `displayOrder`.
@@ -224,7 +224,7 @@ Mỗi item ghi:
 
 Story 2 phụ thuộc Story 1: schema của `admin` đòi `displayOrder` trong phản hồi, và E2E của nó chạy trên `api` thật. Mỗi vai chỉ có một item, nên không có hai item nào của cùng một vai làm cùng lúc được. `runs.agents_per_role` cho `fe-dev` 2 agent, nhưng giá trị nào của nó cũng không đổi thứ tự này. Nhánh của Story 2 cắt từ `develop` sau khi Story 1 merge.
 
-- [ ] Story 2: Quản trị viên đặt thứ tự hiển thị trong form danh mục và thấy cột thứ tự trong bảng · fe-dev · level standard
+- [ ] SHOP-97 Story 2: Quản trị viên đặt thứ tự hiển thị trong form danh mục và thấy cột thứ tự trong bảng · fe-dev · level standard
   - AC1, AC2, AC3, AC5, và nửa cột S1.4 của AC8. Màn hình S1 (S1.2, S1.3, S1.4) và S2 (S2.2, S2.3, S2.5). NFR4, NFR5 (phần `admin`), NFR8, NFR12 (phần `admin`).
   - **Bước 1, model:**
     - `adminCategorySchema` có `displayOrder` bắt buộc, số nguyên 0–9999 (Architecture Decisions 9);
