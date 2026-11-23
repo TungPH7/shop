@@ -201,7 +201,7 @@ export const nextWatchState = (state, { marks = [], forget = [], offsets = state
 
 // The files the watcher reads, from the project folder: fs { existsSync, readdirSync, readFileSync, statSync, and for
 // claim and release writeFileSync, mkdirSync, rmSync }, alive(pid).
-export function watchEffects({ projectDir, fs, alive }) {
+export function watchEffects({ projectDir, fs, alive, now = Date.now }) {
   const runsDir = join(projectDir, '.ai', 'runs');
   const activeDir = join(runsDir, 'active');
   const eventDir = join(runsDir, '_run');
@@ -303,13 +303,21 @@ export function watchEffects({ projectDir, fs, alive }) {
       }
       return { events, offsets: after, sizes: seen };
     },
-    // One watcher a project (review of shop PR #92): { ok: true }, or { ok: false, pid } of the one that runs.
+    // One watcher a project (review of shop PR #92): { ok: true }, or { ok: false, pid } of the one that runs. A watcher
+    // writes its file again at each round (beat); a file not written for three rounds holds nothing, whatever process
+    // its pid names now (review of shop PR #93, security, Low 2).
     claim: (pid) => {
       const held = readJson(pidFile);
-      if (held && held.pid !== pid && Number.isInteger(held.pid) && alive(held.pid)) return { ok: false, pid: held.pid };
+      const fresh = held && now() - Date.parse(held.at ?? held.startedAt ?? 0) <= 3 * WATCH.everyMs;
+      if (held && held.pid !== pid && Number.isInteger(held.pid) && alive(held.pid) && fresh) return { ok: false, pid: held.pid };
       fs.mkdirSync(runsDir, { recursive: true });
-      fs.writeFileSync(pidFile, `${JSON.stringify({ pid, startedAt: new Date().toISOString() })}\n`);
+      const at = new Date(now()).toISOString();
+      fs.writeFileSync(pidFile, `${JSON.stringify({ pid, startedAt: at, at })}\n`);
       return { ok: true };
+    },
+    beat: (pid) => {
+      const held = readJson(pidFile);
+      if (held?.pid === pid) fs.writeFileSync(pidFile, `${JSON.stringify({ ...held, at: new Date(now()).toISOString() })}\n`);
     },
     release: (pid) => {
       if (readJson(pidFile)?.pid === pid) fs.rmSync(pidFile, { force: true });

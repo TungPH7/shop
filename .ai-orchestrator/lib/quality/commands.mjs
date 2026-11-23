@@ -210,8 +210,10 @@ function checkCommand(command, role, gates, roster, depth = 0) {
   if (expanded.some((name) => SESSION_VARIABLE.test(name))) return deny(IDENTITY);
   if (arithmeticTexts(command).some((text) => BUILT_ASSIGNED.test(text))) return deny(BUILT_NAME);
   // An assignment built into a value, as in w="$v=0", runs when arithmetic reads that value: (( w )), $[ w ], a[w] or
-  // [[ w -eq 0 ]] (review of shop PR #92). So with any arithmetic in the command, it is refused wherever it is.
-  if (arithmeticTexts(command).length > 0 && BUILT_ASSIGNED.test(command)) return deny(BUILT_NAME);
+  // [[ w -eq 0 ]] (review of shop PR #92). So with any arithmetic in the command, it is refused wherever it is: also when
+  // a quote or a backslash stands before the sign, as in v="$n"'=0', and printf -v, which writes a variable from a
+  // format (review of shop PR #93). A value read from a file or from $( ) stays out of reach, as a script file does.
+  if (arithmeticTexts(command).length > 0 && (BUILT_ASSIGNED.test(command) || BUILT_ASSIGNED.test(command.replace(/['"\\]/g, '')) || PRINTF_TO_VARIABLE.test(command))) return deny(BUILT_NAME);
   if (gates.approvedLibraries && expanded.some((name) => SOURCE_NAME.test(name))) return deny(installRefusal([{ refused: expanded.find((name) => SOURCE_NAME.test(name)), registry: true }], []));
   for (const words of segments(command)) {
     const result = checkWords(words, role, gates, roster, depth);
@@ -311,6 +313,7 @@ function arithmeticTexts(command) {
 // An assignment in arithmetic to a name read from a variable, as in $[ $n = 0 ]: the variable may hold the name of
 // one of the session.
 const BUILT_ASSIGNED = /\$\{?[A-Za-z_]\w*\}?\s*(?:[-+*/%&|^]|<<|>>)?=(?!=)/;
+const PRINTF_TO_VARIABLE = /(?:^|[\s;&|(`])printf\s+(?:-\S+\s+)*-v\b/;
 const BUILT_NAME = 'write out the name of the variable you set: gh-guard reads the name, and an arithmetic that sets a name built from a variable could set one of the session';
 // declare -i gives a variable the integer attribute: each value it gets then runs as arithmetic, which can set another
 // variable that gh-guard cannot see (review of shop PR #90, security, Low).
@@ -686,7 +689,11 @@ function checkEdit(file, role, gates, projectDir, roster, tempDir) {
   // The seo-ok of an item, its run state and the locks are ao-step's: an agent that wrote them could approve a comment
   // of seo, or free an item another run holds (review of shop PR #81). The screenshots of a preview stay the agents'.
   // So is the file of the comment of seo you approved, which a run reads in place of Jira (third review of shop PR #81).
-  if (/^\.ai\/runs\/(?:active\/|[^/]+\/(?:seo-ok|state)\.json$|[^/]+\/seo-[0-9a-f]+\.md$)/i.test(path)) return deny(`${path} is ao-step's: agents do not write it`);
+  // So are the files of the watcher: a pid written there would keep every watcher from starting (review of shop PR #93).
+  if (/^\.ai\/runs\/(?:active\/|[^/]+\/(?:seo-ok|state)\.json$|[^/]+\/seo-[0-9a-f]+\.md$|watch(?:-process)?\.json$)/i.test(path)) return deny(`${path} is ao-step's: agents do not write it`);
+  // The report of a review after merge is the role's that wrote it: ao-step posts it with the App (review of shop PR #93).
+  const report = /^\.ai\/reviews\/[A-Z][A-Z0-9]*-\d+-(reviewer|security)-[0-9a-f]{7}\.md$/i.exec(path);
+  if (report && report[1].toLowerCase() !== role) return deny(`${path} is the report of ${report[1].toLowerCase()}: only ${report[1].toLowerCase()} writes it`);
   const hit = gates.protected_paths.find(({ path: glob }) => matchesGlob(glob.toLowerCase(), path.toLowerCase()));
   if (hit && !(hit.editors ?? []).includes(role)) {
     return deny(`${hit.path} is protected: ${hit.editors ? `only ${hit.editors.join(', ')} may edit it` : 'agents do not edit it'}`);

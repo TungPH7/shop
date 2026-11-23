@@ -67,22 +67,51 @@ const choiceOf = (labels, names, projectDefault) => {
   return { skip: projectDefault === 'off', why: 'default' };
 };
 
-// The review choice of an item (spec 2.2–2.5): { skip, why, ignored }. why: label or default. ignored: { label } when
-// the labels now say skip but a change of the agents' account made them so; it does not count. at: the time of the
-// merge, for audit; without it the labels as they are now. names: reviewLabels(mapping); without them, review.
-export function reviewChoice({ labels = [], histories = [], agentAccount, names, projectDefault = 'on', at } = {}) {
+// Whether a change of the changelog by someone other than the agents' account put `label` on the item.
+const addedByOthers = (histories, label, agentAccount) =>
+  histories.some((history) => history.author?.accountId !== agentAccount && labelChanges(history).some(({ fromString, toString }) => words(toString).includes(label) && !words(fromString).includes(label)));
+
+// The review choice of an item (spec 2.2–2.5): { skip, why, by, ignored }. why: label or default. by, for a skip by label:
+// you, or plan when ba set it as it made the item from the plan you approved. ignored: { label, change } when the labels
+// now say skip, but the agents' account made them so; it does not count. change: added (ao-review-skip put), removed
+// (ao-review-on taken off), or made (ao-review-skip set when it made the item after gate ② of its Epic, or outside one).
+// at: the time of the merge, for audit; without it the labels as they are now. names: reviewLabels(mapping); without
+// them, review. made: { by, at, planApprovedAt }, who made the item, when, and when the plan of its Epic was approved;
+// without it, as for the board, a label set at creation counts.
+export function reviewChoice({ labels = [], histories = [], agentAccount, names, projectDefault = 'on', at, made } = {}) {
   if (!names) return { skip: false, why: 'default', ignored: null };
   const then = at === undefined ? labels : labelsAt(labels, histories, at);
   const past = at === undefined ? histories : histories.filter(({ created }) => time(created) <= time(at));
   const now = choiceOf(then, names, projectDefault);
-  const trusted = choiceOf(trustedReviewLabels(then, past, { agentAccount, names }), names, projectDefault);
-  if (now.skip && trusted.skip) return { ...now, ignored: null };
-  if (now.skip) return { ...trusted, ignored: { label: names.skip } };
+  const kept = trustedReviewLabels(then, past, { agentAccount, names });
+  const trusted = choiceOf(kept, names, projectDefault);
+  // A label set when the item was made leaves no line in its changelog (review of shop PR #93, security Medium 2).
+  if (trusted.skip && trusted.why === 'label' && made && agentAccount && !addedByOthers(past, names.skip, agentAccount)) {
+    if (made.by !== agentAccount) return { ...trusted, by: 'you', ignored: null };
+    const fromPlan = made.planApprovedAt != null && time(made.at) < time(made.planApprovedAt);
+    if (fromPlan) return { ...trusted, by: 'plan', ignored: null };
+    return { ...choiceOf(kept.filter((label) => label !== names.skip), names, projectDefault), ignored: { label: names.skip, change: 'made' } };
+  }
+  if (now.skip && trusted.skip) return trusted.why === 'label' && made ? { ...now, by: 'you', ignored: null } : { ...now, ignored: null };
+  if (now.skip) return { ...trusted, ignored: then.includes(names.skip) && !kept.includes(names.skip) ? { label: names.skip, change: 'added' } : { label: names.on, change: 'removed' } };
   return { ...now, ignored: null };
 }
 
-// Why an item skips review, in words, for a stop, a status line and the trace.
-export const skipReason = ({ why }, names) => (why === 'label' ? `label ${names?.skip ?? 'ao-review-skip'}` : 'the project default, review.default: off in project.yaml');
+// When the plan of an Epic was first approved at gate ②: its first move from Planning to In Progress in its changelog,
+// or null.
+export function planApprovedAt(histories = [], mapping) {
+  const states = mapping?.workflows?.epic?.states ?? {};
+  const [from, to] = [states.planning?.status, states['in-progress']?.status];
+  const moves = histories.filter(({ items }) => (items ?? []).some((item) => item.field === 'status' && item.fromString === from && item.toString === to));
+  return moves.length > 0 ? moves.map(({ created }) => created).sort((a, b) => time(a) - time(b))[0] : null;
+}
+
+// Why an item skips review, in words, for a stop, a status line and the trace: with who set the label, when known.
+export function skipReason({ why, by }, names) {
+  if (why !== 'label') return 'the project default, review.default: off in project.yaml';
+  const who = by === 'plan' ? ', put by ba from the plan you approved at gate ②' : by === 'you' ? ', put by you' : '';
+  return `label ${names?.skip ?? 'ao-review-skip'}${who}`;
+}
 
 // The trace of a skip on the head (spec 3.1): a COMMENT review of the review App.
 const SKIP_LINE = /^Review skipped:\s*([A-Z][A-Z0-9]{0,9}-\d{1,7})\s*$/m;
@@ -156,11 +185,12 @@ export function newestMark(comments = [], { bot }) {
 
 // What a release PR still waits for (spec 5.1): one line per PR the release brings that skipped review and has no
 // mark, or whose mark counts Critical or High with no PR of its fix in the release. pulls: [{ number, key, skipped,
-// mark }], every PR of an item the release brings.
+// mark, epic }], every PR of an item the release brings; epic, when known, is the Epic of the item, whose review after
+// merge takes every PR of its items at once.
 export function releaseReviewGaps(pulls = []) {
   const keys = new Set(pulls.map(({ key }) => key));
-  return pulls.filter(({ skipped }) => skipped).flatMap(({ number, key, mark }) => {
-    if (!mark) return [`review after merge of #${number} (${key}), which skipped review: /ao-review <its Epic>`];
+  return pulls.filter(({ skipped }) => skipped).flatMap(({ number, key, mark, epic }) => {
+    if (!mark) return [`review after merge of #${number} (${key}), which skipped review: /ao-review ${epic ?? key}`];
     if (mark.blocking === 0 || keys.has(mark.fix)) return [];
     return [`the PR of ${mark.fix}, which fixes the ${mark.blocking} Critical or High that the review after merge ${mark.key} found in #${number} (${key}), merged into this release`];
   });
@@ -170,11 +200,23 @@ export function releaseReviewGaps(pulls = []) {
 // ignored }, from its labels and their changelog read with a Jira client.
 export const itemReview = (jira, mapping) => async (key, { at, projectDefault = 'on' } = {}) => {
   const path = `/rest/api/3/issue/${encodeURIComponent(key)}`;
-  const labels = (await jira.get(path, { fields: 'labels' })).fields?.labels ?? [];
+  const { fields = {} } = await jira.get(path, { fields: 'labels,creator,created,parent' });
+  const labels = fields.labels ?? [];
   const histories = await jira.getAll(`${path}/changelog`);
   const agentAccount = mapping.identities?.find(({ id }) => id === 'agents')?.account_id;
-  return reviewChoice({ labels, histories, agentAccount, names: reviewLabels(mapping), projectDefault, at });
+  const names = reviewLabels(mapping);
+  const made = await madeFacts(jira, { fields, labels, names, agentAccount }, mapping);
+  return reviewChoice({ labels, histories, agentAccount, names, projectDefault, at, made });
 };
+
+// Who made an item and when, and, for an item the agents' account made with ao-review-skip, when the plan of its parent
+// Epic was approved (the parent's changelog, read only then). fields: creator, created, parent of the item.
+export async function madeFacts(jira, { fields, labels, names, agentAccount }, mapping) {
+  const by = fields.creator?.accountId ?? null;
+  const needsPlan = names && agentAccount && by === agentAccount && labels.includes(names.skip) && fields.parent?.key;
+  const planAt = needsPlan ? planApprovedAt(await jira.getAll(`/rest/api/3/issue/${encodeURIComponent(fields.parent.key)}/changelog`), mapping) : null;
+  return { by, at: fields.created ?? null, planApprovedAt: planAt };
+}
 
 // The default of the project at a commit or branch on GitHub (spec 2.5): from its project.yaml there. Any failure reads
 // as on, so that a file GitHub does not give never turns review off.

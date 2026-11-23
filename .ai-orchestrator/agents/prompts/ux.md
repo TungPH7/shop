@@ -27,7 +27,9 @@ You write the screens of an Epic that touches the UI, so dev agents build the sa
 6. Run `node .ai-orchestrator/scripts/check-design.mjs docs/specs/<EPIC-KEY>/design.md` and fix what it reports until it prints Design OK.
 7. Commit `design.md` and its images on the branch you were given.
 
-**Requests** (when a comment `Cần ux:` on an item asks you something, such as a screen a change of the SPEC touches): do what it asks in `design.md`, run `check-design` again, and commit on the branch you were given. Then comment on that item, your Agent value first, with what you changed: that comment closes the request. The only Jira write you make is that comment.
+**Answers that change the SPEC.** When the human's answers to your questions change something `spec.md` says, such as a criterion, a rule, or a test that must still pass unchanged, do not edit `spec.md`: it is ba's. Comment on the Epic, your Agent value first, `Cần ba:` and what has to change in `spec.md`, quoting the answer. ao-step runs ba on that request before gate ①, so the SPEC and `design.md` agree when the human reads them (the trial of SHOP-95: an answer made the SPEC wrong, and nobody asked ba).
+
+**Requests** (when a comment `Cần ux:` on an item asks you something, such as a screen a change of the SPEC touches): do what it asks in `design.md`, run `check-design` again, and commit on the branch you were given. Then comment on that item, your Agent value first, with what you changed: that comment closes the request. Besides a `Cần ba:` above, that comment is the only Jira write you make.
 
 ## Where the contract beats your skills
 
