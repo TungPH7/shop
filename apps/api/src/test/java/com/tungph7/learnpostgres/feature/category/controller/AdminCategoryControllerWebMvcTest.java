@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -83,6 +84,7 @@ class AdminCategoryControllerWebMvcTest {
         .andExpect(jsonPath("$.name").value("Áo khoác"))
         .andExpect(jsonPath("$.slug").value("ao-khoac"))
         .andExpect(jsonPath("$.status").value("VISIBLE"))
+        .andExpect(jsonPath("$.displayOrder").value(5))
         .andExpect(jsonPath("$.createdAt").value("2026-11-22T02:10:00.000Z"))
         .andExpect(jsonPath("$.updatedAt").value("2026-11-22T02:15:30.000Z"))
         .andExpect(jsonPath("$.version").value(0));
@@ -96,7 +98,7 @@ class AdminCategoryControllerWebMvcTest {
 
     assertThat(fieldNames(json.readTree(body)))
         .containsExactlyInAnyOrder(
-            "id", "name", "slug", "status", "createdAt", "updatedAt", "version");
+            "id", "name", "slug", "status", "displayOrder", "createdAt", "updatedAt", "version");
   }
 
   @Test
@@ -110,7 +112,7 @@ class AdminCategoryControllerWebMvcTest {
         ArgumentCaptor.forClass(CreateCategoryRequest.class);
     verify(service).create(sent.capture());
     assertThat(sent.getValue())
-        .isEqualTo(new CreateCategoryRequest("Áo khoác", "ao-khoac", CategoryStatus.HIDDEN));
+        .isEqualTo(new CreateCategoryRequest("Áo khoác", "ao-khoac", CategoryStatus.HIDDEN, null));
   }
 
   @Test
@@ -119,7 +121,7 @@ class AdminCategoryControllerWebMvcTest {
 
     post("{\"name\":\"Áo khoác\",\"slug\":null}").andExpect(status().isCreated());
 
-    verify(service).create(new CreateCategoryRequest("Áo khoác", null, null));
+    verify(service).create(new CreateCategoryRequest("Áo khoác", null, null, null));
   }
 
   @Test
@@ -196,6 +198,79 @@ class AdminCategoryControllerWebMvcTest {
   }
 
   // ============================================================
+  // POST: the display order (SHOP-95: AC1, AC4, NFR7)
+  // ============================================================
+
+  @ParameterizedTest(name = "displayOrder {0}")
+  @ValueSource(strings = {"0", "5", "9999"})
+  void create_passesAValidDisplayOrderAsSent(String displayOrder) throws Exception {
+    when(service.create(any(CreateCategoryRequest.class))).thenReturn(sample());
+
+    post("{\"name\":\"Áo khoác\",\"displayOrder\":" + displayOrder + "}")
+        .andExpect(status().isCreated());
+
+    verify(service)
+        .create(new CreateCategoryRequest("Áo khoác", null, null, new BigDecimal(displayOrder)));
+  }
+
+  @Test
+  void create_withANullDisplayOrder_passesNullForTheServiceToFillIn() throws Exception {
+    when(service.create(any(CreateCategoryRequest.class))).thenReturn(sample());
+
+    post("{\"name\":\"Áo khoác\",\"displayOrder\":null}").andExpect(status().isCreated());
+
+    verify(service).create(new CreateCategoryRequest("Áo khoác", null, null, null));
+  }
+
+  @ParameterizedTest(name = "AC4 displayOrder {0}")
+  @CsvSource({
+    "-1, must be at least 0",
+    "10000, must be at most 9999",
+    "1.5, must be a whole number",
+    "99999999999, must be at most 9999"
+  })
+  void create_withAWrongDisplayOrder_returns400OnItNextToTheBlankName(
+      String displayOrder, String message) throws Exception {
+    post("{\"name\":\"  \",\"displayOrder\":" + displayOrder + "}")
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+        .andExpect(jsonPath("$.errors", hasSize(2)))
+        .andExpect(jsonPath("$.errors[*].field", containsInAnyOrder("name", "displayOrder")))
+        .andExpect(jsonPath("$.errors[?(@.field == 'displayOrder')].message").value(message));
+
+    verify(service, never()).create(any());
+  }
+
+  /**
+   * -1.5 breaks two rules, but {@code GlobalExceptionHandler} reports one error per field, the
+   * fraction first ({@code RULE_ORDER}), as for the price -1.5 of a product. The API Contract of
+   * SHOP-95 asks for two items here: raised on SHOP-96, the handler is left as it is.
+   */
+  @Test
+  void create_withMinusOnePointFive_givesOneErrorOnTheDisplayOrder_theFraction() throws Exception {
+    post("{\"name\":\"Áo khoác\",\"displayOrder\":-1.5}")
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors", hasSize(1)))
+        .andExpect(jsonPath("$.errors[0].field").value("displayOrder"))
+        .andExpect(jsonPath("$.errors[0].message").value("must be a whole number"));
+
+    verify(service, never()).create(any());
+  }
+
+  @ParameterizedTest(name = "AC4 displayOrder {0}")
+  @ValueSource(strings = {"\"abc\"", "true", "[1]", "{}"})
+  void create_withADisplayOrderThatIsNotANumber_returns400MalformedRequest(String displayOrder)
+      throws Exception {
+    post("{\"name\":\"Áo khoác\",\"displayOrder\":" + displayOrder + "}")
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
+
+    verify(service, never()).create(any());
+  }
+
+  // ============================================================
   // POST: 409 of AC4
   // ============================================================
 
@@ -231,6 +306,7 @@ class AdminCategoryControllerWebMvcTest {
                         "Áo khoác",
                         "ao-khoac",
                         CategoryStatus.VISIBLE,
+                        4,
                         3,
                         Instant.parse("2026-11-22T02:10:00Z"),
                         Instant.parse("2026-11-22T02:15:30Z"),
@@ -245,6 +321,7 @@ class AdminCategoryControllerWebMvcTest {
             .andExpect(jsonPath("$.items[0].name").value("Áo khoác"))
             .andExpect(jsonPath("$.items[0].slug").value("ao-khoac"))
             .andExpect(jsonPath("$.items[0].status").value("VISIBLE"))
+            .andExpect(jsonPath("$.items[0].displayOrder").value(4))
             .andExpect(jsonPath("$.items[0].productCount").value(3))
             .andExpect(jsonPath("$.items[0].createdAt").value("2026-11-22T02:10:00.000Z"))
             .andExpect(jsonPath("$.items[0].updatedAt").value("2026-11-22T02:15:30.000Z"))
@@ -256,7 +333,15 @@ class AdminCategoryControllerWebMvcTest {
     assertThat(fieldNames(json.readTree(body))).containsExactly("items");
     assertThat(fieldNames(json.readTree(body).get("items").get(0)))
         .containsExactlyInAnyOrder(
-            "id", "name", "slug", "status", "productCount", "createdAt", "updatedAt", "version");
+            "id",
+            "name",
+            "slug",
+            "status",
+            "displayOrder",
+            "productCount",
+            "createdAt",
+            "updatedAt",
+            "version");
   }
 
   @Test
@@ -283,6 +368,7 @@ class AdminCategoryControllerWebMvcTest {
         "Áo khoác",
         "ao-khoac",
         CategoryStatus.VISIBLE,
+        5,
         Instant.parse("2026-11-22T02:10:00Z"),
         Instant.parse("2026-11-22T02:15:30Z"),
         0);

@@ -108,7 +108,7 @@ class V7CreateCategoriesMigrationTest extends AbstractContainerBaseTest {
     try (PostgreSQLContainer deployed = new PostgreSQLContainer(image)) {
       deployed.start();
       try (MigrationDatabase onDeployed = MigrationDatabase.create(deployed)) {
-        MigrateResult result = onDeployed.flyway().migrate();
+        MigrateResult result = onDeployed.flyway(MigrationDatabase.V7).migrate();
 
         assertThat(result.targetSchemaVersion).isEqualTo(MigrationDatabase.V7);
         assertThat(
@@ -130,7 +130,7 @@ class V7CreateCategoriesMigrationTest extends AbstractContainerBaseTest {
 
   @Test
   void v7_writes_one_row_to_the_migration_log() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
 
     assertThat(
             jdbc.sql("SELECT count(*) FROM app._app_migration_log WHERE migration_name = ?")
@@ -151,7 +151,7 @@ class V7CreateCategoriesMigrationTest extends AbstractContainerBaseTest {
     String before = digestOfV6Columns();
 
     long started = System.nanoTime();
-    MigrateResult result = db.flyway().migrate();
+    MigrateResult result = db.flyway(MigrationDatabase.V7).migrate();
     Duration took = Duration.ofNanos(System.nanoTime() - started);
 
     assertThat(result.migrationsExecuted).isEqualTo(1);
@@ -164,7 +164,7 @@ class V7CreateCategoriesMigrationTest extends AbstractContainerBaseTest {
   @Test
   void the_legacy_price_trigger_still_runs_after_v7() {
     insertTheFiveProductsOfShop12();
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
 
     jdbc.sql("UPDATE app.products SET price_vnd = 260000 WHERE slug = 'ao-thun-co-tron'").update();
     jdbc.sql(
@@ -192,7 +192,7 @@ class V7CreateCategoriesMigrationTest extends AbstractContainerBaseTest {
 
   @Test
   void categories_has_the_columns_of_the_plan() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
 
     Map<String, List<Object>> columns = new LinkedHashMap<>();
     jdbc.sql(
@@ -238,7 +238,7 @@ class V7CreateCategoriesMigrationTest extends AbstractContainerBaseTest {
 
   @Test
   void category_id_is_a_nullable_uuid_without_default_with_its_foreign_key_and_index() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
 
     assertThat(
             jdbc.sql(
@@ -275,7 +275,7 @@ class V7CreateCategoriesMigrationTest extends AbstractContainerBaseTest {
 
   @Test
   void the_constraints_of_categories_are_those_of_the_plan() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
 
     assertThat(
             jdbc.sql(
@@ -296,7 +296,7 @@ class V7CreateCategoriesMigrationTest extends AbstractContainerBaseTest {
 
   @Test
   void the_table_the_new_columns_the_foreign_key_and_the_collation_have_a_comment() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
 
     assertThat(
             jdbc.sql(
@@ -321,7 +321,7 @@ SELECT obj_description('app.categories'::regclass, 'pg_class') IS NOT NULL
 
   @Test
   void an_update_of_a_category_refreshes_its_updated_at() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
     UUID id = insertCategory("Áo", "ao", "VISIBLE");
     jdbc.sql("UPDATE app.categories SET updated_at = ? WHERE id = ?").params(UPDATED, id).update();
 
@@ -341,7 +341,7 @@ SELECT obj_description('app.categories'::regclass, 'pg_class') IS NOT NULL
 
   @Test
   void a_new_category_is_visible_by_default_and_gets_an_id() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
 
     Map<String, Object> row =
         jdbc.sql(
@@ -356,7 +356,7 @@ SELECT obj_description('app.categories'::regclass, 'pg_class') IS NOT NULL
 
   @Test
   void the_database_refuses_each_wrong_value_of_nfr14() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
     insertCategory("Áo", "ao", "VISIBLE");
 
     assertThat(refusal(() -> insertCategory("", "rong", "VISIBLE")))
@@ -396,7 +396,7 @@ SELECT obj_description('app.categories'::regclass, 'pg_class') IS NOT NULL
 
   @Test
   void the_database_takes_the_edges_of_nfr14() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
     insertCategory("Áo", "ao", "VISIBLE");
 
     insertCategory("Ao", "ao-khong-dau", "VISIBLE");
@@ -412,7 +412,7 @@ SELECT obj_description('app.categories'::regclass, 'pg_class') IS NOT NULL
 
   @Test
   void names_come_in_the_vietnamese_order_of_nfr17() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
     List<String> expected =
         List.of("An toàn", "Áo khoác", "Ăn vặt", "Bao tay", "Dép", "Đầm", "quần");
     List<String> shuffled = new ArrayList<>(expected);
@@ -435,7 +435,7 @@ SELECT obj_description('app.categories'::regclass, 'pg_class') IS NOT NULL
 
   @Test
   void deleting_a_category_empties_the_category_of_its_products_and_changes_nothing_else() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
     UUID ao = insertCategory("Áo", "ao", "VISIBLE");
     UUID quan = insertCategory("Quần", "quan", "VISIBLE");
     UUID onSale = insertProduct("Áo thun cổ tròn", "ao-thun-co-tron", "ACTIVE", ao, 3L);
@@ -474,7 +474,7 @@ SELECT obj_description('app.categories'::regclass, 'pg_class') IS NOT NULL
   @Test
   void flyway_of_v030_validates_and_migrates_nothing_on_a_database_that_has_v7(
       @TempDir Path folder) {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
     Flyway v030 = db.flywayOfV030(folder);
 
     assertThat(v030.validateWithResult().validationSuccessful).isTrue();
@@ -483,7 +483,7 @@ SELECT obj_description('app.categories'::regclass, 'pg_class') IS NOT NULL
 
   @Test
   void the_insert_of_v030_leaves_the_category_empty() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
     UUID id = UUID.randomUUID();
 
     jdbc.sql(V030_INSERT)
@@ -513,7 +513,7 @@ SELECT obj_description('app.categories'::regclass, 'pg_class') IS NOT NULL
 
   @Test
   void the_update_of_v030_keeps_the_category_of_the_product() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
     UUID ao = insertCategory("Áo", "ao", "VISIBLE");
     UUID id = insertProduct("Áo thun cổ tròn", "ao-thun-co-tron", "ACTIVE", ao, 2L);
 
@@ -548,7 +548,7 @@ SELECT obj_description('app.categories'::regclass, 'pg_class') IS NOT NULL
 
   @Test
   void the_delete_of_v030_deletes_a_product_that_has_a_category_and_keeps_the_category() {
-    db.flyway().migrate();
+    db.flyway(MigrationDatabase.V7).migrate();
     UUID ao = insertCategory("Áo", "ao", "VISIBLE");
     UUID id = insertProduct("Áo thun cổ tròn", "ao-thun-co-tron", "ACTIVE", ao, 0L);
 

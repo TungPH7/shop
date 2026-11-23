@@ -61,7 +61,7 @@ class AdminCategoryServiceTest {
     when(repository.saveAndFlush(any(Category.class)))
         .thenThrow(violation("categories_slug_unique"));
 
-    assertThatThrownBy(() -> service.create(new CreateCategoryRequest("Áo", null, null)))
+    assertThatThrownBy(() -> service.create(new CreateCategoryRequest("Áo", null, null, null)))
         .isInstanceOf(ConflictException.class)
         .extracting(e -> ((BusinessException) e).getCode())
         .isEqualTo(ErrorCode.CATEGORY_SLUG_DUPLICATED);
@@ -75,7 +75,7 @@ class AdminCategoryServiceTest {
     when(repository.saveAndFlush(any(Category.class)))
         .thenThrow(violation("categories_name_unique"));
 
-    assertThatThrownBy(() -> service.create(new CreateCategoryRequest("Áo", null, null)))
+    assertThatThrownBy(() -> service.create(new CreateCategoryRequest("Áo", null, null, null)))
         .extracting(e -> ((BusinessException) e).getCode())
         .isEqualTo(ErrorCode.CATEGORY_NAME_DUPLICATED);
 
@@ -87,7 +87,7 @@ class AdminCategoryServiceTest {
     when(repository.saveAndFlush(any(Category.class)))
         .thenThrow(violation("categories_name_unique"));
 
-    assertThatThrownBy(() -> service.create(new CreateCategoryRequest("Áo", "ao", null)))
+    assertThatThrownBy(() -> service.create(new CreateCategoryRequest("Áo", "ao", null, null)))
         .extracting(e -> ((BusinessException) e).getCode())
         .isEqualTo(ErrorCode.CATEGORY_NAME_DUPLICATED);
   }
@@ -97,9 +97,9 @@ class AdminCategoryServiceTest {
     DataIntegrityViolationException other = violation("categories_slug_format");
     when(repository.saveAndFlush(any(Category.class))).thenThrow(other);
 
-    assertThatThrownBy(() -> service.create(new CreateCategoryRequest("Áo", null, null)))
+    assertThatThrownBy(() -> service.create(new CreateCategoryRequest("Áo", null, null, null)))
         .isSameAs(other);
-    assertThatThrownBy(() -> service.create(new CreateCategoryRequest("Áo", "ao", null)))
+    assertThatThrownBy(() -> service.create(new CreateCategoryRequest("Áo", "ao", null, null)))
         .isSameAs(other);
   }
 
@@ -111,7 +111,7 @@ class AdminCategoryServiceTest {
     }
     when(repository.findSlugsAmong(any(String[].class))).thenReturn(taken);
 
-    assertThatThrownBy(() -> service.create(new CreateCategoryRequest("Áo", null, null)))
+    assertThatThrownBy(() -> service.create(new CreateCategoryRequest("Áo", null, null, null)))
         .extracting(e -> ((BusinessException) e).getCode())
         .isEqualTo(ErrorCode.CATEGORY_SLUG_DUPLICATED);
 
@@ -129,7 +129,7 @@ class AdminCategoryServiceTest {
               return category;
             });
 
-    service.create(new CreateCategoryRequest("Áo", null, null));
+    service.create(new CreateCategoryRequest("Áo", null, null, null));
 
     ArgumentCaptor<String[]> asked = ArgumentCaptor.forClass(String[].class);
     verify(repository, times(1)).findSlugsAmong(asked.capture());

@@ -15,6 +15,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -80,6 +81,7 @@ class AdminCategoryEditWebMvcTest {
         .andExpect(jsonPath("$.name").value("Áo nam"))
         .andExpect(jsonPath("$.slug").value("ao"))
         .andExpect(jsonPath("$.status").value("HIDDEN"))
+        .andExpect(jsonPath("$.displayOrder").value(7))
         .andExpect(jsonPath("$.version").value(3));
   }
 
@@ -116,7 +118,71 @@ class AdminCategoryEditWebMvcTest {
     put(VALID_BODY).andExpect(status().isOk()).andExpect(jsonPath("$.version").value(4));
 
     verify(service)
-        .update(ID, new UpdateCategoryRequest("Áo nam", "ao", CategoryStatus.VISIBLE, 3L));
+        .update(ID, new UpdateCategoryRequest("Áo nam", "ao", CategoryStatus.VISIBLE, null, 3L));
+  }
+
+  // ------------------------------------------------------------
+  // The display order (SHOP-95: AC2, AC4, NFR7, NFR12)
+  // ------------------------------------------------------------
+
+  @Test
+  void update_withoutDisplayOrder_passesNull_soTheServiceKeepsTheStoredNumber() throws Exception {
+    when(service.update(eq(ID), any(UpdateCategoryRequest.class))).thenReturn(sample(4));
+
+    put(VALID_BODY).andExpect(status().isOk()).andExpect(jsonPath("$.displayOrder").value(7));
+
+    verify(service)
+        .update(ID, new UpdateCategoryRequest("Áo nam", "ao", CategoryStatus.VISIBLE, null, 3L));
+  }
+
+  @ParameterizedTest(name = "displayOrder {0}")
+  @ValueSource(strings = {"0", "7", "9999", "null"})
+  void update_passesAValidOrNullDisplayOrderAsSent(String displayOrder) throws Exception {
+    when(service.update(eq(ID), any(UpdateCategoryRequest.class))).thenReturn(sample(4));
+
+    put(withDisplayOrder(displayOrder)).andExpect(status().isOk());
+
+    verify(service)
+        .update(
+            ID,
+            new UpdateCategoryRequest(
+                "Áo nam",
+                "ao",
+                CategoryStatus.VISIBLE,
+                "null".equals(displayOrder) ? null : new BigDecimal(displayOrder),
+                3L));
+  }
+
+  @ParameterizedTest(name = "AC4 displayOrder {0}")
+  @CsvSource({
+    "-1, must be at least 0",
+    "10000, must be at most 9999",
+    "1.5, must be a whole number",
+    "99999999999, must be at most 9999"
+  })
+  void update_withAWrongDisplayOrder_returns400OnItNextToTheBlankName(
+      String displayOrder, String message) throws Exception {
+    put(withDisplayOrder(displayOrder).replace("\"Áo nam\"", "\" \""))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+        .andExpect(jsonPath("$.errors", hasSize(2)))
+        .andExpect(jsonPath("$.errors[*].field", containsInAnyOrder("name", "displayOrder")))
+        .andExpect(jsonPath("$.errors[?(@.field == 'displayOrder')].message").value(message));
+
+    verify(service, never()).update(any(), any());
+  }
+
+  @ParameterizedTest(name = "AC4 displayOrder {0}")
+  @ValueSource(strings = {"\"abc\"", "true", "[1]", "{}"})
+  void update_withADisplayOrderThatIsNotANumber_returns400MalformedRequest(String displayOrder)
+      throws Exception {
+    put(withDisplayOrder(displayOrder))
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
+
+    verify(service, never()).update(any(), any());
   }
 
   @Test
@@ -249,6 +315,12 @@ class AdminCategoryEditWebMvcTest {
   // Helpers
   // ============================================================
 
+  /** {@link #VALID_BODY} with this display order, as JSON. */
+  private static String withDisplayOrder(String displayOrderJson) {
+    return VALID_BODY.replace(
+        ",\"version\":3}", ",\"displayOrder\":" + displayOrderJson + ",\"version\":3}");
+  }
+
   private ResultActions putWithName(String nameJson) throws Exception {
     return put("{\"name\":" + nameJson + ",\"slug\":\"ao\",\"status\":\"VISIBLE\",\"version\":3}");
   }
@@ -266,6 +338,7 @@ class AdminCategoryEditWebMvcTest {
         "Áo nam",
         "ao",
         CategoryStatus.HIDDEN,
+        7,
         Instant.parse("2026-11-22T02:10:00Z"),
         Instant.parse("2026-11-22T02:15:30Z"),
         version);

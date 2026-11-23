@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -136,7 +137,8 @@ class AdminCategoryEditIntegrationTest extends AbstractContainerBaseTest {
     UUID id = insertCategory("Áo", "ao", "VISIBLE");
 
     AdminCategory updated =
-        service.update(id, new UpdateCategoryRequest("Áo", "ao-nam", CategoryStatus.HIDDEN, 0L));
+        service.update(
+            id, new UpdateCategoryRequest("Áo", "ao-nam", CategoryStatus.HIDDEN, null, 0L));
 
     assertThat(updated.slug()).isEqualTo("ao-nam");
     assertThat(updated.status()).isEqualTo(CategoryStatus.HIDDEN);
@@ -163,7 +165,7 @@ class AdminCategoryEditIntegrationTest extends AbstractContainerBaseTest {
   @Test
   void update_withAnOldVersion_returns409AndWritesNothing() throws Exception {
     UUID id = insertCategory("Áo", "ao", "VISIBLE");
-    service.update(id, new UpdateCategoryRequest("Áo nam", "ao", CategoryStatus.VISIBLE, 0L));
+    service.update(id, new UpdateCategoryRequest("Áo nam", "ao", CategoryStatus.VISIBLE, null, 0L));
 
     putJson(id, "Áo nữ", "ao-nu", "HIDDEN", 0)
         .andExpect(status().isConflict())
@@ -316,8 +318,156 @@ class AdminCategoryEditIntegrationTest extends AbstractContainerBaseTest {
   }
 
   // ============================================================
+  // The display order (SHOP-95: AC2, AC4, NFR12, NFR13)
+  // ============================================================
+
+  @Test
+  void update_ofTheNameWithoutDisplayOrder_keepsTheStoredNumber() throws Exception {
+    UUID id = insertCategory("Áo", "ao", "VISIBLE", 7);
+
+    putJson(id, "Áo nam", "ao", "VISIBLE", 0)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.name").value("Áo nam"))
+        .andExpect(jsonPath("$.displayOrder").value(7));
+
+    assertThat(column(id, "name")).isEqualTo("Áo nam");
+    assertThat(column(id, "display_order")).isEqualTo("7");
+  }
+
+  @Test
+  void update_ofTheNameWithANullDisplayOrder_keepsTheStoredNumber() throws Exception {
+    UUID id = insertCategory("Áo", "ao", "VISIBLE", 7);
+
+    putJson(id, "Áo nam", "ao", "VISIBLE", "null", 0)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.displayOrder").value(7));
+
+    assertThat(column(id, "display_order")).isEqualTo("7");
+  }
+
+  @Test
+  void update_withDisplayOrderZero_setsZero() throws Exception {
+    UUID id = insertCategory("Áo", "ao", "VISIBLE", 7);
+
+    putJson(id, "Áo", "ao", "VISIBLE", "0", 0)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.displayOrder").value(0));
+
+    assertThat(column(id, "display_order")).isEqualTo("0");
+  }
+
+  @Test
+  void update_ofTheDisplayOrderOnly_movesTheVersionAndTheUpdatedAt() throws Exception {
+    UUID id = insertCategory("Áo", "ao", "VISIBLE", 2);
+    String updatedAtBefore = column(id, "updated_at");
+
+    putJson(id, "Áo", "ao", "VISIBLE", "9999", 0)
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.displayOrder").value(9999))
+        .andExpect(jsonPath("$.version").value(1));
+
+    assertThat(column(id, "display_order")).isEqualTo("9999");
+    assertThat(column(id, "version")).isEqualTo("1");
+    assertThat(column(id, "(updated_at > '" + updatedAtBefore + "'::timestamptz)"))
+        .as("NFR13")
+        .isEqualTo("true");
+  }
+
+  @Test
+  void update_twoEditsOfTheDisplayOrderWithTheSameVersion_answer409ToTheLater() throws Exception {
+    UUID id = insertCategory("Áo", "ao", "VISIBLE", 2);
+
+    putJson(id, "Áo", "ao", "VISIBLE", "5", 0).andExpect(status().isOk());
+    putJson(id, "Áo", "ao", "VISIBLE", "8", 0)
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.code").value("OPTIMISTIC_LOCK_CONFLICT"));
+
+    assertThat(column(id, "display_order")).isEqualTo("5");
+  }
+
+  @Test
+  void update_twoEditsOfTheDisplayOrderAtOnce_saveOneAndAnswer409ToTheOther() throws Exception {
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    try {
+      for (int round = 0; round < 5; round++) {
+        String slug = "ao-" + round;
+        UUID id = insertCategory("Áo " + round, slug, "VISIBLE", 2);
+        CyclicBarrier start = new CyclicBarrier(2);
+        String name = "Áo " + round;
+        List<Future<Object>> edits =
+            List.of(
+                pool.submit(() -> updateOrderAfter(start, id, name, slug, 5)),
+                pool.submit(() -> updateOrderAfter(start, id, name, slug, 8)));
+
+        List<Object> outcomes = new ArrayList<>();
+        for (Future<Object> edit : edits) {
+          outcomes.add(edit.get(30, TimeUnit.SECONDS));
+        }
+
+        assertThat(outcomes).filteredOn(AdminCategory.class::isInstance).hasSize(1);
+        assertThat(outcomes)
+            .filteredOn(o -> !(o instanceof AdminCategory))
+            .containsExactly("OPTIMISTIC_LOCK_CONFLICT");
+        assertThat(column(id, "version")).isEqualTo("1");
+      }
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  @Test
+  void update_withAWrongDisplayOrder_writesNothing() throws Exception {
+    UUID id = insertCategory("Áo", "ao", "VISIBLE", 7);
+
+    for (String displayOrder : List.of("-1", "10000", "1.5", "99999999999", "\"abc\"")) {
+      putJson(id, "Áo nam", "ao", "VISIBLE", displayOrder, 0).andExpect(status().isBadRequest());
+    }
+
+    assertThat(column(id, "name")).isEqualTo("Áo");
+    assertThat(column(id, "display_order")).isEqualTo("7");
+    assertThat(column(id, "version")).isEqualTo("0");
+  }
+
+  // ============================================================
   // Helpers
   // ============================================================
+
+  /** The body of an edit with {@code "displayOrder": displayOrderJson}. */
+  private ResultActions putJson(
+      UUID id, String name, String slug, String status, String displayOrderJson, long version)
+      throws Exception {
+    String body =
+        "{\"name\":\"%s\",\"slug\":\"%s\",\"status\":\"%s\",\"displayOrder\":%s,\"version\":%d}"
+            .formatted(name, slug, status, displayOrderJson, version);
+    return mockMvc.perform(put(URL + id).contentType(MediaType.APPLICATION_JSON).content(body));
+  }
+
+  /** The category, or the code of the error an edit of only the display order answered with. */
+  private Object updateOrderAfter(
+      CyclicBarrier start, UUID id, String name, String slug, int displayOrder) throws Exception {
+    start.await(30, TimeUnit.SECONDS);
+    try {
+      return service.update(
+          id,
+          new UpdateCategoryRequest(
+              name, slug, CategoryStatus.VISIBLE, BigDecimal.valueOf(displayOrder), 0L));
+    } catch (BusinessException e) {
+      return e.getCode().name();
+    } catch (org.springframework.orm.ObjectOptimisticLockingFailureException e) {
+      return ErrorCode.OPTIMISTIC_LOCK_CONFLICT.name();
+    }
+  }
+
+  private UUID insertCategory(String name, String slug, String status, int displayOrder) {
+    return transaction.execute(
+        tx ->
+            jdbc.sql(
+                    "INSERT INTO app.categories (name, slug, status, display_order)"
+                        + " VALUES (?, ?, ?, ?) RETURNING id")
+                .params(name, slug, status, displayOrder)
+                .query(UUID.class)
+                .single());
+  }
 
   private ResultActions putJson(UUID id, String name, String slug, String status, long version)
       throws Exception {
@@ -337,7 +487,8 @@ class AdminCategoryEditIntegrationTest extends AbstractContainerBaseTest {
       throws Exception {
     start.await(30, TimeUnit.SECONDS);
     try {
-      return service.update(id, new UpdateCategoryRequest(name, slug, CategoryStatus.VISIBLE, 0L));
+      return service.update(
+          id, new UpdateCategoryRequest(name, slug, CategoryStatus.VISIBLE, null, 0L));
     } catch (BusinessException e) {
       return e.getCode().name();
     } catch (org.springframework.orm.ObjectOptimisticLockingFailureException e) {

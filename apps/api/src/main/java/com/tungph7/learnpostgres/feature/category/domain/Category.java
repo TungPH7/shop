@@ -12,8 +12,8 @@ import com.tungph7.learnpostgres.common.domain.BaseEntity;
 import com.tungph7.learnpostgres.common.domain.CitextType;
 
 /**
- * A product category, one level only, on {@code app.categories} of V7 (SHOP-81; ADR-0004,
- * ADR-0005).
+ * A product category, one level only, on {@code app.categories} of V7 and V8 (SHOP-81, SHOP-95;
+ * ADR-0004, ADR-0005, ADR-0006).
  *
  * <p>The column {@code name} has the collation {@code app.vi_ci}: {@code ORDER BY name} is the
  * Vietnamese order, and {@code categories_name_unique} and every {@code =} on the name ignore case
@@ -49,15 +49,24 @@ public class Category extends BaseEntity {
   @Column(name = "status", nullable = false, length = 16)
   private CategoryStatus status;
 
+  /**
+   * Display order, 0–9999 (SHOP-95, ADR-0006): a smaller number comes first, equal numbers by name
+   * then id. Checked by Bean Validation at the API boundary; {@code categories_display_order_range}
+   * of V8 backs it (NFR9).
+   */
+  @Column(name = "display_order", nullable = false)
+  private int displayOrder;
+
   /** JPA needs a default constructor, kept protected so business code does not use it. */
   protected Category() {
     // for JPA
   }
 
-  public Category(String name, String slug, CategoryStatus status) {
+  public Category(String name, String slug, CategoryStatus status, int displayOrder) {
     this.name = name;
     this.slug = slug;
     this.status = status;
+    this.displayOrder = displayOrder;
   }
 
   public String getName() {
@@ -82,5 +91,13 @@ public class Category extends BaseEntity {
 
   public void setStatus(CategoryStatus status) {
     this.status = status;
+  }
+
+  public int getDisplayOrder() {
+    return displayOrder;
+  }
+
+  public void setDisplayOrder(int displayOrder) {
+    this.displayOrder = displayOrder;
   }
 }

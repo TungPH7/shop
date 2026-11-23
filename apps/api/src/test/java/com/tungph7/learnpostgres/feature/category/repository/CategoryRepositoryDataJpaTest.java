@@ -53,7 +53,7 @@ class CategoryRepositoryDataJpaTest extends AbstractContainerBaseTest {
   @Test
   void save_writesTheNameSlugStatusAndAuditColumns() {
     Category saved =
-        repository.saveAndFlush(new Category("Áo khoác", "ao-khoac", CategoryStatus.HIDDEN));
+        repository.saveAndFlush(new Category("Áo khoác", "ao-khoac", CategoryStatus.HIDDEN, 0));
 
     Map<String, Object> row =
         jdbc.sql(
@@ -73,11 +73,30 @@ class CategoryRepositoryDataJpaTest extends AbstractContainerBaseTest {
   }
 
   @Test
+  void save_writesTheDisplayOrder_andAReadGivesItBack() {
+    Category saved =
+        repository.saveAndFlush(new Category("Áo khoác", "ao-khoac", CategoryStatus.VISIBLE, 7));
+    saved.setDisplayOrder(9999);
+    repository.saveAndFlush(saved);
+
+    assertThat(
+            jdbc.sql("SELECT display_order FROM app.categories WHERE id = ?")
+                .param(saved.getId())
+                .query(Integer.class)
+                .single())
+        .isEqualTo(9999);
+    assertThat(repository.findById(saved.getId()))
+        .get()
+        .extracting(Category::getDisplayOrder)
+        .isEqualTo(9999);
+  }
+
+  @Test
   void save_ofANameTakenIgnoringCase_breaksTheUniqueConstraintOfTheName() {
-    repository.saveAndFlush(new Category("Áo", "ao", CategoryStatus.VISIBLE));
+    repository.saveAndFlush(new Category("Áo", "ao", CategoryStatus.VISIBLE, 0));
 
     assertThatThrownBy(
-            () -> repository.saveAndFlush(new Category("ÁO", "ao-2", CategoryStatus.VISIBLE)))
+            () -> repository.saveAndFlush(new Category("ÁO", "ao-2", CategoryStatus.VISIBLE, 0)))
         .isInstanceOf(DataIntegrityViolationException.class)
         .satisfies(
             e -> assertThat(ConstraintViolations.nameOf(e)).contains("categories_name_unique"));
@@ -89,7 +108,7 @@ class CategoryRepositoryDataJpaTest extends AbstractContainerBaseTest {
 
   @Test
   void existsByName_ignoresCaseButNotAccents() {
-    repository.saveAndFlush(new Category("Áo thun", "ao-thun", CategoryStatus.VISIBLE));
+    repository.saveAndFlush(new Category("Áo thun", "ao-thun", CategoryStatus.VISIBLE, 0));
 
     assertThat(repository.existsByName("Áo thun")).isTrue();
     assertThat(repository.existsByName("áo THUN")).isTrue();
@@ -99,8 +118,9 @@ class CategoryRepositoryDataJpaTest extends AbstractContainerBaseTest {
 
   @Test
   void existsByNameAndIdNot_leavesOutTheCategoryItself() {
-    Category ao = repository.saveAndFlush(new Category("Áo", "ao", CategoryStatus.VISIBLE));
-    Category quan = repository.saveAndFlush(new Category("Quần", "quan", CategoryStatus.VISIBLE));
+    Category ao = repository.saveAndFlush(new Category("Áo", "ao", CategoryStatus.VISIBLE, 0));
+    Category quan =
+        repository.saveAndFlush(new Category("Quần", "quan", CategoryStatus.VISIBLE, 0));
 
     assertThat(repository.existsByNameAndIdNot("áo", ao.getId())).isFalse();
     assertThat(repository.existsByNameAndIdNot("áo", quan.getId())).isTrue();
@@ -112,7 +132,7 @@ class CategoryRepositoryDataJpaTest extends AbstractContainerBaseTest {
 
   @Test
   void existsBySlug_ignoresCase() {
-    repository.saveAndFlush(new Category("Áo", "ao", CategoryStatus.VISIBLE));
+    repository.saveAndFlush(new Category("Áo", "ao", CategoryStatus.VISIBLE, 0));
 
     assertThat(repository.existsBySlug("ao")).isTrue();
     assertThat(repository.existsBySlug("AO")).isTrue();
@@ -121,9 +141,9 @@ class CategoryRepositoryDataJpaTest extends AbstractContainerBaseTest {
 
   @Test
   void findSlugsAmong_returnsTheTakenOnesAsStored() {
-    repository.saveAndFlush(new Category("Áo thun", "ao-thun", CategoryStatus.VISIBLE));
-    repository.saveAndFlush(new Category("Ao thun", "ao-thun-3", CategoryStatus.HIDDEN));
-    repository.saveAndFlush(new Category("Áo thun dài", "ao-thun-dai", CategoryStatus.VISIBLE));
+    repository.saveAndFlush(new Category("Áo thun", "ao-thun", CategoryStatus.VISIBLE, 0));
+    repository.saveAndFlush(new Category("Ao thun", "ao-thun-3", CategoryStatus.HIDDEN, 0));
+    repository.saveAndFlush(new Category("Áo thun dài", "ao-thun-dai", CategoryStatus.VISIBLE, 0));
 
     assertThat(repository.findSlugsAmong(new String[] {"AO-THUN", "ao-thun-2", "ao-thun-3"}))
         .containsExactlyInAnyOrder("ao-thun", "ao-thun-3");
@@ -131,8 +151,8 @@ class CategoryRepositoryDataJpaTest extends AbstractContainerBaseTest {
 
   @Test
   void findVisibleIdBySlug_findsAVisibleCategoryIgnoringCaseAndNeverAHiddenOne() {
-    Category ao = repository.saveAndFlush(new Category("Áo", "ao", CategoryStatus.VISIBLE));
-    repository.saveAndFlush(new Category("Phụ kiện", "phu-kien", CategoryStatus.HIDDEN));
+    Category ao = repository.saveAndFlush(new Category("Áo", "ao", CategoryStatus.VISIBLE, 0));
+    repository.saveAndFlush(new Category("Phụ kiện", "phu-kien", CategoryStatus.HIDDEN, 0));
 
     assertThat(repository.findVisibleIdBySlug("AO")).contains(ao.getId());
     assertThat(repository.findVisibleIdBySlug("phu-kien")).isEmpty();

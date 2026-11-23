@@ -108,9 +108,9 @@ class AdminCategoryServiceIntegrationTest extends AbstractContainerBaseTest {
   @Test
   void create_savesTheTypedSlugAndTheStatusGiven() {
     AdminCategory category =
-        service.create(new CreateCategoryRequest("Phụ kiện", "phu-kien-2026", null));
+        service.create(new CreateCategoryRequest("Phụ kiện", "phu-kien-2026", null, null));
     AdminCategory hidden =
-        service.create(new CreateCategoryRequest("Khăn", null, CategoryStatus.HIDDEN));
+        service.create(new CreateCategoryRequest("Khăn", null, CategoryStatus.HIDDEN, null));
 
     assertThat(category.slug()).isEqualTo("phu-kien-2026");
     assertThat(category.status().name()).isEqualTo("VISIBLE");
@@ -127,7 +127,7 @@ class AdminCategoryServiceIntegrationTest extends AbstractContainerBaseTest {
 
   @Test
   void create_withANameOfSymbolsOnly_usesDanhMuc() {
-    assertThat(service.create(new CreateCategoryRequest("!!!", null, null)).slug())
+    assertThat(service.create(new CreateCategoryRequest("!!!", null, null, null)).slug())
         .isEqualTo("danh-muc");
   }
 
@@ -144,7 +144,7 @@ class AdminCategoryServiceIntegrationTest extends AbstractContainerBaseTest {
 
   @Test
   void create_withANameTakenInOtherCase_returns409NameAndSavesNothing() throws Exception {
-    service.create(new CreateCategoryRequest("Áo thun", null, null));
+    service.create(new CreateCategoryRequest("Áo thun", null, null, null));
 
     postJson("{\"name\":\"Áo Thun\"}")
         .andExpect(status().isConflict())
@@ -156,16 +156,16 @@ class AdminCategoryServiceIntegrationTest extends AbstractContainerBaseTest {
 
   @Test
   void create_withTheNameWithoutAccents_isAnotherNameAndTakesTheSuffix2() {
-    service.create(new CreateCategoryRequest("Áo thun", null, null));
+    service.create(new CreateCategoryRequest("Áo thun", null, null, null));
 
-    AdminCategory other = service.create(new CreateCategoryRequest("Ao thun", null, null));
+    AdminCategory other = service.create(new CreateCategoryRequest("Ao thun", null, null, null));
 
     assertThat(other.slug()).isEqualTo("ao-thun-2");
   }
 
   @Test
   void create_withATypedSlugTaken_returns409SlugAndSavesNothing() throws Exception {
-    service.create(new CreateCategoryRequest("Áo thun", null, null));
+    service.create(new CreateCategoryRequest("Áo thun", null, null, null));
 
     postJson("{\"name\":\"Áo phông\",\"slug\":\"ao-thun\"}")
         .andExpect(status().isConflict())
@@ -177,7 +177,7 @@ class AdminCategoryServiceIntegrationTest extends AbstractContainerBaseTest {
 
   @Test
   void create_checksTheNameBeforeTheSlug() throws Exception {
-    service.create(new CreateCategoryRequest("Áo thun", null, null));
+    service.create(new CreateCategoryRequest("Áo thun", null, null, null));
 
     postJson("{\"name\":\"ÁO THUN\",\"slug\":\"ao-thun\"}")
         .andExpect(status().isConflict())
@@ -190,14 +190,14 @@ class AdminCategoryServiceIntegrationTest extends AbstractContainerBaseTest {
     insert("Áo thun 2", "ao-thun-2");
     insert("Áo thun 4", "ao-thun-4");
 
-    assertThat(service.create(new CreateCategoryRequest("Áo  thun", null, null)).slug())
+    assertThat(service.create(new CreateCategoryRequest("Áo  thun", null, null, null)).slug())
         .isEqualTo("ao-thun-3");
   }
 
   @Test
   void create_whenATypedSlugIsTakenAfterTheCheck_returns409FromTheUniqueConstraint()
       throws Exception {
-    service.create(new CreateCategoryRequest("Áo thun", null, null));
+    service.create(new CreateCategoryRequest("Áo thun", null, null, null));
     doReturn(false).when(repository).existsBySlug("ao-thun");
 
     postJson("{\"name\":\"Áo phông\",\"slug\":\"ao-thun\"}")
@@ -209,10 +209,10 @@ class AdminCategoryServiceIntegrationTest extends AbstractContainerBaseTest {
 
   @Test
   void create_whenTheGeneratedSlugIsTakenAfterTheCheck_retriesWithTheNextNumber() {
-    service.create(new CreateCategoryRequest("Áo thun", null, null));
+    service.create(new CreateCategoryRequest("Áo thun", null, null, null));
     missTheTakenSlugsOnce();
 
-    AdminCategory other = service.create(new CreateCategoryRequest("Ao thun", null, null));
+    AdminCategory other = service.create(new CreateCategoryRequest("Ao thun", null, null, null));
 
     assertThat(other.slug()).isEqualTo("ao-thun-2");
     assertThat(count()).isEqualTo(2);
@@ -282,8 +282,92 @@ class AdminCategoryServiceIntegrationTest extends AbstractContainerBaseTest {
   }
 
   // ============================================================
+  // The display order (SHOP-95: AC1, AC4, NFR7)
+  // ============================================================
+
+  @Test
+  void create_withoutDisplayOrder_savesZero_andTheListReturnsIt() throws Exception {
+    postJson("{\"name\":\"Áo khoác\"}")
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.displayOrder").value(0));
+
+    assertThat(displayOrderOf("Áo khoác")).isZero();
+    mockMvc
+        .perform(get(URL))
+        .andExpect(jsonPath("$.items[0].name").value("Áo khoác"))
+        .andExpect(jsonPath("$.items[0].displayOrder").value(0));
+  }
+
+  @Test
+  void create_withANullDisplayOrder_savesZero() throws Exception {
+    postJson("{\"name\":\"Áo khoác\",\"displayOrder\":null}")
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.displayOrder").value(0));
+
+    assertThat(displayOrderOf("Áo khoác")).isZero();
+  }
+
+  @Test
+  void create_withDisplayOrder5_saves5() throws Exception {
+    postJson("{\"name\":\"Áo khoác\",\"displayOrder\":5}")
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.displayOrder").value(5));
+
+    assertThat(displayOrderOf("Áo khoác")).isEqualTo(5);
+  }
+
+  @Test
+  void create_withDisplayOrder9999AndATypedSlug_saves9999() {
+    AdminCategory saved =
+        service.create(
+            new CreateCategoryRequest(
+                "Áo khoác", "ao-khoac", null, new java.math.BigDecimal("9999")));
+
+    assertThat(saved.displayOrder()).isEqualTo(9999);
+    assertThat(displayOrderOf("Áo khoác")).isEqualTo(9999);
+  }
+
+  @Test
+  void create_withAWrongDisplayOrder_savesNothing() throws Exception {
+    for (String displayOrder : List.of("-1", "10000", "1.5", "99999999999", "\"abc\"")) {
+      postJson("{\"name\":\"Áo khoác\",\"displayOrder\":" + displayOrder + "}")
+          .andExpect(status().isBadRequest());
+    }
+
+    assertThat(count()).isZero();
+  }
+
+  @Test
+  void list_sortsByDisplayOrderThenName() throws Exception {
+    for (String body :
+        List.of(
+            "{\"name\":\"Áo\",\"displayOrder\":2}",
+            "{\"name\":\"Đầm\",\"displayOrder\":1,\"status\":\"HIDDEN\"}",
+            "{\"name\":\"Quần\"}",
+            "{\"name\":\"Bao tay\",\"displayOrder\":1}")) {
+      postJson(body).andExpect(status().isCreated());
+    }
+
+    mockMvc
+        .perform(get(URL))
+        .andExpect(
+            jsonPath(
+                "$.items[*].name", org.hamcrest.Matchers.contains("Quần", "Bao tay", "Đầm", "Áo")))
+        .andExpect(jsonPath("$.items[*].displayOrder", org.hamcrest.Matchers.contains(0, 1, 1, 2)));
+  }
+
+  // ============================================================
   // Helpers
   // ============================================================
+
+  private int displayOrderOf(String name) {
+    return transaction.execute(
+        tx ->
+            jdbc.sql("SELECT display_order FROM app.categories WHERE name = ?")
+                .param(name)
+                .query(Integer.class)
+                .single());
+  }
 
   private ResultActions postJson(String body) throws Exception {
     return mockMvc.perform(post(URL).contentType(MediaType.APPLICATION_JSON).content(body));
@@ -293,7 +377,7 @@ class AdminCategoryServiceIntegrationTest extends AbstractContainerBaseTest {
   private Object createAfter(CyclicBarrier start, String name) throws Exception {
     start.await(30, TimeUnit.SECONDS);
     try {
-      return service.create(new CreateCategoryRequest(name, null, null));
+      return service.create(new CreateCategoryRequest(name, null, null, null));
     } catch (BusinessException e) {
       return e.getCode();
     }

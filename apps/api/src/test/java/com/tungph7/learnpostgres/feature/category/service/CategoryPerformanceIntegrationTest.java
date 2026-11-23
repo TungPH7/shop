@@ -47,11 +47,12 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.tungph7.learnpostgres.AbstractContainerBaseTest;
 
 /**
- * NFR2 of SHOP-81 (SHOP-82, step 10): with 200 categories and 10,000 products, one category holding
- * 5,000 of them, each command runs 5 times after a warm-up, and the median is at most 200 ms for a
- * read, 300 ms for a write and 1 s for the delete of the category of 5,000 products, which leaves
- * them without category (NFR15). Each command is measured at the HTTP boundary, through MockMvc, so
- * the median holds every statement, the transaction and the JSON.
+ * NFR2 of SHOP-81 (SHOP-82, step 10), kept as NFR3 of SHOP-95 with display orders from 0 to 9: with
+ * 200 categories and 10,000 products, one category holding 5,000 of them, each command runs 5 times
+ * after a warm-up, and the median is at most 200 ms for a read, 300 ms for a write and 1 s for the
+ * delete of the category of 5,000 products, which leaves them without category (NFR15). Each
+ * command is measured at the HTTP boundary, through MockMvc, so the median holds every statement,
+ * the transaction and the JSON.
  *
  * <p>The warm-up run counts the SQL statements of the command on this data: a fixed number, the one
  * the plan names for each read (Architecture Decisions 6), so none grows with the categories or the
@@ -190,6 +191,7 @@ class CategoryPerformanceIntegrationTest extends AbstractContainerBaseTest {
   void eachWrite_takesAtMost300MillisecondsAtTheMedian_inAFixedNumberOfStatements() {
     // Neither the big category nor its products: the delete keeps a category of exactly 5,000.
     UUID edited = categoryId("danh-muc-3");
+    UUID reordered = categoryId("danh-muc-6");
     UUID one = categoryId("danh-muc-4");
     UUID another = categoryId("danh-muc-5");
     UUID product = productId("perf-5001");
@@ -213,6 +215,16 @@ class CategoryPerformanceIntegrationTest extends AbstractContainerBaseTest {
                         ("{\"name\":\"Danh mục 3 sửa %d\",\"slug\":\"danh-muc-3\","
                                 + "\"status\":\"VISIBLE\",\"version\":%d}")
                             .formatted(run, run))));
+    measures.put(
+        "admin, edit only the display order of a category",
+        write(
+            run ->
+                put("/api/admin/categories/" + reordered)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(
+                        ("{\"name\":\"Danh mục 6\",\"slug\":\"danh-muc-6\","
+                                + "\"status\":\"VISIBLE\",\"displayOrder\":%d,\"version\":%d}")
+                            .formatted(9 - run, run))));
     measures.put(
         "admin, add a product with a category",
         write(
@@ -247,6 +259,7 @@ class CategoryPerformanceIntegrationTest extends AbstractContainerBaseTest {
     Map<String, Integer> statements = new LinkedHashMap<>();
     statements.put("admin, add a category", 3);
     statements.put("admin, edit a category", 4);
+    statements.put("admin, edit only the display order of a category", 4);
     statements.put("admin, add a product with a category", 3);
     statements.put("admin, edit a product with a category", 4);
     assertThat(statementsOf(measures)).containsExactlyEntriesOf(statements);
@@ -397,14 +410,18 @@ class CategoryPerformanceIntegrationTest extends AbstractContainerBaseTest {
         .single();
   }
 
-  /** 200 categories, {@code danh-muc-1} to {@code danh-muc-200}; one in ten is hidden. */
+  /**
+   * 200 categories, {@code danh-muc-1} to {@code danh-muc-200}; one in ten is hidden. Their display
+   * orders run from 0 to 9, twenty categories at each number (NFR3 of SHOP-95).
+   */
   private void insertCategories() {
     jdbc.sql(
             """
-INSERT INTO app.categories (name, slug, status)
+INSERT INTO app.categories (name, slug, status, display_order)
 SELECT 'Danh mục ' || i,
        'danh-muc-' || i,
-       CASE WHEN i % 10 = 0 THEN 'HIDDEN' ELSE 'VISIBLE' END
+       CASE WHEN i % 10 = 0 THEN 'HIDDEN' ELSE 'VISIBLE' END,
+       i % 10
   FROM generate_series(1, :categories) AS s(i)
 """)
         .param("categories", CATEGORIES)
