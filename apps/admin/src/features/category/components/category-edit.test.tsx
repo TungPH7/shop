@@ -41,6 +41,35 @@ describe('CategoryEdit', () => {
     );
   });
 
+  it('has a label and a field in the skeleton for each of the four fields, the display order too', () => {
+    server.use(http.get('*/admin/categories/:id', () => new Promise<Response>(() => undefined)));
+    renderEdit();
+
+    const region = screen.getByRole('region', { name: 'Loading the category' });
+    expect(region.querySelectorAll('.product-form__skeleton-label')).toHaveLength(4);
+    expect(region.querySelectorAll('.product-form__skeleton-input')).toHaveLength(4);
+  });
+
+  it('AC2 opens the form with the saved display order', async () => {
+    server.use(
+      http.get('*/admin/categories/:id', () => HttpResponse.json({ ...shirts, displayOrder: 3 })),
+    );
+    renderEdit();
+
+    expect(await screen.findByRole('textbox', { name: /Display order/ })).toHaveValue('3');
+  });
+
+  it('NFR12 shows the load-failed state with Try again for a category without the display order', async () => {
+    const legacy: Record<string, unknown> = { ...shirts };
+    delete legacy['displayOrder'];
+    server.use(http.get('*/admin/categories/:id', () => HttpResponse.json(legacy)));
+    renderEdit();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the category.");
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /Display order/ })).not.toBeInTheDocument();
+  });
+
   it('AC6 opens the form with the saved category, a hidden one too', async () => {
     server.use(http.get('*/admin/categories/:id', () => HttpResponse.json(shirts)));
     renderEdit();

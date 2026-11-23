@@ -11,12 +11,13 @@ import {
 import { useLocale } from '@/lib/i18n/use-locale';
 
 // The category table of S1.4 of docs/specs/SHOP-81/design.md, in its glass card: Name,
-// URL slug, Status (S1.5), Products (S1.6, right-aligned), Actions (Edit S1.7, Delete
-// S1.8). The body is the rows, the skeleton or a message (S1.9, the error state); the
-// header stays. Under 1024 px the table scrolls sideways inside its labelled, focusable
-// region. Every class is one of the design system (docs/design-system/admin.md).
+// URL slug, Status (S1.5), Products (S1.6, right-aligned), Display order (S1.3 and S1.4
+// of docs/specs/SHOP-95/design.md, right-aligned), Actions (Edit S1.7, Delete S1.8). The
+// body is the rows, the skeleton or a message (S1.9, the error state); the header stays.
+// Under 1024 px the table scrolls sideways inside its labelled, focusable region. Every
+// class is one of the design system (docs/design-system/admin.md).
 
-const COLUMNS = 5;
+const COLUMNS = 6;
 const SKELETON_ROWS = 6;
 
 const STATUS_BADGE: Record<CategoryStatus, string> = {
@@ -55,6 +56,9 @@ export function CategoryTable({ isBusy, children, ref }: CategoryTableProps) {
             <th scope="col" className="table__num">
               {t('table.productCount')}
             </th>
+            <th scope="col" className="table__num">
+              {t('table.displayOrder')}
+            </th>
             <th scope="col" className="table__actions">
               {t('table.actions')}
             </th>
@@ -72,7 +76,10 @@ interface CategoryRowsProps {
   onDelete: (category: AdminCategoryListItem) => void;
 }
 
-/** The rows in the order of the api, by name as Vietnamese sorts it: never sorted again. */
+/**
+ * The rows in the order of the api, by display order then by name as Vietnamese sorts
+ * it: never sorted again (S1.2 of SHOP-95).
+ */
 export function CategoryRows({ categories, onDelete }: CategoryRowsProps) {
   const { t } = useTranslation('category');
   const { locale } = useLocale();
@@ -90,6 +97,8 @@ export function CategoryRows({ categories, onDelete }: CategoryRowsProps) {
         <span className={STATUS_BADGE[category.status]}>{t(`status.${category.status}`)}</span>
       </td>
       <td className="table__num">{count.format(category.productCount)}</td>
+      {/* Plain digits, never through Intl: 1000, not 1.000, as the admin types it (S1.4). */}
+      <td className="table__num">{String(category.displayOrder)}</td>
       <td className="table__actions">
         <div className="table__row-actions">
           <Link

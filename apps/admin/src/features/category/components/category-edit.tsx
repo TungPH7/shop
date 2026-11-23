@@ -33,13 +33,19 @@ function EditFrame({ children, busy = false }: { children: ReactNode; busy?: boo
   );
 }
 
+/**
+ * The fields of the form: name, slug, status, then the display order of S2.3 of
+ * docs/specs/SHOP-95/design.md.
+ */
+const FORM_FIELDS = 4;
+
 /** S2.3 while the category loads: the title, then each field as a label over its box. */
 function EditSkeleton() {
   return (
     <EditFrame busy>
       <span className="skeleton product-form__skeleton-title" />
       <span className="skeleton product-form__skeleton-text" />
-      {Array.from({ length: 3 }, (_, index) => (
+      {Array.from({ length: FORM_FIELDS }, (_, index) => (
         <div key={index}>
           <span className="skeleton product-form__skeleton-label" />
           <span className="skeleton product-form__skeleton-input" />
