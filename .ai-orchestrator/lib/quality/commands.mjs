@@ -205,8 +205,13 @@ function checkCommand(command, role, gates, roster, depth = 0) {
   // So a variable of the session named before an assignment sign anywhere in the command counts as set, inside quotes
   // too: those names are the session's own, and no command of a role writes them there.
   expanded.push(...assignedIn(command).filter((name) => SESSION_VARIABLE.test(name)));
+  // A name split by quotes or a backslash is one word to bash: 'GIT_CONFIG_COU''NT=0' (review of shop PR #92).
+  expanded.push(...assignedIn(command.replace(/['"\\]/g, '')).filter((name) => SESSION_VARIABLE.test(name)));
   if (expanded.some((name) => SESSION_VARIABLE.test(name))) return deny(IDENTITY);
   if (arithmeticTexts(command).some((text) => BUILT_ASSIGNED.test(text))) return deny(BUILT_NAME);
+  // An assignment built into a value, as in w="$v=0", runs when arithmetic reads that value: (( w )), $[ w ], a[w] or
+  // [[ w -eq 0 ]] (review of shop PR #92). So with any arithmetic in the command, it is refused wherever it is.
+  if (arithmeticTexts(command).length > 0 && BUILT_ASSIGNED.test(command)) return deny(BUILT_NAME);
   if (gates.approvedLibraries && expanded.some((name) => SOURCE_NAME.test(name))) return deny(installRefusal([{ refused: expanded.find((name) => SOURCE_NAME.test(name)), registry: true }], []));
   for (const words of segments(command)) {
     const result = checkWords(words, role, gates, roster, depth);

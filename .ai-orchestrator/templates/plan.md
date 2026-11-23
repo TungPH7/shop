@@ -41,10 +41,12 @@ turns roles, levels, efforts and "seo:" into labels.
 Levels: light for an item whose mistake costs little, such as a docs Task or a change of copy, with no logic: one
 review at high, no security, and the main session checks it in place of a qa run. heavy where a mistake costs much:
 money, security, data that exists: reviewer at xhigh, security at max, fixes until no Critical or High. standard for
-the rest. A PR on a critical path makes its item heavy whatever its label. -->
+the rest. A PR on a critical path makes its item heavy whatever its label.
+Only where you asked for it: "review: skip" or "review: on" (SPEC-review-per-item.md section 2), which ba turns into the
+label ao-review-skip or ao-review-on; an item without it follows review.default of project.yaml. -->
 
 ### Phase 1: <name>
-- [ ] <KEY>: <Story or Task title> · <roles> · level <light | standard | heavy>: <reason, unless standard> · effort <xhigh | max>: <reason, only for a hard item> · seo: <S codes of the section ## SEO it touches>
+- [ ] <KEY>: <Story or Task title> · <roles> · level <light | standard | heavy>: <reason, unless standard> · effort <xhigh | max>: <reason, only for a hard item> · seo: <S codes of the section ## SEO it touches> · review: <skip | on, only where you asked>
 
 ### Checkpoint: <name>
 - [ ] <What must work before the next phase>

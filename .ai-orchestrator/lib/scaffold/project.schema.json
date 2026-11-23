@@ -102,12 +102,13 @@
       }
     },
     "review": {
-      "description": "Paths the project adds to a review tier of quality/gates.yaml (review of shop PR #79): its own files that decide who calls, or what the browser runs. They only add to the kit's lists.",
+      "description": "Paths the project adds to a review tier of quality/gates.yaml (review of shop PR #79): its own files that decide who calls, or what the browser runs. They only add to the kit's lists. And whether items are reviewed by default.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "critical_paths": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "sensitive_paths": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+        "sensitive_paths": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "default": { "description": "Whether an item with neither ao-review-on nor ao-review-skip is reviewed (SPEC-review-per-item.md 2.1): on, as when it is left out, or off.", "enum": ["on", "off"] }
       }
     },
     "roles": {

@@ -125,6 +125,7 @@ artifacts:
     created_by: [reviewer, security]
     stored_in:
       - { place: github-pr, note: "Review trên PR" }
+      - { place: tracker, note: "Comment trên Epic hay item, với review sau merge (SPEC-review-per-item.md mục 4)" }
   - id: qa-report
     name: "Báo cáo QA của item"
     template: templates/qa-report.md

@@ -12,6 +12,7 @@ import { matchesGlob } from './glob.mjs';
 import { acceptedRisks, checkDescription, findingId, openFindings, readReviewReport, stillBlocking } from './pull-request.mjs';
 import { pathTier, requiredReviewRoles } from './review-tiers.mjs';
 import { waiverCandidates, waiverFor, waiverOnHead } from './waivers.mjs';
+import { newestMark, projectDefaultAt, releaseReviewGaps, skipOnHead, skipScope, skippedReview } from './review-choice.mjs';
 
 const OPEN_PRS = { state: 'open', sort: 'created', direction: 'asc' };
 // GitHub's answers to a merge it will not make now: 405, the PR cannot be merged; 409, the head moved.
@@ -231,6 +232,8 @@ async function readMergeFacts(github, number, { docs, gates, apps, auditMain }) 
     checks: await readChecks(github, pr.head.sha),
     docs: key && docs ? { ...(await readDocsFacts({ github, jira: docs.jira, key, branch: pr.head.ref })), passage: docs.passage } : undefined,
     label: await waiverLabel({ pr, files, gates, docs }),
+    review: await reviewChoiceOf({ pr, docs, github }),
+    ...(isReleasePr(pr) && { releasePulls: await readReleasePulls(github, pr, { apps }) }),
     ...(isBackMerge(pr) && { tags: await releaseTags(github), brought: auditMain ? await auditMain(pr) : undefined }),
     ...(notesVersion(pr) && { baseHead: (await github.get(`/git/ref/heads/${pr.base.ref}`)).object?.sha }),
   };
@@ -247,6 +250,55 @@ export async function waiverLabel({ pr, files, gates, docs }) {
     return null;
   }
 }
+
+// The review choice of a PR's item (SPEC-review-per-item.md section 2), read with `docs.reviewOf` (lib/quality/
+// review-choice.mjs, itemReview) and the default of project.yaml at `ref`: the base branch for merge-gate, the commit
+// before the merge for audit. `at`, for audit, is the time of the merge. null for a PR that cannot skip review, or when
+// the choice cannot be read: the PR is then reviewed.
+export async function reviewChoiceOf({ pr, docs, github, at, ref }) {
+  if (!skipScope(pr) || !docs?.reviewOf) return null;
+  try {
+    const projectDefault = await projectDefaultAt(github, ref ?? pr.base.ref);
+    return await docs.reviewOf(parseBranch(pr.head.ref).key, { at, projectDefault });
+  } catch {
+    return null;
+  }
+}
+
+// GitHub lists at most 250 commits of a PR.
+const COMMITS_LISTED = 250;
+
+// The PRs of items a release PR brings (SPEC-review-per-item.md section 5): each commit of the release PR that is the
+// merge of a PR into develop or into the release branch, with whether that PR skipped review (the trace on its head and
+// no report of the App there) and the newest mark of a review after merge on it. null when the release brings more
+// commits than GitHub lists: they cannot all be checked.
+export async function readReleasePulls(github, pr, { apps }) {
+  const commits = await github.getAll(`/pulls/${pr.number}/commits`);
+  if (commits.length >= COMMITS_LISTED) return null;
+  return releasePullsOf(github, commits.map(({ sha }) => sha), { apps, bases: ['develop', pr.head.ref] });
+}
+
+// The PRs of items among commits `shas`: each commit that is the merge of a PR into one of `bases`, as readReleasePulls
+// gives them. /ao-release and /ao-ship read them too, from the commits of develop and of the release branch.
+export async function releasePullsOf(github, shas, { apps, bases }) {
+  const bot = botLogin(apps.review);
+  const pulls = [];
+  for (const sha of shas) {
+    const merged = (await github.getAll(`/commits/${sha}/pulls`)).find((p) => p.merged_at && p.merge_commit_sha === sha && bases.includes(p.base?.ref));
+    const key = merged ? parseBranch(merged.head?.ref ?? '')?.key : null;
+    if (!key || pulls.some(({ number }) => number === merged.number)) continue;
+    const reviews = await github.getAll(`/pulls/${merged.number}/reviews`);
+    const skipped = skippedReview(reviews, { bot, head: merged.head.sha });
+    const mark = skipped ? newestMark(await github.getAll(`/issues/${merged.number}/comments`), { bot }) : null;
+    pulls.push({ number: merged.number, key, skipped, mark });
+  }
+  return pulls;
+}
+
+// What a release PR waits for in the review of what it brings: the gaps of releaseReviewGaps, or one line when its PRs
+// could not all be read.
+export const releaseReviewMissing = (releasePulls) =>
+  releasePulls === null ? [`a release of fewer than ${COMMITS_LISTED} commits, so that each PR that skipped review can be checked for its review after merge`] : releaseReviewGaps(releasePulls ?? []);
 
 // The tags vX.Y.Z of the repository and the commit each names. merge-gate and the hotfix step of ao-step make
 // lightweight tags; an annotated tag names a tag object, so it is left out rather than taken for a commit.
@@ -313,7 +365,7 @@ function skipReason(pr, apps, gates) {
 // the audit of the commits it brings from main, [{ sha, ok, problems }], as auditBroughtBack gives it, or undefined when
 // merge-gate could not run it. `baseHead`, for the PR of a release report: the commit at the head of its release branch.
 // `today` (YYYY-MM-DD) is the day a High you accept must still hold on; without it no acceptance counts.
-export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, approvers, docs, space, tags = [], brought, baseHead, today, label = null }) {
+export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, approvers, docs, space, tags = [], brought, baseHead, today, label = null, review = null, releasePulls }) {
   const reason = skipReason(pr, apps, gates);
   if (reason) return skip(reason);
   // null means GitHub has not worked it out yet; the merge call itself refuses a conflict.
@@ -322,9 +374,10 @@ export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, 
   const release = gates.release_pull_requests;
   const keep = { action: 'merge', method: release.merge_method, sha: pr.head.sha, title: `${pr.title} (#${pr.number})` };
 
-  // Every change in a release passed its own gates, protected paths included: CI and your approval are enough.
+  // Every change in a release passed its own gates, protected paths included: CI and your approval are enough, once each
+  // PR that skipped review had its review after merge (SPEC-review-per-item.md section 5).
   if (isReleasePr(pr)) {
-    const missing = [...(checks.green ? [] : [`CI green ${at}`]), ...(approved({ pr, reviews, approvers }) ? [] : [`approval ${at}`]), ...conflicts];
+    const missing = [...(checks.green ? [] : [`CI green ${at}`]), ...(approved({ pr, reviews, approvers }) ? [] : [`approval ${at}`]), ...releaseReviewMissing(releasePulls), ...conflicts];
     if (missing.length > 0) return { action: 'wait', missing };
     return { ...keep, release: { tag: release.tag.replace('<VERSION>', parseBranch(pr.head.ref).version), backMerge: release.back_merge_after_release } };
   }
@@ -364,7 +417,7 @@ export function decideMerge({ pr, commits, files, checks, reviews, gates, apps, 
     return missing.length > 0 ? { action: 'wait', missing, docs: verdict.key } : { ...merge, docs: verdict.key };
   }
   const note = verdict ? { note: verdict.reason } : {};
-  const missing = [...unmetConditions({ pr, checks, reviews, gates, apps, approvers, on: today, files, label }), ...conflicts];
+  const missing = [...unmetConditions({ pr, checks, reviews, gates, apps, approvers, on: today, files, label, review }), ...conflicts];
   const paths = protectedPaths(files, gates);
   if (paths.length > 0) return { action: 'needs-you', paths, missing };
   if (missing.length > 0) return { action: 'wait', missing, ...note };
@@ -408,15 +461,22 @@ export function docsUnmet({ pr, checks, reviews, verdict }) {
 // paths, as phrases of what it waits for. audit checks a merged PR against them too, and passes authorApproves: a PR
 // one of your logins opened counts as approved, since GitHub does not let you approve your own PR. `on` (YYYY-MM-DD) is
 // the day a High you accept must still hold on (Pilot 3, spec 2.9 part 5); without it no acceptance counts.
-export function unmetConditions({ pr, checks, reviews, gates, apps, approvers, authorApproves = false, on, files = [], label = null }) {
+export function unmetConditions({ pr, checks, reviews, gates, apps, approvers, authorApproves = false, on, files = [], label = null, review = null }) {
   const head = pr.head.sha;
   const at = `on head ${head.slice(0, 7)}`;
   const missing = baseConditions({ pr, checks });
-  // A review waived by rule needs its trace on the head instead of the reports (C1 spec 3.4), worked out again here.
+  // A review waived by rule needs its trace on the head instead of the reports (C1 spec 3.4), worked out again here; so
+  // does the review an item skips (SPEC-review-per-item.md 3.5), from `review`, its choice as the caller read it.
   const waiver = reviewWaiver({ pr, files, reviews, gates, apps, label });
+  const bot = botLogin(apps.review);
   if (waiver) {
-    if (waiverOnHead(reviews, { bot: botLogin(apps.review), head }) !== waiver.id) missing.push(`review waiver ${waiver.id} ${at}, which ao-step review posts`);
-  } else missing.push(...reportGaps(reviews, head, at, reviewRolesNeeded({ pr, files, reviews, gates, apps }), botLogin(apps.review), { approvers, on }));
+    if (waiverOnHead(reviews, { bot, head }) !== waiver.id) missing.push(`review waiver ${waiver.id} ${at}, which ao-step review posts`);
+  } else if (reviewSkipped({ pr, reviews, gates, apps, review })) {
+    // The reports of a full review you asked for with /ao-review <PR> full do as well as the trace.
+    const key = parseBranch(pr.head.ref).key;
+    const reported = reportGaps(reviews, head, at, reviewRolesNeeded({ pr, files, reviews, gates, apps }), bot, { approvers, on }).length === 0;
+    if (skipOnHead(reviews, { bot, head }) !== key && !reported) missing.push(`the trace of the review ${key} skips ${at}, which ao-step review posts`);
+  } else missing.push(...reportGaps(reviews, head, at, reviewRolesNeeded({ pr, files, reviews, gates, apps }), bot, { approvers, on }));
   if (changesRequestedOn(reviews, head)) missing.push(`answer to the changes requested ${at}`);
   if (!approved({ pr, reviews, approvers, authorApproves })) missing.push(`approval ${at}`);
   return missing;
@@ -440,6 +500,15 @@ export function reviewWaiver({ pr, files, reviews, gates, apps, label }) {
   const bot = botLogin(apps.review);
   const blockingFound = reviews.filter((r) => r.user?.login === bot).some((r) => (readReviewReport(r.body, roles).blocking?.length ?? 0) > 0);
   return waiverFor({ files, gates, label, blockingFound, truncated: truncated(pr, files) });
+}
+
+// Whether the PR skips review (SPEC-review-per-item.md 2.6, 2.7): its item's choice says so, it is an item's PR into
+// develop, and no report of the App on it, on any commit, found a Critical or High.
+export function reviewSkipped({ pr, reviews, gates, apps, review }) {
+  if (!review?.skip || !skipScope(pr)) return false;
+  const roles = gates.github_apps.review.roles;
+  const bot = botLogin(apps.review);
+  return !reviews.filter((r) => r.user?.login === bot).some((r) => (readReviewReport(r.body, roles).blocking?.length ?? 0) > 0);
 }
 
 // The conditions of every PR, the docs PR included: branch, title, description and CI on the head commit.

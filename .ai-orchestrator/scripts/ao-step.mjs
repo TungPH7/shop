@@ -23,6 +23,9 @@ import { touchedPaths, unquotePath } from '../lib/quality/diff-paths.mjs';
 import { readProjectYaml } from '../lib/quality/approved-file.mjs';
 import { epicOfDocsBranch, readGates } from '../lib/quality/gates.mjs';
 import { withProjectPaths } from '../lib/quality/review-tiers.mjs';
+import { markBody, newestMark, projectReviewDefault, skipBody } from '../lib/quality/review-choice.mjs';
+import { findingId, readReviewReport } from '../lib/quality/pull-request.mjs';
+import { findingsSource, fixSubtask, fixTask, reportComment, reportLine, splitFindings } from '../lib/workflow/after-merge.mjs';
 import { matchesGlob } from '../lib/quality/glob.mjs';
 import { DOCKER_INFO, dockerAnswered } from '../lib/quality/maven.mjs';
 import { markReadyForReview, READY_PERMISSIONS } from '../lib/quality/pr-ready.mjs';
@@ -48,7 +51,7 @@ import { adfText, buildReviewPack, filesToQuote } from '../lib/workflow/review-p
 import { postKitCopyReports, readKitCopy, renderedReason } from '../lib/workflow/kit-copy.mjs';
 import { removeInstructions } from '../lib/workflow/review-tree.mjs';
 import { agentCommand, formatDecision, runGo } from '../lib/workflow/runner.mjs';
-import { CHANGES, appRolesOf, decideStep, dockerGate, seoMarkText } from '../lib/workflow/steps.mjs';
+import { CHANGES, appRoleOf, appRolesOf, decideStep, dockerGate, seoMarkText } from '../lib/workflow/steps.mjs';
 import { restoreWip, saveWip } from '../lib/workflow/wip.mjs';
 import { copyRunFiles, laneKeeper, removeNodeModules, runsSettings } from '../lib/workflow/lanes.mjs';
 import { installLane, pullsOfBranch, qaWatcher, runPlacer } from '../lib/workflow/lane-runs.mjs';
@@ -133,7 +136,10 @@ export function checkArgument(command, arg, space, extra) {
   // The description goes in the chat, never on the check line (human-loop spec 3.1).
   if (command === 'intake') return arg === undefined && extra === undefined ? null : '/ao-intake takes no argument on its check line: your description stays in the chat';
   if (extra !== undefined) return `/ao-${command} takes one argument`;
-  if (['review', 'fix'].includes(command)) return /^\d{1,7}$/.test(arg ?? '') ? null : `/ao-${command} takes a PR number, not ${arg ?? 'nothing'}`;
+  if (command === 'fix') return /^\d{1,7}$/.test(arg ?? '') ? null : `/ao-fix takes a PR number, not ${arg ?? 'nothing'}`;
+  // /ao-review <KEY> reviews after merge the PRs of an Epic's items, or of one item (SPEC-review-per-item.md section 4).
+  if (command === 'review' && /^\d{1,7}$/.test(arg ?? '')) return null;
+  if (command === 'review' && !/^[A-Z][A-Z0-9]*-\d{1,7}$/.test(arg ?? '')) return `/ao-review takes a PR number, or the key of an Epic or an item to review after merge, not ${arg ?? 'nothing'}`;
   if (command === 'status' && arg === undefined) return null;
   if (!/^[A-Z][A-Z0-9]*-\d{1,7}$/.test(arg ?? '')) return `/ao-${command} takes a Jira key such as ${space ?? 'DEMO'}-12, not ${arg ?? 'nothing'}`;
   if (space && !arg.startsWith(`${space}-`)) return `${arg} is not in the space ${space} of this project`;
@@ -307,6 +313,12 @@ async function main() {
     },
     // A file the agents of a release command wrote in .ai/runs/<release>/ (release-workflow T15).
     runFile: (k, name) => readRunFile(k, name),
+    // The reports of a review after merge in .ai/reviews/ whose name starts with `prefix` (SPEC-review-per-item.md 4.4).
+    reviews: (prefix) => {
+      const dir = join(projectDir, '.ai', 'reviews');
+      if (!existsSync(dir)) return {};
+      return Object.fromEntries(readdirSync(dir).filter((name) => name.startsWith(prefix) && name.endsWith('.md')).map((name) => [name, readFileSync(join(dir, name), 'utf8')]));
+    },
   };
   // The release commands read deployments with your gh login: the read token of ao-review may not (release-workflow T12).
   const userToken = RELEASE_COMMANDS.includes(command) ? readGitHubToken() : null;
@@ -314,7 +326,9 @@ async function main() {
   // A kit copy is compared with a head of another project, which your gh login reads (kit-copy-review spec 2.5).
   const peers = (setting('AO_KIT_PEERS', settings) ?? '').split(',').map((name) => name.trim()).filter(Boolean);
   const kitCopy = (pr) => readKitCopy({ pr, github, peer: (name) => createGitHubClient({ repo: name, token: readGitHubToken() }), peers, gates, apps, approvers, render: (sha, paths) => renderCheck(pr.number, sha, paths) });
-  const gatherAll = () => gatherFacts({ command, arg, extra, jira, github, deploys, history: developHistory, local: files, contract, mapping, roster, gates, apps, approvers, space, kitCopy, agentsPerRole: runs.agentsPerRole });
+  // The default of review of project.yaml (SPEC-review-per-item.md 2.1): an item with no review label follows it.
+  const reviewDefault = projectReviewDefault(readProjectYaml(projectDir));
+  const gatherAll = () => gatherFacts({ command, arg, extra, jira, github, deploys, history: developHistory, local: files, contract, mapping, roster, gates, apps, approvers, space, kitCopy, agentsPerRole: runs.agentsPerRole, reviewDefault });
   // /ao-preview also reads this machine: project.yaml, the preview that runs, the folder and the ports (spec 4.3).
   const gather = async () => {
     const gathered = await gatherAll();
@@ -526,6 +540,8 @@ async function main() {
         if (step.action === 'deploy-request') return deployRequest(step, { repo, userToken });
         if (step.action === 'kit-copy-reports') return kitCopyReports(step, { repo, appEnv });
         if (step.action === 'review-waiver') return reviewWaiverNote(step, { repo, appEnv });
+        if (step.action === 'review-skip') return reviewSkipNote(step, { repo, appEnv });
+        if (step.action === 'after-merge-post') return afterMergePost(step, { repo, appEnv, apps, mapping, contract, space, gates, appRoles });
         if (step.action === 'pr-ready') return prReady(step, { repo, settings });
         if (step.action === 'preview-start') return preview.start(step);
         if (step.action === 'preview-stop') return preview.stop().then(({ notes }) => notes);
@@ -797,6 +813,81 @@ async function reviewWaiverNote({ key, number, sha, waiver, level, files }, { re
   const github = createGitHubClient({ repo, token, write: true });
   await github.request('POST', `/pulls/${number}/reviews`, {}, { commit_id: sha, event: 'COMMENT', body: waiverBody({ id: waiver, level, files, key, sha }) });
   return [`Posted the waiver ${waiver} on the head ${sha.slice(0, 7)} of PR #${number}: no review runs.`];
+}
+
+// /ao-review of a PR whose item skips review (SPEC-review-per-item.md 3.1): the trace on its head, a COMMENT review of
+// the review App, with the critical files it changes. merge-gate and audit work the choice out again from Jira.
+async function reviewSkipNote({ key, number, sha, reason, critical }, { repo, appEnv }) {
+  const { token } = await installationToken({ ...appCredentials('review', { env: appEnv }), repo, permissions: { pull_requests: 'write' } });
+  const github = createGitHubClient({ repo, token, write: true });
+  await github.request('POST', `/pulls/${number}/reviews`, {}, { commit_id: sha, event: 'COMMENT', body: skipBody({ key, sha, reason, critical }) });
+  return [`Posted the trace of the review ${key} skips on the head ${sha.slice(0, 7)} of PR #${number}: no review runs.`];
+}
+
+// After the runs of /ao-review <KEY> (SPEC-review-per-item.md 4.5), with no agent: one fix Task for the Critical and High,
+// with the CI token; the mark of the review after merge on each PR, as the review App; the reports on KEY; the Medium
+// and Low to the findings Task of the Epic. Each step looks for what an earlier run of it made, so none is made twice.
+async function afterMergePost({ key, epic, head, base, pulls, items, files, reports: names }, { repo, appEnv, apps, mapping, contract, space, gates, appRoles }) {
+  const roles = gates.github_apps.review.roles;
+  const texts = Object.fromEntries(Object.entries(names).map(([role, name]) => [role, readFileSync(join(projectDir, '.ai', 'reviews', name), 'utf8')]));
+  const parsed = Object.fromEntries(Object.entries(texts).map(([role, text]) => [role, readReviewReport(text, roles)]));
+  const { blocking, minor } = splitFindings(parsed);
+  const jira = ciJira(mapping);
+  const notes = [];
+  const reviewOn = mapping.work_labels.review_on;
+  const typeOf = (id) => contract.work_types.find((type) => type.id === id).jira_issue_type;
+  let fix = null;
+  if (blocking.length > 0) {
+    const task = fixTask({ key, head, findings: blocking, pulls, roleOf: (where) => appRoleOf(where, appRoles) });
+    const jql = epic ? `project = "${space}" AND parent = "${epic}" AND labels = "${reviewOn}"` : `project = "${space}" AND labels = "${reviewOn}" ORDER BY created DESC`;
+    fix = (await jira.searchAll(jql, ['summary'])).find(({ fields }) => fields.summary === task.summary)?.key ?? null;
+    if (!fix) {
+      const prefix = mapping.work_labels.role_prefix;
+      const labels = [reviewOn, ...(task.roles.length === 1 ? [`${prefix}${task.roles[0]}`] : [])];
+      ({ key: fix } = await jira.request('POST', '/rest/api/3/issue', {}, { fields: { project: { key: space }, issuetype: { name: typeOf('task') }, summary: task.summary, description: markdownToAdf(task.description), labels, ...(epic && { parent: { key: epic } }) } }));
+      if (task.roles.length > 1) {
+        for (const role of task.roles) {
+          const sub = fixSubtask(role, key);
+          await jira.request('POST', '/rest/api/3/issue', {}, { fields: { project: { key: space }, issuetype: { name: typeOf('sub-task') }, summary: sub.summary, description: markdownToAdf(sub.description), labels: [`${prefix}${role}`], parent: { key: fix } } });
+        }
+      }
+      // The Epic waits for it, as for its findings Task.
+      if (epic) await jira.request('POST', '/rest/api/3/issueLink', {}, { type: { name: 'Blocks' }, inwardIssue: { key: fix }, outwardIssue: { key: epic } });
+      notes.push(`Made ${fix}: ${blocking.length} Critical or High to fix, label ${reviewOn}${task.roles.length > 1 ? `, one Sub-task each for ${task.roles.join(' and ')}` : task.roles.length === 1 ? `, ${prefix}${task.roles[0]}` : ', no role label: put one before /ao-build'}${epic ? `; it blocks ${epic}` : ''}.`);
+    }
+  }
+  const { token } = await installationToken({ ...appCredentials('review', { env: appEnv }), repo, permissions: { pull_requests: 'write' } });
+  const github = createGitHubClient({ repo, token, write: true });
+  const bot = `${apps.review}[bot]`;
+  for (const number of pulls) {
+    const mark = newestMark(await github.getAll(`/issues/${number}/comments`), { bot });
+    if (mark?.key === key && mark.head === head) continue;
+    await github.request('POST', `/issues/${number}/comments`, {}, { body: markBody({ key, head, blocking: blocking.length, fix }) });
+    notes.push(`Marked PR #${number}: reviewed after merge in ${key}${fix ? `, fixed by ${fix}` : ''}.`);
+  }
+  const path = `/rest/api/3/issue/${encodeURIComponent(key)}/comment`;
+  if (!(await jira.getAll(path, {}, 'comments')).some(({ body }) => adfText(body).startsWith(reportLine(key, head)))) {
+    await jira.request('POST', path, {}, { body: markdownToAdf(reportComment({ key, head, base, pulls, files, fix, reports: texts })) });
+    notes.push(`Posted both reports on ${key}.`);
+  }
+  if (minor.length > 0 && epic) {
+    const label = mapping.work_labels.findings;
+    let task = (await jira.searchAll(`project = "${space}" AND parent = "${epic}" AND labels = "${label}" ORDER BY created ASC`, ['summary']))[0]?.key ?? null;
+    if (!task) {
+      const { summary, description } = findingsTask({ epic });
+      ({ key: task } = await jira.request('POST', '/rest/api/3/issue', {}, { fields: { project: { key: space }, issuetype: { name: typeOf('task') }, summary, description: markdownToAdf(description), labels: [label], parent: { key: epic } } }));
+      await jira.request('POST', '/rest/api/3/issueLink', {}, { type: { name: 'Blocks' }, inwardIssue: { key: task }, outwardIssue: { key: epic } });
+      notes.push(`Made ${task}, the findings Task of ${epic}.`);
+    }
+    const source = findingsSource(key, head);
+    const comments = `/rest/api/3/issue/${encodeURIComponent(task)}/comment`;
+    if (!(await jira.getAll(comments, {}, 'comments')).some(({ body }) => adfText(body).includes(`Finding chưa sửa của ${source}`))) {
+      const listed = minor.map(({ role, severity, where, finding, asked }) => ({ role, severity, where, finding, id: findingId({ where, finding }), ...(asked && { asked }) }));
+      await jira.request('POST', comments, {}, { body: markdownToAdf(findingsComment({ key: items.join(', '), findings: listed, source })) });
+      notes.push(`Added the ${minor.length} Medium and Low to ${task}.`);
+    }
+  }
+  return notes;
 }
 
 // The first step of /ao-review on a draft PR (human-loop spec 4.6): marks it ready as the ao-dev App, which opened it.
@@ -1202,7 +1293,7 @@ async function watchCommand(args, values) {
   const quietMin = values.quiet === undefined ? WATCH.quietMs / 60_000 : Number(values.quiet);
   if (!(quietMin >= 5 && quietMin <= 240)) return console.log(`STOP: --quiet is ${values.quiet}: minutes, from 5 to 240`);
   const options = { quietMs: quietMin * 60_000 };
-  const files = watchEffects({ projectDir, fs: { existsSync, readdirSync, readFileSync, statSync }, alive });
+  const files = watchEffects({ projectDir, fs: { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync, rmSync }, alive });
   // The board as the dispatcher reads it: ao-step status --json, with the tokens of this project.
   const board = dispatcherEffects({ kitDir, projectDir, spawn, fs: { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, appendFileSync, rmSync }, alive });
   const flaggedNow = async () => (await board.readBoard()).items.filter(({ flagged }) => flagged).map(({ key, flag }) => ({ key, flag }));
@@ -1211,7 +1302,7 @@ async function watchCommand(args, values) {
 
   if (values.once) {
     const now = Date.now();
-    const snapshot = { now, locks: files.locks(), logAt: files.logAt, dispatcher: files.dispatcher(), events: files.newEvents(state.offsets).events };
+    const snapshot = { now, locks: files.locks(), logAt: files.logAt, lastTool: files.lastTool, dispatcher: files.dispatcher(), events: files.newEvents(state.offsets, state.sizes).events };
     let flagged = null;
     let boardFailed = null;
     try {
@@ -1224,6 +1315,18 @@ async function watchCommand(args, values) {
     return;
   }
 
+  // One watcher a project (review of shop PR #92): a second one ends at once, and the first reports for both.
+  const claimed = files.claim(process.pid);
+  if (!claimed.ok) return console.log(`STOP: a watcher already runs in this project (process ${claimed.pid}); it reports for every command`);
+  try {
+    await watchLoop({ files, flaggedNow, options, state, stamp });
+  } finally {
+    files.release(process.pid);
+  }
+}
+
+async function watchLoop({ files, flaggedNow, options, state: first, stamp }) {
+  let state = first;
   let lastBoard = 0;
   let failures = 0;
   let failingSince = null;
@@ -1232,7 +1335,7 @@ async function watchCommand(args, values) {
   let before = [];
   for (;;) {
     const now = Date.now();
-    const { events, offsets } = files.newEvents(state.offsets);
+    const { events, offsets, sizes } = files.newEvents(state.offsets, state.sizes);
     const locks = files.locks();
     const after = locks.filter(({ alive: live }) => live).map(({ name }) => name);
     let flagged = null;
@@ -1250,10 +1353,10 @@ async function watchCommand(args, values) {
     }
     const boardFailed = failures > 0 ? { count: failures, reason, since: failingSince } : null;
     before = after;
-    const result = look({ now, locks, logAt: files.logAt, dispatcher: files.dispatcher(), events, flagged, boardFailed }, new Set(state.told), options);
+    const result = look({ now, locks, logAt: files.logAt, lastTool: files.lastTool, dispatcher: files.dispatcher(), events, flagged, boardFailed }, new Set(state.told), options);
     idleSince = result.running ? null : (idleSince ?? now);
     const ends = idleSince !== null && now - idleSince >= WATCH.endMs;
-    state = nextWatchState(state, { marks: result.marks, offsets });
+    state = nextWatchState(state, { marks: result.marks, forget: result.forget, offsets, sizes });
     mkdirSync(dirname(files.stateFile), { recursive: true });
     writeFileSync(files.stateFile, `${JSON.stringify(state, null, 2)}\n`);
     if (result.tell.length > 0 || ends) {

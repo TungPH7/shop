@@ -8,7 +8,7 @@ import { adfText, readChecks } from '../tracker/facts.mjs';
 import { raiseFlag } from '../tracker/sync.mjs';
 import { touchedPaths } from './diff-paths.mjs';
 import { docsPullRequest, readDocsFacts } from './docs-pr.mjs';
-import { approved, botLogin, docsUnmet, docsVerdict, isBackMerge, isReleasePr, notesPaths, notesVersion, protectedPaths, releaseTags, truncated, unmetConditions, waiverLabel } from './merge-gate.mjs';
+import { approved, botLogin, docsUnmet, docsVerdict, isBackMerge, isReleasePr, notesPaths, notesVersion, protectedPaths, readReleasePulls, releaseReviewMissing, releaseTags, reviewChoiceOf, truncated, unmetConditions, waiverLabel } from './merge-gate.mjs';
 
 // Who may merge a PR that needs no approval of yours, a merge back or the release report: merge-gate, with ao-merge
 // (Pilot 3, spec 2.9), or with ao-dev only in a project that has no ao-merge yet; or you. In a project with ao-merge, a
@@ -30,7 +30,7 @@ export function mergedPull(pulls, sha, branch) {
 // merge back: the release tags of the repository, [{ name, sha }], as releaseTags reads them, and `brought`, the audit of
 // the commits it brought from main, as auditBroughtBack gives it. A High you accepted counts on the day of the merge
 // (Pilot 3, spec 2.9 part 5).
-export function decideAudit({ sha, branch, message, pull, files = [], reviews = [], checks, gates, apps, approvers, docs, space, tags = [], brought, label = null }) {
+export function decideAudit({ sha, branch, message, pull, files = [], reviews = [], checks, gates, apps, approvers, docs, space, tags = [], brought, label = null, review = null, releasePulls }) {
   const short = sha.slice(0, 7);
   // Every commit comes through a PR. The release report of /ao-ship did not, before Pilot 3, spec 2.9: whoever held the
   // token of ao-dev, an agent included, could change the release notes that way.
@@ -67,16 +67,18 @@ export function decideAudit({ sha, branch, message, pull, files = [], reviews = 
     if (pull.user?.login !== botLogin(apps.dev)) problems.push(`PR #${pull.number} is the report of v${notes}, which ao-dev opens, but ${pull.user?.login} opened it`);
     if (!mergers(apps, approvers).includes(merger)) problems.push(`PR #${pull.number} is the report of v${notes}, which merge-gate or you merge, but ${merger} merged it`);
   } else if (parseBranch(pull.head.ref)?.kind === 'release') {
-    // Every item of a release passed review on its own PR: CI and your approval are enough.
+    // Every item of a release passed review on its own PR, or after its merge when it skipped review there
+    // (SPEC-review-per-item.md section 5): CI and your approval are enough.
     missing = [
       ...(checks.green ? [] : [`CI green ${at}`]),
       ...(approved({ pr: pull, reviews, approvers, authorApproves: true }) ? [] : [`approval ${at}`]),
+      ...(isReleasePr(pull) ? releaseReviewMissing(releasePulls) : []),
     ];
   } else {
     const verdict = docsVerdict({ pr: pull, files, gates, apps, docs, space });
     if (verdict?.docs) missing = docsUnmet({ pr: pull, checks, reviews, verdict });
     else {
-      missing = unmetConditions({ pr: pull, checks, reviews, gates, apps, approvers, authorApproves: true, on: pull.merged_at?.slice(0, 10), files, label });
+      missing = unmetConditions({ pr: pull, checks, reviews, gates, apps, approvers, authorApproves: true, on: pull.merged_at?.slice(0, 10), files, label, review });
       if (verdict && missing.length > 0) missing[missing.length - 1] += ` (${verdict.reason})`;
     }
     const paths = protectedPaths(files, gates);
@@ -160,6 +162,10 @@ export async function readAuditFacts({ github, docs, sha, branch, gates, apps, a
     checks: await readChecks(github, pull.head.sha),
     docs: docsKey && docs ? { ...(await readDocsFacts({ github, jira: docs.jira, key: docsKey, branch: pull.head.ref })), passage: docs.passage } : undefined,
     label: await waiverLabel({ pr: pull, files, gates, docs }),
+    // The choice of its item at the time of the merge, with the default of project.yaml on develop just before it
+    // (SPEC-review-per-item.md 2.5).
+    review: await reviewChoiceOf({ pr: pull, docs, github, at: pull.merged_at, ref: parents[0] }),
+    ...(isReleasePr(pull) && { releasePulls: await readReleasePulls(github, pull, { apps }) }),
     parents,
     // A merge back passes once the head of main it merged was a version you shipped (Pilot 3, spec 2.9), and every
     // commit it brought from main passed audit (review round 3 of shop PR #13).

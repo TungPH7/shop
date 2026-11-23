@@ -56,6 +56,16 @@ export async function planRound({ items, pulls = [], merged = [], scope, live = 
   });
   const open = inScope.filter((item) => !nextCommand(item, prOf.get(item.key) ?? null).done);
   const done = open.every((item) => item.workType === 'epic' && item.state === 'in-progress');
+  // Every item of the Epic is Done or Cancelled but its findings Task, which the board leaves out once Done: the PRs of
+  // its items that skipped review wait for their review after merge (SPEC-review-per-item.md 6.1). It costs agents, so
+  // the dispatcher does not start it: it waits for you to type it.
+  const epic = scope.epic ? inScope.find((item) => item.key === scope.epic && item.workType === 'epic' && item.state === 'in-progress') : null;
+  if (epic && inScope.every((item) => item === epic || item.findings)) {
+    const due = await decide('review', epic.key);
+    if (due.go) {
+      waiting.push({ key: epic.key, waits: 'you', text: `/ao-review ${epic.key}`, reason: 'every item is done, and the PRs of some skipped review: review them after merge before a release', rank: -1 });
+    }
+  }
 
   const runnable = [];
   candidates.sort((a, b) => PRIORITY.indexOf(a.command) - PRIORITY.indexOf(b.command) || a.rank - b.rank);

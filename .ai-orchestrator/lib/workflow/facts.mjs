@@ -6,9 +6,11 @@
 import { createHash } from 'node:crypto';
 import { docsPullRequest, gatePassage } from '../quality/docs-pr.mjs';
 import { docsRule } from '../quality/gates.mjs';
-import { approved, botLogin, protectedPaths } from '../quality/merge-gate.mjs';
+import { approved, botLogin, protectedPaths, releasePullsOf, releaseReviewMissing } from '../quality/merge-gate.mjs';
 import { acceptedRisks, findingCounts, findingId, openFindings, readReviewReport, stillBlocking } from '../quality/pull-request.mjs';
-import { pathTier, requiredReviewRoles } from '../quality/review-tiers.mjs';
+import { criticalNames, pathTier, requiredReviewRoles } from '../quality/review-tiers.mjs';
+import { newestMark, reviewChoice, reviewLabels, skipOnHead, skippedReview } from '../quality/review-choice.mjs';
+import { touchedPaths } from '../quality/diff-paths.mjs';
 import { waiverOnHead } from '../quality/waivers.mjs';
 import { parseBranch } from '../tracker/conventions.mjs';
 import { adfText, agentValues, changesRequestedOn, githubGuards, sameRepo, jiraGuards, qaEnvironment, readChecks, notQaSigners, readLatestQaReport, wipHolders } from '../tracker/facts.mjs';
@@ -87,6 +89,9 @@ export async function readWorkItem(jira, key, ctx) {
     // A level the agents' account lowered after it created the item does not count: only you lower one (reviews of shop
     // PR #79). levelIgnored: the lower label left out, which /ao-status and the review name.
     ...levelFacts(trustedLevel(labels, histories, { agentAccount: agentsAccount(mapping), prefix: mapping.work_labels.level_prefix })),
+    // Whether the item skips review (SPEC-review-per-item.md section 2), as merge-gate works it out: its labels, with a
+    // change of the agents' account towards skipping left out, and the default of project.yaml (ctx.reviewDefault).
+    review: reviewChoice({ labels, histories, agentAccount: agentsAccount(mapping), names: reviewLabels(mapping), projectDefault: ctx.reviewDefault }),
     // An ops Task, and the basic auth you gave devops for it (kit followups, batch 4 item 14).
     ops: labels.includes(mapping.work_labels.ops),
     envAuth: labels.includes(mapping.work_labels.env_auth),
@@ -265,6 +270,10 @@ export async function readPullRequest(github, number, { gates, apps, approvers =
     minorFindings: minor,
     // The review waived by rule whose trace is on the head, or null (C1 spec 3.4).
     waiverOnHead: waiverOnHead(reviews, { bot: botLogin(apps.review), head }),
+    // The item whose skipped review is traced on the head, or null, and the critical files gate ③ names then
+    // (SPEC-review-per-item.md 3.1, 3.2).
+    skipOnHead: skipOnHead(reviews, { bot: botLogin(apps.review), head }),
+    critical: criticalNames(files, gates),
     changesRequested: changesRequestedOn(reviews, head),
     approved: approved({ pr, reviews, approvers }),
   };
@@ -342,13 +351,18 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
   if (command === 'status' && !arg) return { command, space: ctx.space, ...(await readSpace({ jira, github, local, ...ctx })) };
   if (command === 'intake') return { command, space: ctx.space, item: null, intake: await readIntake({ jira, ...ctx }) };
   // A release command works on the release, not on one item (release-workflow spec 2.6, 2.7).
-  if (command === 'release') return { command, arg, extra: ctx.extra, space: ctx.space, item: null, runKey: arg ?? 'release', release: await readCutFacts({ jira, ...ctx }) };
+  if (command === 'release') return { command, arg, extra: ctx.extra, space: ctx.space, item: null, runKey: arg ?? 'release', release: await readCutFacts({ jira, github, ...ctx }) };
   // vX.Y.0 ships a release; vX.Y.Z with Z > 0 a hotfix (spec 2.7, 2.8).
   if (command === 'ship' && /\.0$/.test(arg)) return { command, arg, space: ctx.space, item: null, runKey: arg, ship: await readShipFacts({ jira, github, local, ...ctx, version: arg }) };
   if (command === 'ship') return { command, arg, space: ctx.space, item: null, runKey: arg, hotfix: await readHotfixFacts({ jira, github, ...ctx, version: arg }) };
   if (command === 'rollback') return { command, arg, extra: ctx.extra, space: ctx.space, item: null, runKey: `rollback-${arg}`, rollback: await readRollbackFacts({ ...ctx, environment: arg, extra: ctx.extra }) };
   let pr = null;
   let key = arg;
+  // /ao-review <KEY> reviews after merge the PRs of an Epic's items, or of one item (SPEC-review-per-item.md section 4).
+  if (command === 'review' && !/^\d+$/.test(String(arg))) {
+    const item = await readWorkItem(jira, arg, ctx);
+    return { command, arg, space: ctx.space, item, pr: null, afterMerge: await readAfterMerge(github, item, ctx, local), run: local.runState(item.key) };
+  }
   if (['review', 'fix'].includes(command)) {
     pr = await readPullRequest(github, Number(arg), ctx);
     key = pr.docsEpic ?? parseBranch(pr.headRef)?.key ?? null;
@@ -407,7 +421,48 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
     run: local.runState(item.key),
     seoApproved: seoApprovedOf(local, item.key),
     // /ao-status <Epic> adds the runs of its items, for the cost per acceptance criterion (C1 spec section 7).
+    // /ao-status <Epic> says which PRs of its items wait for their review after merge (SPEC-review-per-item.md 6.3).
+    ...(command === 'status' && item.workType === 'epic' && { afterMerge: await readAfterMerge(github, item, ctx, local) }),
     ...(command === 'status' && item.workType === 'epic' && { itemRuns: (item.children ?? []).flatMap((child) => [child, ...(child.subtasks ?? [])]).map(({ key: k }) => ({ key: k, runs: local.runState(k)?.runs ?? [] })) }),
+  };
+}
+
+// What /ao-review <KEY> reads (SPEC-review-per-item.md section 4): the PRs of the Epic's Stories, Tasks and Bugs, or of
+// the item, merged into develop, each with whether it skipped review on its last head and its newest mark of a review
+// after merge; for those still to review, their files, the commit before the oldest merge and the head of develop; the
+// items not merged yet; and the reports runs saved in .ai/reviews/ under <KEY>- (local.reviews).
+export async function readAfterMerge(github, item, { gates, apps }, local) {
+  const KINDS = ['story', 'task', 'bug'];
+  const items = item.workType === 'epic' ? (item.children ?? []).filter(({ workType }) => KINDS.includes(workType)) : KINDS.includes(item.workType) ? [item] : [];
+  const bot = botLogin(apps.review);
+  const all = items.length > 0 ? (await github.getAll('/pulls', { state: 'all', sort: 'created', direction: 'desc' })).filter(sameRepo) : [];
+  const pulls = [];
+  for (const { key } of items) {
+    for (const pr of all.filter((p) => p.merged_at && p.base?.ref === 'develop' && parseBranch(p.head.ref)?.key === key)) {
+      const skipped = skippedReview(await github.getAll(`/pulls/${pr.number}/reviews`), { bot, head: pr.head.sha });
+      const mark = skipped ? newestMark(await github.getAll(`/issues/${pr.number}/comments`), { bot }) : null;
+      pulls.push({ number: pr.number, key, merged: true, skipped, mark, mergeCommit: pr.merge_commit_sha, mergedAt: pr.merged_at });
+    }
+  }
+  const todo = pulls.filter(({ skipped, mark }) => skipped && !mark);
+  const files = [];
+  let base = null;
+  let head = null;
+  if (todo.length > 0) {
+    for (const { number } of todo) files.push(...touchedPaths(await github.getAll(`/pulls/${number}/files`)));
+    const oldest = [...todo].sort((a, b) => Date.parse(a.mergedAt) - Date.parse(b.mergedAt))[0];
+    base = (await github.get(`/commits/${oldest.mergeCommit}`)).parents?.[0]?.sha ?? null;
+    head = (await github.get('/git/ref/heads/develop')).object?.sha ?? null;
+  }
+  const merged = new Set(pulls.map(({ key }) => key));
+  return {
+    pulls,
+    files: [...new Set(files)].sort(),
+    base,
+    head,
+    levels: Object.fromEntries(items.map(({ key, level }) => [key, level ?? null])),
+    waiting: items.filter(({ key, state }) => !merged.has(key) && !['done', 'cancelled'].includes(state)).map(({ key }) => key),
+    reports: local.reviews?.(`${item.key}-`) ?? {},
   };
 }
 
@@ -456,7 +511,7 @@ async function readWip(jira, item, { contract, mapping, agentsPerRole }) {
 }
 
 // /ao-status without a key: every item of the space not done, the open PRs, and the runs in .ai/runs/.
-async function readSpace({ jira, github, deploys, local, contract, mapping, roster, space }) {
+async function readSpace({ jira, github, deploys, local, contract, mapping, roster, space, reviewDefault }) {
   const names = agentNames(contract, mapping);
   const found = await jira.searchAll(`project = "${space}" AND statusCategory != Done ORDER BY Rank ASC`, ['summary', 'issuetype', 'status', 'labels', 'parent', 'comment']);
   const items = found.map(({ key, fields }) => {
@@ -475,6 +530,11 @@ async function readSpace({ jira, github, deploys, local, contract, mapping, rost
       flag: flagged ? (latestFlagComment(comments)?.kind ?? 'other') : null,
       parent: fields.parent?.key ?? null,
       requests: openRequests(comments, names, { agentAccount: agentsAccount(mapping) }),
+      // Whether it skips review, from its labels as they are (SPEC-review-per-item.md 3.4): /ao-run then goes on from its
+      // draft PR to /ao-review, which reads the labels with their changelog before it skips anything.
+      review: reviewChoice({ labels, names: reviewLabels(mapping), projectDefault: reviewDefault }),
+      // The findings Task of an Epic: /ao-run counts the Epic done with it still open (SPEC-review-per-item.md 6.1).
+      findings: labels.includes(mapping.work_labels.findings),
     };
   });
   // An Epic In Progress with its items: /ao-status says when it can be completed.
@@ -549,7 +609,7 @@ export async function readQaFacts(deploys, pr, { contract, mapping }) {
 // newest tag. history(tag) resolves the first-parent history of develop after `tag` (all of it when tag is null), as
 // `git log --first-parent --reverse --format=%H%x09%s` prints it. An item Jira does not answer for holds the cut point
 // back like any item not Done.
-export async function readCutFacts({ jira, deploys, history, contract, mapping, space }) {
+export async function readCutFacts({ jira, github, deploys, history, contract, mapping, space, apps }) {
   if (!deploys) throw new Error('/ao-release reads deployments with your gh login: log in with gh auth login');
   const facts = await readReleaseFacts({ github: deploys, jira, mapping, space });
   const tags = facts.tags.map(({ name }) => name);
@@ -568,7 +628,11 @@ export async function readCutFacts({ jira, deploys, history, contract, mapping, 
   const items = Object.fromEntries(Object.entries(info).map(([key, { state }]) => [key, state]));
   const { cut, included, after, cancelled } = cutPoint({ commits, items, epics });
   const withInfo = (list) => list.map(({ key }) => ({ key, ...info[key] }));
-  return { latestTag: newest, version: nextRelease(tags), commits: commits.length, cut, included: withInfo(included), after: withInfo(after), cancelled: withInfo(cancelled), versions: facts.versions, releaseBranches: facts.releaseBranches };
+  // The PRs up to the cut point that skipped review and still wait for their review after merge (SPEC-review-per-item.md
+  // 5.3): gate ④ names them, though the release branch goes to Staging anyway.
+  const upTo = cut ? commits.slice(0, commits.findIndex(({ sha }) => sha === cut.sha) + 1).map(({ sha }) => sha) : [];
+  const reviewGaps = github && apps && upTo.length > 0 ? releaseReviewMissing(await releasePullsOf(github, upTo, { apps, bases: ['develop'] })) : [];
+  return { latestTag: newest, version: nextRelease(tags), commits: commits.length, cut, included: withInfo(included), after: withInfo(after), cancelled: withInfo(cancelled), versions: facts.versions, releaseBranches: facts.releaseBranches, reviewGaps };
 }
 
 const NOTES = ['changelog.md', 'pr-description.md', 'fix-version.md'];
@@ -585,7 +649,7 @@ function notesStale(runs) {
 // Critical and High still open with its Fix Version, the newest regression on record in .ai/runs/<version>/ (the
 // commit it ran on, from state.json, and the Result line of its report), the files the branch changed since that
 // commit, whether devops wrote its notes, and the open release PR. local: { runState(key), runFile(key, name) }.
-export async function readShipFacts({ jira, github, deploys, local, contract, mapping, space, version }) {
+export async function readShipFacts({ jira, github, deploys, local, contract, mapping, space, version, apps }) {
   if (!deploys) throw new Error('/ao-ship reads deployments with your gh login: log in with gh auth login');
   const release = await readReleaseFacts({ github: deploys, jira, mapping, space });
   if (release.running.staging) release.running.staging.projectText = await projectAt(deploys, release.running.staging.sha);
@@ -605,7 +669,12 @@ export async function readShipFacts({ jira, github, deploys, local, contract, ma
     changedSinceRegression = [...new Set(files.flatMap(({ filename, previous_filename: previous }) => (previous ? [previous, filename] : [filename])))].sort();
   }
   const pr = (await github.getAll('/pulls', { state: 'open', base: 'main' })).find(({ head }) => head.ref === `release/${version}`);
+  // The PRs the release brings that skipped review and still wait for their review after merge (SPEC-review-per-item.md
+  // 5.3): /ao-ship stops before gate ⑤, where merge-gate would hold the release PR for them.
+  const compare = branch && apps ? await maybe(() => github.get(`/compare/main...${branch.name}`)) : null;
+  const reviewGaps = !compare ? [] : releaseReviewMissing((compare.total_commits ?? 0) >= 250 ? null : await releasePullsOf(github, (compare.commits ?? []).map(({ sha }) => sha), { apps, bases: ['develop', branch.name] }));
   return {
+    reviewGaps,
     version,
     branch,
     staging: release.running.staging,

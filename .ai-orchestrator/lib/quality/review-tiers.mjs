@@ -36,6 +36,10 @@ function nameTier(name, gates) {
   return 'normal';
 }
 
+// The names among the files of a PR that are critical, a renamed file by both names: what gate ③ names when the item
+// skips review (SPEC-review-per-item.md 3.2).
+export const criticalNames = (files, gates) => namesOf(files).filter((name) => nameTier(name, gates) === 'critical');
+
 // The gates with the project's own paths of a tier added: review.critical_paths and review.sensitive_paths of its
 // .ai-orchestrator/project.yaml, a protected file the kit copy leaves alone (review of shop PR #79). They only add to
 // the lists of the kit, so no project lowers a tier. config: the parsed project.yaml, or null.

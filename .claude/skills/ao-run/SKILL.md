@@ -28,6 +28,9 @@ disable-model-invocation: true
 - When it reports, tell the human, in Vietnamese, each line that waits for them, with numbered clicks or the command
   they type, and each other line with its reason and what would fix it. Read `.ai/runs/<KEY>/last.md` of an item whose
   command ended to say what its agents did and cost. Then start the watcher again, while the dispatcher still runs.
+- A line `waiting for you: <EPIC>: /ao-review <EPIC>` means every item of the Epic is done and the PRs of some skipped
+  review (SPEC-review-per-item.md): they wait for their review after merge before a release. It costs agents, so the
+  dispatcher does not start it: tell the human, and run `/ao-review <EPIC>` only when they type it.
 - When the human clicks a gate, approves a PR or answers a question, the dispatcher sees it at its next round, within 2
   minutes, and goes on by itself: do not start the next command yourself.
 - To end it, run `node .ai-orchestrator/scripts/ao-step.mjs run --stop`: the commands that run go on to their end, and

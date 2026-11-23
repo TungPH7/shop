@@ -126,6 +126,11 @@ work_labels:
   # section ## SEO, and /ao-intake on a Task or a Bug that touches a page of an app with seo: true. Its build, review and
   # QA are pointed to that part. Never a role label, though seo is a role.
   seo: ao-seo
+  # Review per item (SPEC-review-per-item.md section 2): ao-review-on reviews the PR of the item, ao-review-skip skips its
+  # review, whatever review.default of project.yaml says; with both, review. You put them; ba puts them only when it
+  # creates the items of a plan you approved that says so. No agent adds or removes one afterwards.
+  review_on: ao-review-on
+  review_skip: ao-review-skip
 
 # One Kanban board per space. Columns follow the board_column of the contract states; the first is the Kanban backlog.
 # `{key}` is the space key. Cancelled items have no column, so they leave the board.
