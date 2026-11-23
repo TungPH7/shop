@@ -2,10 +2,14 @@ package com.tungph7.learnpostgres.feature.category.controller;
 
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.not;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -134,6 +138,32 @@ class CategoryApiDocsIntegrationTest extends AbstractContainerBaseTest {
         // Next to oneOf, a $ref or a type would also have to hold, and a null is no StoreCategory.
         .andExpect(jsonPath(SCHEMAS + ".StoreProduct.properties.category.$ref").doesNotExist())
         .andExpect(jsonPath(SCHEMAS + ".StoreProduct.properties.category.type").doesNotExist());
+  }
+
+  @Test
+  void apiDocs_describeTheDisplayOrderOfTheAddAndTheEdit_asAnOptionalInteger() throws Exception {
+    for (String request : List.of("CreateCategoryRequest", "UpdateCategoryRequest")) {
+      String field = SCHEMAS + "." + request + ".properties.displayOrder";
+      apiDocs()
+          .andExpect(jsonPath(field + ".type", hasItem("integer")))
+          .andExpect(jsonPath(field + ".type", hasItem("null")))
+          .andExpect(jsonPath(field + ".format").value("int32"))
+          .andExpect(jsonPath(field + ".minimum").value(0))
+          .andExpect(jsonPath(field + ".maximum").value(9999))
+          .andExpect(jsonPath(field + ".description").value(containsString("keeps")))
+          .andExpect(
+              jsonPath(SCHEMAS + "." + request + ".required[*]", not(hasItem("displayOrder"))));
+    }
+  }
+
+  @Test
+  void apiDocs_describeTheDisplayOrderOfTheAdminCategories_asARequiredInteger() throws Exception {
+    for (String response : List.of("AdminCategory", "AdminCategoryListItem")) {
+      apiDocs()
+          .andExpect(
+              jsonPath(SCHEMAS + "." + response + ".properties.displayOrder.type").value("integer"))
+          .andExpect(jsonPath(SCHEMAS + "." + response + ".required", hasItem("displayOrder")));
+    }
   }
 
   private ResultActions apiDocs() throws Exception {

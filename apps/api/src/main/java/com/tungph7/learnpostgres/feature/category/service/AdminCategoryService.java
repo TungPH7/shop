@@ -92,8 +92,8 @@ public class AdminCategoryService {
   }
 
   /**
-   * Every category, visible or hidden, in the order of names, each with the number of its products
-   * (AC1): one statement (NFR2).
+   * Every category, visible or hidden, by display order then name (AC5 of SHOP-95), each with the
+   * number of its products (AC1): one statement (NFR2).
    */
   public ItemList<AdminCategoryListItem> list() {
     return new ItemList<>(
@@ -101,8 +101,9 @@ public class AdminCategoryService {
   }
 
   /**
-   * Adds a category from a valid request, and logs the add at INFO with the operation, the id, the
-   * slug and the correlation id, never the request (NFR11).
+   * Adds a category from a valid request, with display order 0 when the request has none (AC4 of
+   * SHOP-95), and logs the add at INFO with the operation, the id, the slug and the correlation id,
+   * never the request (NFR11).
    *
    * @throws ConflictException {@code CATEGORY_NAME_DUPLICATED} when another category has the name;
    *     {@code CATEGORY_SLUG_DUPLICATED} when the slug typed is taken, or when a generated slug
@@ -133,8 +134,11 @@ public class AdminCategoryService {
   }
 
   /**
-   * Edits a category with every field of a valid request, and returns it with its new version.
-   * Logged at INFO with the operation, the id, the slug and the correlation id (NFR11).
+   * Edits a category with every field of a valid request, and returns it with its new version. An
+   * absent or {@code null} display order keeps the stored one (AC4 of SHOP-95): Hibernate writes
+   * every column in its UPDATE, so it writes back the number it read. A valid display order is
+   * whole and from 0 to 9999, so {@code intValueExact()} never throws. Logged at INFO with the
+   * operation, the id, the slug and the correlation id (NFR11).
    *
    * <p>The checks, in the order of the API Contract, each before anything is written: the category
    * exists (404), the version is the stored one (409 {@code OPTIMISTIC_LOCK_CONFLICT}), no other
@@ -172,6 +176,9 @@ public class AdminCategoryService {
       category.setSlug(request.slug());
     }
     category.setStatus(request.status());
+    if (request.displayOrder() != null) {
+      category.setDisplayOrder(request.displayOrder().intValueExact());
+    }
     try {
       repository.saveAndFlush(category);
     } catch (DataIntegrityViolationException e) {
@@ -281,7 +288,7 @@ public class AdminCategoryService {
         request.name(),
         slug,
         request.status() != null ? request.status() : CategoryStatus.VISIBLE,
-        0);
+        request.displayOrder() != null ? request.displayOrder().intValueExact() : 0);
   }
 
   /**

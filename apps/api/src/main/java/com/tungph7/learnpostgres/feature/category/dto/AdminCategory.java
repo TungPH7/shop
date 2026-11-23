@@ -8,6 +8,8 @@ import com.tungph7.learnpostgres.common.dto.ApiInstant;
 import com.tungph7.learnpostgres.feature.category.domain.Category;
 import com.tungph7.learnpostgres.feature.category.domain.Category.CategoryStatus;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * A category as the admin API returns it: {@code AdminCategory} of the API Contract of the plan of
  * SHOP-81, with {@code displayOrder} of the plan of SHOP-95. {@code version} is sent back when the
@@ -20,7 +22,7 @@ public record AdminCategory(
     String name,
     String slug,
     CategoryStatus status,
-    int displayOrder,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int displayOrder,
     @ApiInstant Instant createdAt,
     @ApiInstant Instant updatedAt,
     long version) {

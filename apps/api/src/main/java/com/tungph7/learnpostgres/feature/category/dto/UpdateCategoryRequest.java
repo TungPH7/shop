@@ -1,5 +1,10 @@
 package com.tungph7.learnpostgres.feature.category.dto;
 
+import java.math.BigDecimal;
+
+import jakarta.validation.constraints.Digits;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -7,6 +12,8 @@ import jakarta.validation.constraints.Size;
 import com.tungph7.learnpostgres.common.text.FormText;
 import com.tungph7.learnpostgres.common.text.SlugFormat;
 import com.tungph7.learnpostgres.feature.category.domain.Category.CategoryStatus;
+
+import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
  * The body of {@code PUT /api/admin/categories/{id}}: {@code UpdateCategoryInput} of the API
@@ -17,6 +24,9 @@ import com.tungph7.learnpostgres.feature.category.domain.Category.CategoryStatus
  * @param name trimmed, then 1–60 characters
  * @param slug required, the slug format, at most 100 characters ({@link SlugFormat})
  * @param status required
+ * @param displayOrder absent or {@code null}: the stored number is kept, never set to 0, since a
+ *     tab of {@code admin} opened before SHOP-95 sends no display order (AC4, NFR12 of SHOP-95);
+ *     otherwise checked as in {@link CreateCategoryRequest}
  * @param version the version of the category the form read: another one is a 409 (NFR12)
  */
 public record UpdateCategoryRequest(
@@ -27,6 +37,16 @@ public record UpdateCategoryRequest(
         String name,
     @NotBlank(message = "must not be blank") @SlugFormat String slug,
     @NotNull(message = "must not be null") CategoryStatus status,
+    @Schema(
+            types = {"integer", "null"},
+            format = "int32",
+            minimum = "0",
+            maximum = "9999",
+            description = CreateCategoryRequest.DISPLAY_ORDER_DOC)
+        @Digits(integer = Integer.MAX_VALUE, fraction = 0, message = "must be a whole number")
+        @Min(value = 0, message = "must be at least 0")
+        @Max(value = CreateCategoryRequest.DISPLAY_ORDER_MAX, message = "must be at most 9999")
+        BigDecimal displayOrder,
     @NotNull(message = "must not be null") Long version) {
 
   /** Trims the name, as the form does. */

@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -111,7 +112,7 @@ class AdminCategoryControllerWebMvcTest {
         ArgumentCaptor.forClass(CreateCategoryRequest.class);
     verify(service).create(sent.capture());
     assertThat(sent.getValue())
-        .isEqualTo(new CreateCategoryRequest("Áo khoác", "ao-khoac", CategoryStatus.HIDDEN));
+        .isEqualTo(new CreateCategoryRequest("Áo khoác", "ao-khoac", CategoryStatus.HIDDEN, null));
   }
 
   @Test
@@ -120,7 +121,7 @@ class AdminCategoryControllerWebMvcTest {
 
     post("{\"name\":\"Áo khoác\",\"slug\":null}").andExpect(status().isCreated());
 
-    verify(service).create(new CreateCategoryRequest("Áo khoác", null, null));
+    verify(service).create(new CreateCategoryRequest("Áo khoác", null, null, null));
   }
 
   @Test
@@ -192,6 +193,79 @@ class AdminCategoryControllerWebMvcTest {
   @Test
   void create_withAnUnknownStatus_returns400() throws Exception {
     post("{\"name\":\"Áo thun\",\"status\":\"DELETED\"}").andExpect(status().isBadRequest());
+
+    verify(service, never()).create(any());
+  }
+
+  // ============================================================
+  // POST: the display order (SHOP-95: AC1, AC4, NFR7)
+  // ============================================================
+
+  @ParameterizedTest(name = "displayOrder {0}")
+  @ValueSource(strings = {"0", "5", "9999"})
+  void create_passesAValidDisplayOrderAsSent(String displayOrder) throws Exception {
+    when(service.create(any(CreateCategoryRequest.class))).thenReturn(sample());
+
+    post("{\"name\":\"Áo khoác\",\"displayOrder\":" + displayOrder + "}")
+        .andExpect(status().isCreated());
+
+    verify(service)
+        .create(new CreateCategoryRequest("Áo khoác", null, null, new BigDecimal(displayOrder)));
+  }
+
+  @Test
+  void create_withANullDisplayOrder_passesNullForTheServiceToFillIn() throws Exception {
+    when(service.create(any(CreateCategoryRequest.class))).thenReturn(sample());
+
+    post("{\"name\":\"Áo khoác\",\"displayOrder\":null}").andExpect(status().isCreated());
+
+    verify(service).create(new CreateCategoryRequest("Áo khoác", null, null, null));
+  }
+
+  @ParameterizedTest(name = "AC4 displayOrder {0}")
+  @CsvSource({
+    "-1, must be at least 0",
+    "10000, must be at most 9999",
+    "1.5, must be a whole number",
+    "99999999999, must be at most 9999"
+  })
+  void create_withAWrongDisplayOrder_returns400OnItNextToTheBlankName(
+      String displayOrder, String message) throws Exception {
+    post("{\"name\":\"  \",\"displayOrder\":" + displayOrder + "}")
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+        .andExpect(jsonPath("$.errors", hasSize(2)))
+        .andExpect(jsonPath("$.errors[*].field", containsInAnyOrder("name", "displayOrder")))
+        .andExpect(jsonPath("$.errors[?(@.field == 'displayOrder')].message").value(message));
+
+    verify(service, never()).create(any());
+  }
+
+  /**
+   * -1.5 breaks two rules, but {@code GlobalExceptionHandler} reports one error per field, the
+   * fraction first ({@code RULE_ORDER}), as for the price -1.5 of a product. The API Contract of
+   * SHOP-95 asks for two items here: raised on SHOP-96, the handler is left as it is.
+   */
+  @Test
+  void create_withMinusOnePointFive_givesOneErrorOnTheDisplayOrder_theFraction() throws Exception {
+    post("{\"name\":\"Áo khoác\",\"displayOrder\":-1.5}")
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.errors", hasSize(1)))
+        .andExpect(jsonPath("$.errors[0].field").value("displayOrder"))
+        .andExpect(jsonPath("$.errors[0].message").value("must be a whole number"));
+
+    verify(service, never()).create(any());
+  }
+
+  @ParameterizedTest(name = "AC4 displayOrder {0}")
+  @ValueSource(strings = {"\"abc\"", "true", "[1]", "{}"})
+  void create_withADisplayOrderThatIsNotANumber_returns400MalformedRequest(String displayOrder)
+      throws Exception {
+    post("{\"name\":\"Áo khoác\",\"displayOrder\":" + displayOrder + "}")
+        .andExpect(status().isBadRequest())
+        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+        .andExpect(jsonPath("$.code").value("MALFORMED_REQUEST"));
 
     verify(service, never()).create(any());
   }

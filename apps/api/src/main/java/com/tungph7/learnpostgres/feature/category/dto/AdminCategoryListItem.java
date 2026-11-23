@@ -8,6 +8,8 @@ import com.tungph7.learnpostgres.common.dto.ApiInstant;
 import com.tungph7.learnpostgres.feature.category.domain.Category.CategoryStatus;
 import com.tungph7.learnpostgres.feature.category.repository.CategoryQueryRepository.AdminRow;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * One category of the admin list: {@code AdminCategoryListItem} of the API Contract of the plan of
  * SHOP-81, {@code AdminCategory} with the number of its products.
@@ -20,7 +22,7 @@ public record AdminCategoryListItem(
     String name,
     String slug,
     CategoryStatus status,
-    int displayOrder,
+    @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int displayOrder,
     long productCount,
     @ApiInstant Instant createdAt,
     @ApiInstant Instant updatedAt,
