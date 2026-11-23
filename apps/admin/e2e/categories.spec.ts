@@ -65,11 +65,13 @@ function rowOf(page: Page, name: string): Locator {
 }
 
 /**
- * The cells of the row of a category: name, slug, status, product count, then the
- * actions. Retried until the list shows them, as it reloads after a save.
+ * The cells of the row of a category: name, slug, status, product count, the display
+ * order, then the actions. The categories of this file set no display order, so it is
+ * 0 (AC8 of SHOP-95; plan of SHOP-95, Architecture Decisions 10). Retried until the list
+ * shows them, as it reloads after a save.
  */
 async function expectCells(row: Locator, cells: string[]): Promise<void> {
-  await expect(row.getByRole('cell')).toHaveText([...cells, /Edit/]);
+  await expect(row.getByRole('cell')).toHaveText([...cells, '0', /Edit/]);
 }
 
 /**

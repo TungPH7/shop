@@ -24,6 +24,7 @@ const listItem = {
   slug: 'ao-khoac',
   status: 'VISIBLE',
   productCount: 3,
+  displayOrder: 0,
   createdAt: '2026-11-22T02:10:00.000Z',
   updatedAt: '2026-11-22T02:15:30.000Z',
   version: 0,
@@ -67,6 +68,24 @@ describe('adminCategorySchema', () => {
 
     expect(adminCategorySchema.parse(category)).toEqual(category);
   });
+
+  it.each([0, 1, 9999])('reads the display order %d of the api', (displayOrder) => {
+    expect(adminCategorySchema.parse({ ...listItem, displayOrder }).displayOrder).toBe(
+      displayOrder,
+    );
+  });
+
+  it('NFR12 rejects a category without a display order, from an api of before the Epic, never reading it as 0', () => {
+    const category = { ...listItem } as Partial<typeof listItem>;
+    delete category.displayOrder;
+
+    expect(adminCategorySchema.safeParse(category).success).toBe(false);
+    expect(adminCategoryListSchema.safeParse({ items: [category] }).success).toBe(false);
+  });
+
+  it.each([-1, 10000, 1.5, null, '3'])('rejects the display order %j', (displayOrder) => {
+    expect(adminCategorySchema.safeParse({ ...listItem, displayOrder }).success).toBe(false);
+  });
 });
 
 describe('categoryFormSchema', () => {
@@ -76,6 +95,7 @@ describe('categoryFormSchema', () => {
       slug: '',
       slugEdited: false,
       status: 'VISIBLE',
+      displayOrder: '0',
     });
   });
 
@@ -84,6 +104,7 @@ describe('categoryFormSchema', () => {
       name: 'Áo khoác nữ',
       slug: null,
       status: 'VISIBLE',
+      displayOrder: 0,
     });
   });
 
@@ -132,9 +153,42 @@ describe('categoryFormSchema', () => {
 
     it('reports every invalid field at once', () => {
       expect(
-        errorsOf(categoryFormSchema, values({ name: ' ', slug: 'A B', slugEdited: true })),
-      ).toEqual({ name: 'nameRequired', slug: 'slugFormat' });
+        errorsOf(
+          categoryFormSchema,
+          values({ name: ' ', slug: 'A B', slugEdited: true, displayOrder: '-1' }),
+        ),
+      ).toEqual({ name: 'nameRequired', slug: 'slugFormat', displayOrder: 'displayOrderInvalid' });
     });
+  });
+
+  describe('the display order of S2.3', () => {
+    it.each([
+      ['0', 0],
+      ['7', 7],
+      [' 7 ', 7],
+      ['007', 7],
+      ['9999', 9999],
+    ])('AC1 AC3 sends %j as the number %d', (displayOrder, sent) => {
+      expect(categoryFormSchema.parse(values({ displayOrder })).displayOrder).toBe(sent);
+    });
+
+    it.each(['', '   '])(
+      'AC3 asks for a display order when it is %j, never reading it as 0',
+      (displayOrder) => {
+        expect(errorsOf(categoryFormSchema, values({ displayOrder }))).toEqual({
+          displayOrder: 'displayOrderRequired',
+        });
+      },
+    );
+
+    it.each(['-1', '10000', '1.5', '1,5', 'abc', '+5', '1e3', '٣', '99999999999999999999'])(
+      'AC3 rejects the display order %j',
+      (displayOrder) => {
+        expect(errorsOf(categoryFormSchema, values({ displayOrder }))).toEqual({
+          displayOrder: 'displayOrderInvalid',
+        });
+      },
+    );
   });
 });
 
@@ -143,6 +197,7 @@ const saved: AdminCategory = {
   name: 'Áo',
   slug: 'ao',
   status: 'VISIBLE',
+  displayOrder: 3,
   createdAt: listItem.createdAt,
   updatedAt: listItem.updatedAt,
   version: 2,
@@ -155,7 +210,12 @@ describe('categoryFormValuesOf', () => {
       slug: 'ao',
       slugEdited: true,
       status: 'VISIBLE',
+      displayOrder: '3',
     });
+  });
+
+  it('writes the saved display order in plain digits, with no thousands separator', () => {
+    expect(categoryFormValuesOf({ ...saved, displayOrder: 1000 }).displayOrder).toBe('1000');
   });
 });
 
@@ -165,7 +225,25 @@ describe('categoryEditSchema', () => {
       name: 'Áo nam',
       slug: 'ao',
       status: 'VISIBLE',
+      displayOrder: 3,
     });
+  });
+
+  it('AC2 sends the new display order, the name, slug and status unchanged', () => {
+    expect(categoryEditSchema.parse({ ...categoryFormValuesOf(saved), displayOrder: '0' })).toEqual(
+      { name: 'Áo', slug: 'ao', status: 'VISIBLE', displayOrder: 0 },
+    );
+  });
+
+  it.each(['', '-1', '10000', '1.5'])('AC3 rejects the display order %j', (displayOrder) => {
+    expect(
+      Object.keys(errorsOf(categoryEditSchema, { ...categoryFormValuesOf(saved), displayOrder })),
+    ).toEqual(['displayOrder']);
+  });
+
+  it('types the display order of its body as a number, which add and edit always send', () => {
+    expectTypeOf<z.output<typeof categoryEditSchema>['displayOrder']>().toEqualTypeOf<number>();
+    expectTypeOf<z.output<typeof categoryFormSchema>['displayOrder']>().toEqualTypeOf<number>();
   });
 
   it('AC6 sends the new status', () => {

@@ -10,6 +10,7 @@ import { InputField } from '@/components/ui/field';
 import { SegmentedChoice } from '@/components/ui/segmented-control';
 import { paths } from '@/config/paths';
 import {
+  CATEGORY_FIELD_API_ERRORS,
   categoryFailureOf,
   type CategoryFormFailure,
   useCreateCategory,
@@ -34,7 +35,7 @@ import { isSameSlug, slugFromName } from '@/lib/text/slug';
 
 // S2 of docs/specs/SHOP-81/design.md, in add or edit mode: the back link (S2.2), the
 // title (S2.3), the banner (S2.4), the name (S2.5), the slug (S2.6), the status (S2.7),
-// Cancel and Save (S2.8, S2.9). Outside ProtectedRoute: until the login Epic, the basic
+// the display order (S2.3 of docs/specs/SHOP-95/design.md), Cancel and Save (S2.8, S2.9). Outside ProtectedRoute: until the login Epic, the basic
 // auth of the host guards admin.
 //
 // The schema checks every field on save (AC3); the api is the final check, and its
@@ -182,7 +183,11 @@ function CategoryFormView<Input extends CreateCategoryInput | CategoryEditInput>
     switch (failure.kind) {
       case 'fields':
         failure.fields.forEach((field, index) => {
-          setError(field, { type: 'server', message: 'invalid' }, { shouldFocus: index === 0 });
+          setError(
+            field,
+            { type: 'server', message: CATEGORY_FIELD_API_ERRORS[field] },
+            { shouldFocus: index === 0 },
+          );
         });
         return;
       case 'nameTaken':
@@ -301,6 +306,19 @@ function CategoryFormView<Input extends CreateCategoryInput | CategoryEditInput>
               onChange={field.onChange}
             />
           )}
+        />
+
+        {/* Text, not type=number: "abc" is kept to be reported, no spinner, no wheel
+            change, and no maxLength, so 10000 can be typed and rejected (S2.3). */}
+        <InputField
+          label={t('form.displayOrder.label')}
+          type="text"
+          inputMode="numeric"
+          autoComplete="off"
+          required
+          hint={t('form.displayOrder.hint')}
+          error={errorText(errors.displayOrder?.message)}
+          {...register('displayOrder')}
         />
 
         <div className="product-form__actions">

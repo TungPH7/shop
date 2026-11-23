@@ -13,6 +13,7 @@
     "slug": "URL slug",
     "status": "Status",
     "productCount": "Products",
+    "displayOrder": "Display order",
     "actions": "Actions"
   },
   "status": {
@@ -56,6 +57,10 @@
       "legend": "Status",
       "hint": "Hidden: customers can't see the category and its page returns 404. Its products stay on sale."
     },
+    "displayOrder": {
+      "label": "Display order",
+      "hint": "A whole number from 0 to 9999. Lower numbers come first; the same number sorts by name."
+    },
     "cancel": "Cancel",
     "submitAdd": "Add category",
     "submitEdit": "Save changes",
@@ -78,7 +83,9 @@
       "slugTooLong": "Slug must be 100 characters or fewer",
       "slugTaken": "This slug is already in use",
       "slugNotGenerated": "Every slug made from this name is taken. Type a slug yourself.",
-      "invalid": "This value isn't valid."
+      "invalid": "This value isn't valid.",
+      "displayOrderRequired": "Enter a display order",
+      "displayOrderInvalid": "Display order must be a whole number from 0 to 9999"
     }
   }
 }

@@ -6,7 +6,7 @@ import { CategoryForm } from '@/features/category/components/category-form';
 import { type AdminCategory } from '@/features/category/model/category';
 import { clearAll, getSnapshot } from '@/lib/notifications/notification-store';
 import { server } from '@/testing/msw/server';
-import { renderWithProviders, screen, waitFor } from '@/testing/render';
+import { renderWithProviders, type RenderResultWithStore, screen, waitFor } from '@/testing/render';
 import { testI18n } from '@/testing/test-i18n';
 
 // S2 of docs/specs/SHOP-81/design.md, in add and edit mode, against fakes of
@@ -21,6 +21,7 @@ const saved: AdminCategory = {
   name: 'Áo',
   slug: 'ao',
   status: 'VISIBLE',
+  displayOrder: 2,
   createdAt: '2026-11-22T02:10:00.000Z',
   updatedAt: '2026-11-22T02:10:00.000Z',
   version: 3,
@@ -76,7 +77,247 @@ const field = {
   slug: () => screen.getByRole('textbox', { name: 'URL slug' }),
   hidden: () => screen.getByRole('radio', { name: 'Hidden' }),
   visible: () => screen.getByRole('radio', { name: 'Visible' }),
+  displayOrder: () => screen.getByRole('textbox', { name: /Display order/ }),
 };
+
+const DISPLAY_ORDER_REQUIRED = 'Enter a display order';
+const DISPLAY_ORDER_INVALID = 'Display order must be a whole number from 0 to 9999';
+
+/** Types `value` into the display order field, emptied first. */
+async function typeDisplayOrder(user: RenderResultWithStore['user'], value: string) {
+  await user.clear(field.displayOrder());
+  if (value !== '') await user.type(field.displayOrder(), value);
+}
+
+describe('the display order field S2.3 of SHOP-95', () => {
+  it('AC1 starts at 0 in add mode, a text field of digits after the status, required, with its hint', () => {
+    renderAdd();
+
+    const input = field.displayOrder();
+    expect(input).toHaveValue('0');
+    expect(input).toHaveAttribute('type', 'text');
+    expect(input).toHaveAttribute('inputmode', 'numeric');
+    expect(input).toHaveAttribute('autocomplete', 'off');
+    expect(input).toBeRequired();
+    expect(input).not.toHaveAttribute('maxlength');
+    expect(input).toHaveAccessibleDescription(
+      'A whole number from 0 to 9999. Lower numbers come first; the same number sorts by name.',
+    );
+    // Last of the fields: after the status, before Cancel (S2.3).
+    expect(
+      field.hidden().compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it('AC1 sends the number typed', async () => {
+    const bodies = fakeSave('post');
+    const { user } = renderAdd();
+
+    await user.type(field.name(), 'Bao tay');
+    await typeDisplayOrder(user, '5');
+    await user.click(screen.getByRole('button', { name: 'Add category' }));
+
+    await screen.findByText('The category list');
+    expect(bodies).toEqual([{ name: 'Bao tay', slug: null, status: 'VISIBLE', displayOrder: 5 }]);
+  });
+
+  it('AC1 sends 0 when the field is left as it was', async () => {
+    const bodies = fakeSave('post');
+    const { user } = renderAdd();
+
+    await user.type(field.name(), 'Dép');
+    await user.click(screen.getByRole('button', { name: 'Add category' }));
+
+    await screen.findByText('The category list');
+    expect(bodies).toEqual([{ name: 'Dép', slug: null, status: 'VISIBLE', displayOrder: 0 }]);
+  });
+
+  it.each([
+    ['', DISPLAY_ORDER_REQUIRED],
+    ['   ', DISPLAY_ORDER_REQUIRED],
+    ['-1', DISPLAY_ORDER_INVALID],
+    ['10000', DISPLAY_ORDER_INVALID],
+    ['1.5', DISPLAY_ORDER_INVALID],
+    ['1,5', DISPLAY_ORDER_INVALID],
+    ['abc', DISPLAY_ORDER_INVALID],
+  ])(
+    'AC3 does not add with the display order %j: the error under it, focused, everything kept',
+    async (value, message) => {
+      const bodies = fakeSave('post');
+      const { user } = renderAdd();
+
+      await user.type(field.name(), 'Bao tay');
+      await user.click(field.hidden());
+      await typeDisplayOrder(user, value);
+      await user.click(screen.getByRole('button', { name: 'Add category' }));
+
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      expect(field.displayOrder()).toHaveAttribute('aria-invalid', 'true');
+      expect(field.displayOrder()).toHaveAccessibleDescription(
+        expect.stringContaining(message) as string,
+      );
+      expect(field.displayOrder()).toHaveFocus();
+      expect(field.displayOrder()).toHaveValue(value);
+      expect(field.name()).toHaveValue('Bao tay');
+      expect(field.hidden()).toBeChecked();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(bodies).toEqual([]);
+    },
+  );
+
+  it.each([
+    ['0', 0],
+    ['9999', 9999],
+    [' 007 ', 7],
+  ])('AC3 adds with the display order %j once corrected, sending %d', async (value, sent) => {
+    const bodies = fakeSave('post');
+    const { user } = renderAdd();
+
+    await user.type(field.name(), 'Bao tay');
+    await typeDisplayOrder(user, '10000');
+    await user.click(screen.getByRole('button', { name: 'Add category' }));
+    await screen.findByText(DISPLAY_ORDER_INVALID);
+    await typeDisplayOrder(user, value);
+    await user.click(screen.getByRole('button', { name: 'Add category' }));
+
+    await screen.findByText('The category list');
+    expect(bodies).toEqual([
+      { name: 'Bao tay', slug: null, status: 'VISIBLE', displayOrder: sent },
+    ]);
+  });
+
+  it('focuses the first invalid field in the order Name, Slug, Display order', async () => {
+    const bodies = fakeSave('post');
+    const { user } = renderAdd();
+
+    await typeDisplayOrder(user, '-1');
+    await user.click(screen.getByRole('button', { name: 'Add category' }));
+
+    expect(await screen.findByText('Enter a category name')).toBeInTheDocument();
+    expect(screen.getByText(DISPLAY_ORDER_INVALID)).toBeInTheDocument();
+    expect(field.name()).toHaveFocus();
+    expect(bodies).toEqual([]);
+  });
+
+  it('AC3 shows its own message under the field for a 400 of the api on displayOrder, focused, with no banner', async () => {
+    fakeSave('post', () =>
+      problem(400, 'VALIDATION_FAILED', {
+        errors: [{ field: 'displayOrder', message: 'must be at most 9999' }],
+      }),
+    );
+    const { user } = renderAdd();
+
+    await user.type(field.name(), 'Bao tay');
+    await typeDisplayOrder(user, '5');
+    await user.click(screen.getByRole('button', { name: 'Add category' }));
+
+    expect(await screen.findByText(DISPLAY_ORDER_INVALID)).toBeInTheDocument();
+    expect(field.displayOrder()).toHaveFocus();
+    expect(field.displayOrder()).toHaveValue('5');
+    expect(screen.queryByText("This value isn't valid.")).not.toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('focuses the name for a 400 of the api on the name and the display order', async () => {
+    fakeSave('post', () =>
+      problem(400, 'VALIDATION_FAILED', {
+        errors: [{ field: 'displayOrder' }, { field: 'name' }],
+      }),
+    );
+    const { user } = renderAdd();
+
+    await user.type(field.name(), 'Bao tay');
+    await user.click(screen.getByRole('button', { name: 'Add category' }));
+
+    expect(await screen.findByText(DISPLAY_ORDER_INVALID)).toBeInTheDocument();
+    expect(screen.getByText("This value isn't valid.")).toBeInTheDocument();
+    expect(field.name()).toHaveFocus();
+  });
+
+  it('shows the general error of S2.4 for 400 MALFORMED_REQUEST', async () => {
+    fakeSave('post', () => problem(400, 'MALFORMED_REQUEST'));
+    const { user } = renderAdd();
+
+    await user.type(field.name(), 'Bao tay');
+    await user.click(screen.getByRole('button', { name: 'Add category' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't save. Please try again.");
+    expect(field.displayOrder()).not.toHaveAttribute('aria-invalid');
+  });
+
+  it('AC2 starts edit mode at the saved display order, in plain digits', () => {
+    renderEdit({ ...saved, displayOrder: 1000 });
+
+    expect(field.displayOrder()).toHaveValue('1000');
+  });
+
+  it('AC2 sends the new display order, the name, slug and status unchanged', async () => {
+    const bodies = fakeSave('put');
+    const { user } = renderEdit({ ...saved, displayOrder: 0 });
+
+    expect(field.displayOrder()).toHaveValue('0');
+    await typeDisplayOrder(user, '3');
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await screen.findByText('The category list');
+    expect(bodies).toEqual([
+      { name: 'Áo', slug: 'ao', status: 'VISIBLE', displayOrder: 3, version: 3 },
+    ]);
+    expect(getSnapshot().map(({ message }) => message)).toEqual(['Category saved']);
+  });
+
+  it.each([
+    ['', DISPLAY_ORDER_REQUIRED],
+    ['-1', DISPLAY_ORDER_INVALID],
+    ['10000', DISPLAY_ORDER_INVALID],
+    ['1.5', DISPLAY_ORDER_INVALID],
+  ])('AC3 does not save the edit with the display order %j', async (value, message) => {
+    const bodies = fakeSave('put');
+    const { user } = renderEdit();
+
+    await user.type(field.name(), ' nam');
+    await typeDisplayOrder(user, value);
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(field.displayOrder()).toHaveFocus();
+    expect(field.displayOrder()).toHaveValue(value);
+    expect(field.name()).toHaveValue('Áo nam');
+    expect(bodies).toEqual([]);
+  });
+
+  it.each([
+    ['0', 0],
+    ['9999', 9999],
+  ])('AC3 saves the edit with the display order %j', async (value, sent) => {
+    const bodies = fakeSave('put');
+    const { user } = renderEdit();
+
+    await typeDisplayOrder(user, value);
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+
+    await screen.findByText('The category list');
+    expect(bodies).toEqual([
+      { name: 'Áo', slug: 'ao', status: 'VISIBLE', displayOrder: sent, version: 3 },
+    ]);
+  });
+
+  it('shows its label, hint and errors in Vietnamese', async () => {
+    await testI18n.changeLanguage('vi');
+    const { user } = renderAdd();
+
+    const input = screen.getByRole('textbox', { name: /Thứ tự hiển thị/ });
+    expect(input).toHaveAccessibleDescription(
+      'Số nguyên từ 0 đến 9999. Số nhỏ hiện trước; cùng số thì xếp theo tên.',
+    );
+    await user.clear(input);
+    await user.click(screen.getByRole('button', { name: 'Thêm danh mục' }));
+    expect(await screen.findByText('Nhập thứ tự hiển thị')).toBeInTheDocument();
+    await user.type(input, '1.5');
+    await user.click(screen.getByRole('button', { name: 'Thêm danh mục' }));
+    expect(await screen.findByText('Thứ tự là số nguyên từ 0 đến 9999')).toBeInTheDocument();
+  });
+});
 
 describe('CategoryForm in add mode', () => {
   it('has the title, the subtitle and the back link of S2.2 and S2.3', () => {
@@ -113,7 +354,9 @@ describe('CategoryForm in add mode', () => {
     await user.click(screen.getByRole('button', { name: 'Add category' }));
 
     expect(await screen.findByText('The category list')).toBeInTheDocument();
-    expect(bodies).toEqual([{ name: 'Áo khoác nữ', slug: null, status: 'VISIBLE' }]);
+    expect(bodies).toEqual([
+      { name: 'Áo khoác nữ', slug: null, status: 'VISIBLE', displayOrder: 0 },
+    ]);
     expect(getSnapshot().map(({ kind, message }) => ({ kind, message }))).toEqual([
       { kind: 'success', message: 'Category added' },
     ]);
@@ -131,7 +374,9 @@ describe('CategoryForm in add mode', () => {
     await user.click(screen.getByRole('button', { name: 'Add category' }));
 
     await screen.findByText('The category list');
-    expect(bodies).toEqual([{ name: 'Áo khoác', slug: 'ao-nam', status: 'HIDDEN' }]);
+    expect(bodies).toEqual([
+      { name: 'Áo khoác', slug: 'ao-nam', status: 'HIDDEN', displayOrder: 0 },
+    ]);
   });
 
   it.each([
@@ -309,7 +554,9 @@ describe('CategoryForm in edit mode', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(await screen.findByText('The category list')).toBeInTheDocument();
-    expect(bodies).toEqual([{ name: 'Áo nam', slug: 'ao', status: 'VISIBLE', version: 3 }]);
+    expect(bodies).toEqual([
+      { name: 'Áo nam', slug: 'ao', status: 'VISIBLE', displayOrder: 2, version: 3 },
+    ]);
     expect(getSnapshot().map(({ message }) => message)).toEqual(['Category saved']);
   });
 
@@ -332,7 +579,9 @@ describe('CategoryForm in edit mode', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await screen.findByText('The category list');
-    expect(bodies).toEqual([{ name: 'Áo', slug: 'ao-nam', status: 'VISIBLE', version: 3 }]);
+    expect(bodies).toEqual([
+      { name: 'Áo', slug: 'ao-nam', status: 'VISIBLE', displayOrder: 2, version: 3 },
+    ]);
   });
 
   it('AC6 sends the Hidden status', async () => {
@@ -343,7 +592,9 @@ describe('CategoryForm in edit mode', () => {
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await screen.findByText('The category list');
-    expect(bodies).toEqual([{ name: 'Áo', slug: 'ao', status: 'HIDDEN', version: 3 }]);
+    expect(bodies).toEqual([
+      { name: 'Áo', slug: 'ao', status: 'HIDDEN', displayOrder: 2, version: 3 },
+    ]);
   });
 
   it.each(['', 'Ao', 'áo', 'ao nam', '-ao'])('AC3 does not save the slug %j', async (slug) => {

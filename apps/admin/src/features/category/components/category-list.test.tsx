@@ -22,6 +22,7 @@ const shirts: AdminCategoryListItem = {
   name: 'Áo',
   slug: 'ao',
   status: 'VISIBLE',
+  displayOrder: 0,
   productCount: 3,
   createdAt: '2026-11-22T02:10:00.000Z',
   updatedAt: '2026-11-22T02:10:00.000Z',
@@ -98,8 +99,8 @@ describe('CategoryList', () => {
           .map((cell) => cell.textContent),
       ),
     ).toEqual([
-      ['Áo', 'ao', 'Visible', '3', 'EditDelete'],
-      ['Phụ kiện', 'phu-kien', 'Hidden', '0', 'EditDelete'],
+      ['Áo', 'ao', 'Visible', '3', '0', 'EditDelete'],
+      ['Phụ kiện', 'phu-kien', 'Hidden', '0', '0', 'EditDelete'],
     ]);
     expect(screen.getByRole('region', { name: 'Category list' })).toHaveAttribute(
       'aria-busy',
@@ -121,9 +122,71 @@ describe('CategoryList', () => {
       ['URL slug', 'col'],
       ['Status', 'col'],
       ['Products', 'col'],
+      ['Display order', 'col'],
       ['Actions', 'col'],
     ]);
     expect(screen.getByRole('table', { name: 'Category list' })).toBeInTheDocument();
+  });
+
+  it('AC5 AC8 shows the display order of each row after the products, in plain digits and in the order of the api', async () => {
+    fakeApi([
+      { ...shirts, id: 'c-1', name: 'Quần', productCount: 1200, displayOrder: 0 },
+      { ...shirts, id: 'c-2', name: 'Bao tay', displayOrder: 1 },
+      { ...shirts, id: 'c-3', name: 'Áo', displayOrder: 1000 },
+    ]);
+    renderWithProviders(<CategoryList />);
+    await screen.findByText('Quần', { selector: '.table__name' });
+
+    const rows = screen.getAllByRole('row').slice(1);
+    expect(rows.map((row) => within(row).getAllByRole('cell')[0]?.textContent)).toEqual([
+      'Quần',
+      'Bao tay',
+      'Áo',
+    ]);
+    const orderCells = rows.map((row) => within(row).getAllByRole('cell')[4]);
+    expect(orderCells.map((cell) => cell?.textContent)).toEqual(['0', '1', '1000']);
+    expect(orderCells.every((cell) => cell?.classList.contains('table__num'))).toBe(true);
+    expect(within(rowOf('Quần')).getAllByRole('cell')[3]).toHaveTextContent('1,200');
+  });
+
+  it('AC5 shows the display order with no thousands separator in Vietnamese too, under its header', async () => {
+    await testI18n.changeLanguage('vi');
+    fakeApi([{ ...shirts, productCount: 1200, displayOrder: 1000 }]);
+    renderWithProviders(<CategoryList />);
+    await screen.findByText('Áo', { selector: '.table__name' });
+
+    const header = screen.getByRole('columnheader', { name: 'Thứ tự hiển thị' });
+    expect(header).toHaveClass('table__num');
+    const cells = within(rowOf('Áo')).getAllByRole('cell');
+    expect(cells[3]).toHaveTextContent('1.200');
+    expect(cells[4]).toHaveTextContent(/^1000$/);
+  });
+
+  it('spans the six columns with each skeleton row and with the empty message (S1.2)', async () => {
+    server.use(http.get('*/admin/categories', () => new Promise<Response>(() => undefined)));
+    const { unmount } = renderWithProviders(<CategoryList />);
+
+    const region = screen.getByRole('region', { name: 'Category list' });
+    region.querySelectorAll('tbody tr').forEach((row) => {
+      expect(row.querySelectorAll('td')).toHaveLength(6);
+    });
+    unmount();
+
+    fakeApi([]);
+    renderWithProviders(<CategoryList />);
+    const empty = await screen.findByRole('status');
+    expect(empty.closest('td')).toHaveAttribute('colspan', '6');
+  });
+
+  it('NFR12 shows the error with Try again for a list without the display order, never a 0', async () => {
+    const legacy: Record<string, unknown> = { ...shirts };
+    delete legacy['displayOrder'];
+    server.use(http.get('*/admin/categories', () => HttpResponse.json({ items: [legacy] })));
+    renderWithProviders(<CategoryList />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the categories.");
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    expect(screen.queryByText('Áo', { selector: '.table__name' })).not.toBeInTheDocument();
   });
 
   it('AC1 shows the labels in Vietnamese', async () => {

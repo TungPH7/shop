@@ -16,13 +16,20 @@ export const CATEGORY_STATUSES = ['VISIBLE', 'HIDDEN'] as const;
 export const categoryStatusSchema = z.enum(CATEGORY_STATUSES);
 export type CategoryStatus = z.infer<typeof categoryStatusSchema>;
 
+/** The range of a display order, lower numbers first (docs/specs/SHOP-95, ADR-0006). */
+export const DISPLAY_ORDER_MIN = 0;
+export const DISPLAY_ORDER_MAX = 9999;
+
 // One category, as POST, GET and PUT of /api/admin/categories/{id} answer. `version`
-// goes back with an edit (NFR12).
+// goes back with an edit (NFR12). `displayOrder` is required: an answer without it, from
+// an api of before SHOP-95 while a release rolls out, fails the load of S1 or S2 with Try
+// again, never showing 0 in its place (NFR12 of docs/specs/SHOP-95/spec.md).
 export const adminCategorySchema = z.object({
   id: z.string(),
   name: z.string(),
   slug: z.string(),
   status: categoryStatusSchema,
+  displayOrder: z.number().int().min(DISPLAY_ORDER_MIN).max(DISPLAY_ORDER_MAX),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
   version: z.number().int().nonnegative(),
@@ -36,7 +43,8 @@ export const adminCategoryListItemSchema = adminCategorySchema.extend({
 export type AdminCategoryListItem = z.infer<typeof adminCategoryListItemSchema>;
 
 // ItemList<AdminCategoryListItem>: every category in one answer, in the order of the api,
-// by name as Vietnamese sorts it, then id (NFR17). admin never sorts it again.
+// by display order, then by name as Vietnamese sorts it, then id (AC5 of SHOP-95, NFR17
+// of SHOP-81). admin never sorts it again.
 export const adminCategoryListSchema = z.object({
   items: z.array(adminCategoryListItemSchema),
 });
@@ -48,9 +56,35 @@ export const CATEGORY_NAME_MAX_LENGTH = 60;
 export const CATEGORY_SLUG_FALLBACK = 'danh-muc';
 
 /** The error codes of the form; the component shows `form.errors.<code>`. */
-export type CategoryFormError = 'nameRequired' | 'nameTooLong' | 'slugFormat' | 'slugTooLong';
+export type CategoryFormError =
+  | 'nameRequired'
+  | 'nameTooLong'
+  | 'slugFormat'
+  | 'slugTooLong'
+  | 'displayOrderRequired'
+  | 'displayOrderInvalid';
 
 const error = (message: CategoryFormError) => ({ message });
+
+/** Digits 0–9 only: no sign, no separator, no fraction, no exponent (S2.3). */
+const DIGITS = /^[0-9]+$/;
+
+/**
+ * The display order field of S2.3 of docs/specs/SHOP-95/design.md: the text as typed,
+ * trimmed, then whole digits from 0 to 9999, sent as a number ("007" sends 7). Empty is
+ * an error of its own, never read as 0; any other wrong value, -1, 10000, 1.5, 1,5 or
+ * "abc", has the one message, and 1.5 is never rounded.
+ */
+const displayOrderFieldSchema = z
+  .string()
+  .trim()
+  // `abort` stops at an empty field, so it has one error, the one asking for a number.
+  .min(1, { ...error('displayOrderRequired'), abort: true })
+  .refine(
+    (text) => DIGITS.test(text) && Number(text) <= DISPLAY_ORDER_MAX,
+    error('displayOrderInvalid'),
+  )
+  .transform(Number);
 
 const categoryFieldsSchema = z.object({
   name: z
@@ -62,6 +96,7 @@ const categoryFieldsSchema = z.object({
   /** Whether the admin typed the slug; until then the api generates it (S2.6). */
   slugEdited: z.boolean(),
   status: categoryStatusSchema,
+  displayOrder: displayOrderFieldSchema,
 });
 
 type CategoryFields = z.output<typeof categoryFieldsSchema>;
@@ -71,6 +106,8 @@ interface CategoryBody<Slug extends string | null> {
   name: string;
   slug: Slug;
   status: CategoryStatus;
+  /** Always sent, add and edit alike (plan of SHOP-95, Architecture Decisions 9). */
+  displayOrder: number;
 }
 
 /**
@@ -103,6 +140,7 @@ function categorySchema<Slug extends string | null>(
           name: form.name,
           slug: slugOf(form),
           status: form.status,
+          displayOrder: form.displayOrder,
         }),
       )
   );
@@ -144,20 +182,25 @@ export interface UpdateCategoryInput extends CategoryEditInput {
   version: number;
 }
 
-/** A new category: Visible (Category Rules), the slug generated. */
+/** A new category: Visible (Category Rules), the slug generated, display order 0 (AC1). */
 export const categoryFormDefaults: CategoryFormValues = {
   name: '',
   slug: '',
   slugEdited: false,
   status: 'VISIBLE',
+  displayOrder: String(DISPLAY_ORDER_MIN),
 };
 
-/** The fields of S2 in edit mode: the saved category, its slug counted as typed. */
+/**
+ * The fields of S2 in edit mode: the saved category, its slug counted as typed, its
+ * display order in plain digits, 1000 and never 1.000 (S2.3, AC2).
+ */
 export function categoryFormValuesOf(category: AdminCategory): CategoryFormValues {
   return {
     name: category.name,
     slug: category.slug,
     slugEdited: true,
     status: category.status,
+    displayOrder: String(category.displayOrder),
   };
 }
