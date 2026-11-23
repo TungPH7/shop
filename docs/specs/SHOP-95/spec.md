@@ -1,6 +1,6 @@
 # Spec: Thứ tự hiển thị danh mục
 
-> **Epic:** SHOP-95 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SHOP-95 · **Status:** Draft
+> **Epic:** SHOP-95 · **Jira:** https://phunghuutung12b4.atlassian.net/browse/SHOP-95 · **Status:** Approved 2026-11-23
 
 ## Objective
 
