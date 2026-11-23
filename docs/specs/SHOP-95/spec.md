@@ -13,7 +13,7 @@ Epic xong khi:
 - hai danh mục cùng số thì xếp theo tên, như hiện nay;
 - bản release chứa Epic lên Production.
 
-Epic đụng tới giao diện của `admin`, nên `ux` viết màn hình ở `docs/specs/SHOP-95/design.md`: ô số thứ tự trong form danh mục (S2 của SHOP-81) và cột thứ tự trong bảng danh mục (S1 của SHOP-81). Trang của `user` không đổi giao diện: các liên kết danh mục (S7 của SHOP-81) chỉ đổi thứ tự. `sa` viết mục Non-functional requirements. Mục `## SEO` theo Q4.
+Epic đụng tới giao diện của `admin`, nên `ux` viết màn hình ở `docs/specs/SHOP-95/design.md`: ô số thứ tự trong form danh mục (S2 của SHOP-81) và cột thứ tự trong bảng danh mục (S1 của SHOP-81). Trang của `user` không đổi giao diện: các liên kết danh mục (S7 của SHOP-81) chỉ đổi thứ tự. `sa` viết mục Non-functional requirements. Epic không có trang mới của `user`, và các liên kết danh mục chỉ đổi thứ tự, không đổi chữ, liên kết hay metadata, nên `seo` chỉ ghi "không đổi" trong mục `## SEO` của SPEC này.
 
 Đây cũng là Epic chạy thử tính năng bật hay tắt review theo item của kit (bản `0e3c9ec`). Xem Constraints.
 
@@ -36,7 +36,7 @@ Epic đụng tới giao diện của `admin`, nên `ux` viết màn hình ở `d
   - thứ tự riêng theo từng ngôn ngữ;
   - thứ tự của sản phẩm trong một danh mục;
   - danh mục nhiều cấp;
-  - thứ tự của các danh mục trong sitemap (Q5).
+  - thứ tự của các danh mục trong sitemap: `/api/sitemap/categories` giữ thứ tự theo `id` như hiện nay, vì máy tìm kiếm không dùng thứ tự của các mục trong sitemap, và khách không thấy sitemap. "Mọi danh sách danh mục của API" mà Epic nói là các danh sách người dùng thấy, ở mục In trên.
 
 ### Constraints
 
@@ -59,14 +59,14 @@ Quy tắc này thêm vào Category Rules của SPEC SHOP-81, và thay đoạn "T
 
 | Trường | Quy tắc |
 |---|---|
-| Thứ tự hiển thị | Số nguyên từ 0 tới 9999 (Q1). Số nhỏ hiện trước. Nhiều danh mục có cùng số được. Form thêm điền sẵn 0 (Q2). Trong form, ô này bắt buộc: ô trống là lỗi, không được hiểu là 0 (Q6). Một số có phần lẻ, như 1.5, là lỗi, không được làm tròn. Chỉ `admin` thấy số này, như số sản phẩm: phản hồi của khách về một danh mục vẫn chỉ có tên và slug (NFR8 của SHOP-81). |
+| Thứ tự hiển thị | Số nguyên từ 0 tới 9999. Số nhỏ hiện trước. Nhiều danh mục có cùng số được. Form thêm điền sẵn 0, và form sửa điền số đã lưu. Trong form, ô này bắt buộc: ô trống là lỗi dưới ô, như ô tên trống, không được hiểu là 0. Một số có phần lẻ, như 1.5, là lỗi, không được làm tròn. Chỉ `admin` thấy số này, như số sản phẩm: phản hồi của khách về một danh mục vẫn chỉ có tên và slug (NFR8 của SHOP-81). |
 
-**Danh mục có sẵn và danh mục mới:** mọi danh mục có trước Epic nhận số 0 khi nâng database. Một lệnh thêm danh mục không gửi số thứ tự cho danh mục số 0, như helper E2E của SHOP-81 vẫn thêm danh mục. Vì vậy thứ tự không đổi, vẫn theo tên, cho tới khi quản trị viên đặt số (Q2, AC8).
+**Danh mục có sẵn và danh mục mới:** mọi danh mục có trước Epic nhận số 0 khi nâng database. Một lệnh thêm danh mục không gửi số thứ tự cho danh mục số 0, như helper E2E của SHOP-81 vẫn thêm danh mục. Vì vậy thứ tự không đổi, vẫn theo tên, cho tới khi quản trị viên đặt số (AC8).
 
 **Thứ tự của mọi danh sách danh mục:** số thứ tự tăng dần; cùng số thì theo tên, như SHOP-81: bảng chữ cái tiếng Việt và không phân biệt chữ hoa, chữ thường, qua collation `app.vi_ci` (ADR-0005); cùng tên thì theo `id`. Thứ tự này áp dụng cho:
 
 - bảng danh mục của `admin` (S1 của SHOP-81), kể cả danh mục Ẩn;
-- ô Danh mục của form sản phẩm (S4.2 của SHOP-81), sau lựa chọn "Không có danh mục" (Q3);
+- ô Danh mục của form sản phẩm (S4.2 của SHOP-81), sau lựa chọn "Không có danh mục", vì ô này đọc cùng một API với bảng danh mục (AC6);
 - các liên kết danh mục ở trang danh sách sản phẩm của `user` (S7 của SHOP-81), vẫn chỉ gồm danh mục Hiện có sản phẩm Đang bán (AC17 của SHOP-81).
 
 `admin` và `user` không tự xếp lại danh sách: thứ tự đến từ `api`, như hiện nay.
@@ -98,7 +98,7 @@ Là khách, tôi muốn thấy danh mục theo thứ tự cửa hàng chọn, đ
 Việc kỹ thuật đi cùng Epic. Plan đưa chúng vào item 1, và chúng không có AC riêng.
 
 - **TW1 · Schema:** migration Flyway V8, sau V7, không sửa V1–V7. `app.categories` thêm cột thứ tự số nguyên, `NOT NULL`, mặc định 0, có CHECK 0–9999, để database là chốt sau `api` như NFR14 của SHOP-81. Mọi danh mục có sẵn nhận 0. Đây chỉ là bước expand: bản `api` trước Epic chạy đúng trên schema mới, trong lúc deploy và sau một lần rollback. Bản đó gồm `v0.3.0` đang chạy trên Production, vốn chưa biết tới danh mục, và bản của `develop` có SHOP-81, vốn chưa biết tới cột thứ tự: khi nó thêm danh mục, danh mục nhận 0; khi nó sửa, số thứ tự còn nguyên. `sa` quyết có cần index cho thứ tự không, với quy mô 200 danh mục của NFR1 của SHOP-81. V8 nằm trong `db/migration/`, nên PR của item 1 có file `critical` (Constraints).
-- **TW2 · Hợp đồng API:** phần quản trị, `/api/admin/categories`: danh sách, chi tiết, thêm và sửa trả số thứ tự; thêm và sửa nhận số đó theo Category Rules; mọi giá trị sai nêu trên trường thứ tự trong cùng một 400 với các trường sai khác (AC3 của SHOP-81). Thêm mà không gửi số thì số là 0. Sửa mà không gửi số thì giữ số đang có, vì một tab `admin` mở từ trước khi deploy gửi lệnh sửa không có trường này (AC4, như NFR19 của SHOP-81): `api` không được lặng lẽ đặt nó về 0. Danh sách của quản trị và danh sách của khách, `GET /api/categories`, xếp theo Category Rules. Phản hồi của khách không thêm trường nào. OpenAPI ở `/v3/api-docs` mô tả trường mới. `sa` ghi hợp đồng trong plan, và xem việc đổi số thứ tự làm đổi `updated_at` của danh mục, nên đổi `lastmod` của nó trong sitemap (AC19 của SHOP-81), có chấp nhận được không.
+- **TW2 · Hợp đồng API:** phần quản trị, `/api/admin/categories`: danh sách, chi tiết, thêm và sửa trả số thứ tự; thêm và sửa nhận số đó theo Category Rules; mọi giá trị sai nêu trên trường thứ tự trong cùng một 400 với các trường sai khác (AC3 của SHOP-81). Thêm mà không gửi số thì số là 0. Sửa mà không gửi số thì giữ số đang có, vì một tab `admin` mở từ trước khi deploy gửi lệnh sửa không có trường này (AC4, như NFR19 của SHOP-81): `api` không được lặng lẽ đặt nó về 0. Danh sách của quản trị và danh sách của khách, `GET /api/categories`, xếp theo Category Rules; `/api/sitemap/categories` giữ thứ tự theo `id` (Scope: Out). Phản hồi của khách không thêm trường nào. OpenAPI ở `/v3/api-docs` mô tả trường mới. `sa` ghi hợp đồng trong plan, và xem việc đổi số thứ tự làm đổi `updated_at` của danh mục, nên đổi `lastmod` của nó trong sitemap (AC19 của SHOP-81), có chấp nhận được không.
 - **TW3 · Dữ liệu của E2E:** helper danh mục của `apps/admin/e2e/support/` và `apps/user/e2e/support/` nhận thêm số thứ tự khi thêm danh mục qua `/api` của host `admin`, và không gửi số khi test không cần, như AC8. Tên danh mục của E2E vẫn kết thúc bằng `E2E <runId>`, và việc dọn danh mục E2E cũ giữ như TW3 của SHOP-81.
 
 ## Tech Stack
@@ -189,16 +189,7 @@ Ngoài DoD của Epic trong `.ai-orchestrator/docs/sdlc.md`:
 
 ## Open Questions
 
-Sáu câu dưới đây cần bạn trả lời trước gate ①. Bốn câu đầu là Open Points của Epic, hai câu sau là câu hỏi mới của `ba`. Mỗi câu có câu trả lời đề xuất, và SPEC trên đã viết theo đề xuất đó: nếu bạn đồng ý cả, SPEC không cần sửa gì thêm.
+Không có. Ngày 2026-11-23 cả sáu đề xuất của `ba` được chọn, và mỗi câu trả lời đã thành quyết định ở mục của nó:
 
-Q1. Số thứ tự là gì? Đề xuất: số nguyên từ 0 tới 9999, số nhỏ hiện trước, và nhiều danh mục có cùng số được (Category Rules, AC3, AC4).
-
-Q2. Danh mục đang có và danh mục mới mang số nào? Đề xuất: đều mang số 0, và form thêm điền sẵn 0. Vì vậy thứ tự không đổi, vẫn theo tên, cho tới khi quản trị viên đặt số (Category Rules, AC1, AC8, TW1).
-
-Q3. Ô Danh mục trong form sản phẩm của `admin` có xếp theo thứ tự mới không? Đề xuất: có, vì nó đọc cùng một API với bảng danh mục (AC6).
-
-Q4. `seo` có viết gì không? Đề xuất: Epic không có trang mới của `user`, và các liên kết danh mục chỉ đổi thứ tự, không đổi chữ, liên kết hay metadata. `seo` chỉ ghi "không đổi" trong mục `## SEO` của SPEC này.
-
-Q5. Sitemap có xếp danh mục theo thứ tự mới không? Epic ghi "mọi danh sách danh mục của API", và `/api/sitemap/categories` cũng là một danh sách. Đề xuất: không, sitemap giữ thứ tự theo `id` như hiện nay, vì máy tìm kiếm không dùng thứ tự của các mục trong sitemap, và khách không thấy sitemap. "Mọi danh sách" hiểu là các danh sách người dùng thấy: bảng danh mục, ô Danh mục của form sản phẩm, và các liên kết danh mục (Scope).
-
-Q6. Quản trị viên xóa trống ô thứ tự rồi lưu thì sao? Đề xuất: form báo lỗi dưới ô, như ô tên trống, thay vì tự hiểu là 0. Ô chỉ trống khi quản trị viên xóa số đi, vì form thêm điền sẵn 0 và form sửa điền số đã lưu (Category Rules, AC3).
+- Bạn đã duyệt bốn Open Points của Epic khi trả lời "OK" cho bản nháp Epic (Phiên 35 · Lượt 67): số thứ tự là số nguyên 0–9999, số nhỏ hiện trước, cùng số được (Category Rules, AC3, AC4); danh mục có sẵn và danh mục mới mang số 0, form thêm điền sẵn 0 (Category Rules, AC1, AC8, TW1); ô Danh mục của form sản phẩm theo thứ tự mới (Category Rules, AC6); `seo` chỉ ghi "không đổi" trong mục `## SEO` (Objective).
+- Claude chọn hai đề xuất mới theo đề xuất của `ba`, vì bạn đã giao cổng ① của Epic này cho Claude (Phiên 35 · Lượt 67: "OK, tôi giao cổng 1, 2, 3 cho bạn"): sitemap giữ thứ tự theo `id` (Scope: Out, TW2), và ô thứ tự trống thì form báo lỗi dưới ô, không hiểu là 0 (Category Rules, AC3).
