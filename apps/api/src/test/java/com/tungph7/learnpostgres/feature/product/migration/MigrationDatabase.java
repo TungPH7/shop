@@ -48,6 +48,9 @@ final class MigrationDatabase implements AutoCloseable {
   /** The Flyway target of the categories, the expand step of {@code v0.4.0} (SHOP-82). */
   static final String V7 = "7";
 
+  /** The Flyway target of the display order of categories, an expand step (SHOP-96). */
+  static final String V8 = "8";
+
   /** The migrations of {@code v0.2.0}: the only ones its Flyway resolves. */
   private static final List<String> V0_2_0_MIGRATIONS =
       List.of("V1__init.sql", "V2__app_helpers.sql", "V3__create_products_table.sql");
@@ -61,6 +64,20 @@ final class MigrationDatabase implements AutoCloseable {
           "V4__expand_products_catalog.sql",
           "V5__gen_uuid_v7_qualify_pgcrypto.sql",
           "V6__assert_pgcrypto_in_public.sql");
+
+  /**
+   * The migrations of the {@code api} of SHOP-81, before the display order of categories: the only
+   * ones its Flyway resolves (SHOP-96).
+   */
+  private static final List<String> V1_TO_V7_MIGRATIONS =
+      List.of(
+          "V1__init.sql",
+          "V2__app_helpers.sql",
+          "V3__create_products_table.sql",
+          "V4__expand_products_catalog.sql",
+          "V5__gen_uuid_v7_qualify_pgcrypto.sql",
+          "V6__assert_pgcrypto_in_public.sql",
+          "V7__create_categories.sql");
 
   private static final String MIGRATIONS = "db/migration/";
   private static final String INIT_SCRIPT = "db/init/test-init.sql";
@@ -108,6 +125,17 @@ final class MigrationDatabase implements AutoCloseable {
     return dataSource;
   }
 
+  /**
+   * A connection of its own, outside the pool of {@link #dataSource()}, for a test that holds a
+   * lock while Flyway runs.
+   */
+  Connection connect() throws SQLException {
+    return DriverManager.getConnection(
+        url(container, name) + "?currentSchema=app",
+        container.getUsername(),
+        container.getPassword());
+  }
+
   /** Flyway as {@code application.yml} sets it, over every migration of this build. */
   Flyway flyway() {
     return configure().locations("classpath:db/migration").load();
@@ -133,6 +161,15 @@ final class MigrationDatabase implements AutoCloseable {
    */
   Flyway flywayOfV030(Path folder) {
     return flywayOver(V0_3_0_MIGRATIONS, folder);
+  }
+
+  /**
+   * Flyway as the {@code api} of SHOP-81 runs it after a rollback: the same settings, but only
+   * V1–V7 to resolve, and {@code ignoreMigrationPatterns} at its default, {@code *:future} (NFR10
+   * of SHOP-95).
+   */
+  Flyway flywayOfV1ToV7(Path folder) {
+    return flywayOver(V1_TO_V7_MIGRATIONS, folder);
   }
 
   private Flyway flywayOver(List<String> migrations, Path folder) {
