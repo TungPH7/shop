@@ -13,6 +13,7 @@ import { unquotePath } from '../lib/quality/diff-paths.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
 import { auditArgs, managerFromLockfile, PNPM_MISSING, runManager } from '../lib/quality/package-manager.mjs';
 import { checkDesignFile } from '../lib/quality/design-files.mjs';
+import { REGISTRY_FILE, checkRegistry, readRegistry } from '../lib/quality/screen-codes.mjs';
 import { auditProblems, checkConventions, designFilesToCheck, osvProblems, pomsToScan, scanTries } from '../lib/quality/policy.mjs';
 import { addedLines, deletedTests, findSuppressions, loweredThresholds } from '../lib/quality/suppressions.mjs';
 import { auditRule, ownPackages, projectDependencies, unapprovedDependencies, workspaceCatalogs } from '../lib/quality/dependencies.mjs';
@@ -101,7 +102,10 @@ try {
       sections.push(['New dependencies', unapprovedDependencies(added, projectDependencies(project).approved, own, { catalogs })]);
     } else notes.push('no .ai-orchestrator/project.yaml: new dependencies are not checked');
     const designs = designFilesToCheck(changes, (path) => existsSync(join(root, path)));
-    sections.push(['Design', designs.flatMap((path) => checkDesignFile(join(root, path)).map(({ rule, line, message }) => `${path}:${line} ${rule} ${message}`))]);
+    // The registry of screen codes, when the PR changes it (tasks/todo.md item 10): one code a screen, declared prefixes.
+    const registryChanged = changes.some(({ status, path }) => path === REGISTRY_FILE && status !== 'D') && existsSync(join(root, REGISTRY_FILE));
+    const registryErrors = registryChanged ? checkRegistry(readRegistry(readFileSync(join(root, REGISTRY_FILE), 'utf8'))).map(({ rule, line, message }) => `${REGISTRY_FILE}:${line} ${rule} ${message}`) : [];
+    sections.push(['Design', [...designs.flatMap((path) => checkDesignFile(join(root, path)).map(({ rule, line, message }) => `${path}:${line} ${rule} ${message}`)), ...registryErrors]]);
   }
 
   const manager = managerFromLockfile((path) => existsSync(join(root, path)));

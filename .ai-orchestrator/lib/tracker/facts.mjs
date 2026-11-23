@@ -106,10 +106,10 @@ export function agentValues(contract, mapping) {
   const names = expectedOptions(contract, mapping, 'agent');
   return Object.fromEntries(values.map(({ id }, i) => [id, names[i]]));
 }
-// The Agent values of every role but qa: a comment that starts with one of them, then a colon, is that role's and no QA
-// report (third review of shop PR #81, High 08bc0732).
 // The signer of the comments ao-step writes on an item.
 export const KIT_SIGNER = 'ao-step';
+// The Agent values of every role but qa: a comment that starts with one of them, then a colon, is that role's and no QA
+// report (third review of shop PR #81, High 08bc0732).
 export const notQaSigners = (contract, mapping) => Object.entries(agentValues(contract, mapping)).filter(([role]) => role !== 'qa').map(([, value]) => value);
 const signedByOneOf = (body, signers) => {
   const text = plainText(typeof body === 'string' ? body : adfText(body)).trim();

@@ -26,7 +26,7 @@ Keep the AC<n> codes of the SPEC. -->
 
 ## Design
 
-<!-- The screens of docs/specs/<EPIC-KEY>/design.md that the Story covers, by code (S1, S2), or "Không đổi giao diện". -->
+<!-- The screens of docs/specs/<EPIC-KEY>/design.md that the Story covers, by code (USR-CART01, USR-CHK01; S1, S2 in a design.md of an older Epic), or "Không đổi giao diện". -->
 
 ## Sub-tasks
 

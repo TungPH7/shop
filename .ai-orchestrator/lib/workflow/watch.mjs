@@ -315,9 +315,13 @@ export function watchEffects({ projectDir, fs, alive, now = Date.now }) {
       fs.writeFileSync(pidFile, `${JSON.stringify({ pid, startedAt: at, at })}\n`);
       return { ok: true };
     },
+    // { ok: true } while the file is still this watcher's; { ok: false, pid } when another took it while this one slept
+    // or waited on Jira for more than three rounds, so this one ends (review of shop PR #97, reviewer Low 1).
     beat: (pid) => {
       const held = readJson(pidFile);
-      if (held?.pid === pid) fs.writeFileSync(pidFile, `${JSON.stringify({ ...held, at: new Date(now()).toISOString() })}\n`);
+      if (held?.pid !== pid) return { ok: false, pid: held?.pid ?? null };
+      fs.writeFileSync(pidFile, `${JSON.stringify({ ...held, at: new Date(now()).toISOString() })}\n`);
+      return { ok: true };
     },
     release: (pid) => {
       if (readJson(pidFile)?.pid === pid) fs.rmSync(pidFile, { force: true });

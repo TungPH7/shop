@@ -2,28 +2,40 @@
 // or of a screenshot (project-scaffold part 2, spec 2.5), the YAML under it, and the Design System section of a design
 // with images. Pure: scripts/check-design.mjs reads the file. Errors are { rule, line, message }, line 1-based.
 import { parse } from 'yaml';
+import { ANY_CODE, REGISTRY_FILE, checkRegistry, codeKind, readRegistry } from './screen-codes.mjs';
 
-const SCREEN_KEYS = ['screen', 'route', 'figma', 'screenshot', 'blocks'];
+// Claude Design screens and project screen codes come from tasks/todo.md item 10 (Phiên 35 · Lượt 84–87).
+const SCREEN_KEYS = ['screen', 'route', 'figma', 'claude-design', 'screenshot', 'prototype', 'blocks'];
+// The sources of an image screen: exactly one of them.
+const SOURCES = ['figma', 'claude-design', 'screenshot'];
 const BLOCK_KEYS = ['name', 'type', 'content', 'behavior', 'validation', 'states', 'a11y', 'ac', 'figma'];
 const MAX_COLUMNS = 100;
 const MAX_IMAGE_BYTES = 1024 * 1024;
 const MAX_IMAGE_SIDE = 2000;
+const MAX_PROTOTYPE_BYTES = 256 * 1024;
+// A Claude artifact: a Design made in Claude, which the Artifact tool of the main session reads.
+const CLAUDE_LINK = /^https:\/\/claude\.ai\/(artifact\/[A-Za-z0-9]{10,40}|code\/artifact\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const FIGMA_LINK = /^https:\/\/(www\.)?figma\.com\/(design|file|proto)\/[^?\s]+\?([^\s]*&)?node-id=[^&\s]+/;
 // Unicode box drawing and block elements, and emoji. ASCII frames use + - | [ ] _ only (rule 2).
 const NOT_ASCII_ART = /[\u2500-\u259F]|\p{Extended_Pictographic}/u;
-const SCREEN = /^S\d+$/;
+// A screen code: a project code such as USR-CART01, or the code of one Epic, S1 (lib/quality/screen-codes.mjs).
+const SCREEN = new RegExp(`^${ANY_CODE}$`);
+const CODE_AT_START = new RegExp(`^(${ANY_CODE})(?![\\w-])`);
+const CODE_IN_TEXT = new RegExp(`\\b(${ANY_CODE})\\b`, 'g');
+const TITLE = new RegExp(`^${ANY_CODE} · [^·]+ · [^·]+$`);
+const ROW = new RegExp(`^\\|\\s*(${ANY_CODE})\\s*\\|`);
 const BLOCK_REF = /\[(\d+)\]/g;
-const ARROW = /\b(S\d+)\s*(?:-{2,}>|-\.+->|={2,}>)\s*(?:\|([^|]*)\|\s*)?(?=(S\d+)\b)/g;
+const ARROW = new RegExp(`\\b(${ANY_CODE})\\s*(?:-{2,}>|-\\.+->|={2,}>)\\s*(?:\\|([^|]*)\\|\\s*)?(?=(${ANY_CODE})\\b)`, 'g');
 // A node's shape and text, such as S1[S1 Đăng nhập], so only its code is left.
-const NODE_SHAPE = /\b(S\d+)\s*(\[\[[^\]]*\]\]|\[[^\]]*\]|\(\([^)]*\)\)|\([^)]*\)|\{[^}]*\})/g;
+const NODE_SHAPE = new RegExp(`\\b(${ANY_CODE})\\s*(\\[\\[[^\\]]*\\]\\]|\\[[^\\]]*\\]|\\(\\([^)]*\\)\\)|\\([^)]*\\)|\\{[^}]*\\})`, 'g');
 
 // Splits the file into what the rules look at. Fenced blocks are read whole; images, table rows and the Figma version
 // only count outside them and outside HTML comments, so neither the guidance of templates/design.md nor its Example,
 // inside a ````markdown fence, is part of the template itself.
 export function readDesign(text) {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
-  const design = { drawings: [], images: [], yamls: [], flows: [], rows: [], sections: [], figmaVersion: null };
+  const design = { drawings: [], images: [], yamls: [], flows: [], rows: [], sections: [], figmaVersion: null, claudeVersion: null };
   let fence = null;
   let comment = false;
   let header = true;
@@ -58,12 +70,14 @@ export function readDesign(text) {
     }
     const version = line.match(/Figma version:\**\s*(.*)$/);
     if (version && header && !design.figmaVersion) design.figmaVersion = { value: version[1].trim(), line: number };
+    const claudeVersion = line.match(/Claude Design version:\**\s*(.*)$/);
+    if (claudeVersion && header && !design.claudeVersion) design.claudeVersion = { value: claudeVersion[1].trim(), line: number };
     for (const [, alt, src] of line.matchAll(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
-      design.images.push({ alt, src, code: alt.match(/^(S\d+)\b/)?.[1] ?? null, line: number });
+      design.images.push({ alt, src, code: alt.match(CODE_AT_START)?.[1] ?? null, line: number });
     }
     const cells = /^\|.*\|\s*$/.test(line) ? line.trim().slice(1, -1).split('|').map((cell) => cell.trim()) : null;
     if (cells?.[0] === 'Code' && !design.screenColumns) design.screenColumns = cells;
-    const row = line.match(/^\|\s*(S\d+)\s*\|/);
+    const row = line.match(ROW);
     if (row) design.rows.push({ code: row[1], line: number, cells });
   });
   if (fence) addFence(design, fence);
@@ -74,8 +88,8 @@ function addFence(design, fence) {
   const { lang, line, body } = fence;
   if (lang === 'yaml' || lang === 'yml') design.yamls.push({ line, body });
   else if (lang === 'mermaid') design.flows.push({ line, body });
-  else if (lang === 'text' && /^S\d+\b/.test(body[0]?.text ?? '')) {
-    design.drawings.push({ code: body[0].text.match(/^(S\d+)/)[1], line, body });
+  else if (lang === 'text' && CODE_AT_START.test(body[0]?.text ?? '')) {
+    design.drawings.push({ code: body[0].text.match(CODE_AT_START)[1], line, body });
   }
 }
 
@@ -88,8 +102,9 @@ export function screenApps(text) {
 }
 
 // images: the files of the design/ folder next to design.md, as a Map of file name → bytes. Without it the files of
-// the images are not checked (D8), as for a template or a design.md read on its own.
-export function checkDesign(text, { images } = {}) {
+// the images are not checked (D8), as for a template or a design.md read on its own. registry: the text of
+// docs/design-system/screens.md, null when the project has none, undefined when the codes are not checked (D11).
+export function checkDesign(text, { images, registry } = {}) {
   const design = readDesign(text);
   const errors = [];
   const error = (rule, line, message) => errors.push({ rule, line, message });
@@ -103,7 +118,9 @@ export function checkDesign(text, { images } = {}) {
   }
   checkFigma(design, screens, error);
   checkDesignSystem(design, screens, error);
-  if (images) checkImages(design, images, error);
+  checkCodeKinds(design, screens, error);
+  if (registry !== undefined) checkRegistered(design, registry, error);
+  if (images) checkImages(design, images, error, screens);
   return errors.sort((a, b) => a.line - b.line);
 }
 
@@ -118,7 +135,7 @@ function readScreens(design, error) {
     } catch (cause) {
       error('D1', cause.linePos?.[0]?.line ? yaml.line + cause.linePos[0].line : yaml.line, `YAML does not parse: ${cause.message.split('\n')[0]}`);
       // Keep the screen, with its blocks unknown, so the error does not repeat as D2, D3 or D6.
-      const code = yaml.body.map(({ text }) => text.match(/^screen\s*:\s*(S\d+)\s*$/)?.[1]).find(Boolean);
+      const code = yaml.body.map(({ text }) => text.match(/^screen\s*:\s*(\S+)\s*$/)?.[1]).find((found) => SCREEN.test(found ?? ''));
       if (code && !screens.has(code)) screens.set(code, { line: lineOf(/^screen\s*:/), blocks: null });
       continue;
     }
@@ -130,7 +147,7 @@ function readScreens(design, error) {
       error('D1', lineOf(new RegExp(`^${escape(key)}\\s*:`)), `unknown key '${key}'; a screen has ${SCREEN_KEYS.join(', ')}`);
     }
     if (typeof data.screen !== 'string' || !SCREEN.test(data.screen)) {
-      error('D1', lineOf(/^screen\s*:/), `screen must be a code such as S1, not '${data.screen ?? ''}'`);
+      error('D1', lineOf(/^screen\s*:/), `screen must be a code such as USR-CART01, or S1 in a design of one Epic, not '${data.screen ?? ''}'`);
       continue;
     }
     const blocks = new Map();
@@ -145,7 +162,10 @@ function readScreens(design, error) {
       checkBlock(`${data.screen}.${key}`, block, line, error);
     }
     if (screens.has(data.screen)) error('D5', lineOf(/^screen\s*:/), `${data.screen} has two YAML blocks`);
-    else screens.set(data.screen, { line: lineOf(/^screen\s*:/), blocks, figma: data.figma, figmaLine: lineOf(/^figma\s*:/), screenshot: data.screenshot, screenshotLine: lineOf(/^screenshot\s*:/) });
+    else {
+      const sources = Object.fromEntries(SOURCES.map((key) => [key, { value: data[key], line: lineOf(new RegExp(`^${key}\\s*:`)) }]));
+      screens.set(data.screen, { line: lineOf(/^screen\s*:/), blocks, sources, prototype: data.prototype, prototypeLine: lineOf(/^prototype\s*:/) });
+    }
   }
   return screens;
 }
@@ -171,7 +191,7 @@ function checkDrawings(design, screens, error) {
   const drawn = new Map();
   for (const { code, body } of design.drawings) {
     const [title, ...frame] = body;
-    if (!/^S\d+ · [^·]+ · [^·]+$/.test(title.text)) error('D4', title.line, 'the first line of a drawing must read "S<n> · <name> · <screen size>"');
+    if (!TITLE.test(title.text)) error('D4', title.line, 'the first line of a drawing must read "<code> · <name> · <screen size>"');
     for (const { text, line } of body) {
       if (NOT_ASCII_ART.test(text)) error('D4', line, 'a drawing uses only + - | [ ] _ and text, no Unicode box characters or emoji');
       if ([...text].length > MAX_COLUMNS) error('D4', line, `a drawing line has ${[...text].length} columns; the limit is ${MAX_COLUMNS}`);
@@ -206,7 +226,7 @@ function checkFlow(design, screens, error) {
     for (const { text, line } of body) {
       if (/^\s*(flowchart|graph)\b|^\s*%%/.test(text)) continue;
       const cleaned = text.replace(NODE_SHAPE, '$1');
-      for (const [, code] of cleaned.replace(/\|[^|]*\|/g, ' ').matchAll(/\b(S\d+)\b/g)) if (!nodes.has(code)) nodes.set(code, line);
+      for (const [, code] of cleaned.replace(/\|[^|]*\|/g, ' ').matchAll(CODE_IN_TEXT)) if (!nodes.has(code)) nodes.set(code, line);
       for (const [, from, label = ''] of cleaned.matchAll(ARROW)) {
         const blocks = screens.get(from)?.blocks;
         if (!blocks) continue;
@@ -237,24 +257,60 @@ function checkKinds(design, screens, error) {
 const imageScreens = (design, screens) => [...screens].filter(([code]) => design.images.some((i) => i.code === code) && !design.drawings.some((d) => d.code === code));
 
 // D7: every image is labelled like the first line of a drawing; a screen shown by images says where they come from, as
-// exactly one of figma, the link of its frame with a node-id, or screenshot, where the screenshot or mockup was taken
-// (project-scaffold part 2, spec 2.5); and a file with a Figma screen names the Figma version that was approved.
+// exactly one of figma, the link of its frame with a node-id, claude-design, the link of its Claude artifact, or
+// screenshot, where the screenshot or mockup was taken (project-scaffold part 2, spec 2.5; tasks/todo.md item 10); and
+// a file with a Figma or Claude Design screen names the version that was approved.
 function checkFigma(design, screens, error) {
   for (const { alt, line } of design.images) {
-    if (!/^S\d+ · [^·]+ · [^·]+$/.test(alt)) error('D7', line, `the alt text of an image must read "S<n> · <name> · <screen size>", not "${alt}"`);
+    if (!TITLE.test(alt)) error('D7', line, `the alt text of an image must read "<code> · <name> · <screen size>", not "${alt}"`);
   }
   const shown = imageScreens(design, screens);
-  for (const [code, { line, figma, figmaLine, screenshot, screenshotLine }] of shown) {
-    if (figma === undefined && screenshot === undefined) error('D7', line, `${code} is shown by images, so its YAML says where they come from: figma, the link of its frame with node-id, or screenshot, where the screenshot was taken`);
-    else if (figma !== undefined && screenshot !== undefined) error('D7', screenshotLine, `${code} has both figma and screenshot: an image screen comes from one of them`);
-    else if (figma !== undefined && !FIGMA_LINK.test(String(figma))) error('D7', figmaLine, `figma of ${code} must be a figma.com link with node-id`);
-    else if (screenshot !== undefined && (typeof screenshot !== 'string' || screenshot.trim() === '')) error('D7', screenshotLine, `screenshot of ${code} names where the screenshot or mockup comes from, such as the page it was taken of`);
+  for (const [code, { line, sources }] of shown) {
+    const given = SOURCES.filter((key) => sources[key].value !== undefined);
+    const { figma, 'claude-design': claude, screenshot } = sources;
+    if (given.length === 0) error('D7', line, `${code} is shown by images, so its YAML says where they come from: figma, the link of its frame with node-id, or screenshot, where the screenshot was taken, or claude-design, the link of its Claude artifact`);
+    else if (given.length > 1) error('D7', sources[given[1]].line, `${code} has more than one of figma, claude-design and screenshot: an image screen comes from one of them`);
+    else if (given[0] === 'figma' && !FIGMA_LINK.test(String(figma.value))) error('D7', figma.line, `figma of ${code} must be a figma.com link with node-id`);
+    else if (given[0] === 'claude-design' && !CLAUDE_LINK.test(String(claude.value))) error('D7', claude.line, `claude-design of ${code} must be the link of a Claude artifact, such as https://claude.ai/artifact/<id>`);
+    else if (given[0] === 'screenshot' && (typeof screenshot.value !== 'string' || screenshot.value.trim() === '')) error('D7', screenshot.line, `screenshot of ${code} names where the screenshot or mockup comes from, such as the page it was taken of`);
   }
-  const figmaScreens = shown.filter(([, { figma }]) => figma !== undefined);
-  if (figmaScreens.length === 0) return;
-  const version = design.figmaVersion;
-  if (!version) error('D7', 1, 'the file has Figma screens, so its header needs a "Figma version:" line');
-  else if (version.value === '' || /^none$/i.test(version.value)) error('D7', version.line, 'name the approved Figma version: the file has Figma screens');
+  for (const [key, name, version] of [['figma', 'Figma', design.figmaVersion], ['claude-design', 'Claude Design', design.claudeVersion]]) {
+    if (!shown.some(([, { sources }]) => sources[key].value !== undefined)) continue;
+    if (!version) error('D7', 1, `the file has ${name} screens, so its header needs a "${name} version:" line`);
+    else if (version.value === '' || /^none$/i.test(version.value)) error('D7', version.line, `name the approved ${name} version: the file has ${name} screens`);
+  }
+}
+
+// D10: one file uses one kind of screen code: project codes, such as USR-CART01, or the codes of its Epic, S1, S2.
+function checkCodeKinds(design, screens, error) {
+  const codes = [...design.rows.map(({ code, line }) => ({ code, line })), ...[...screens].map(([code, { line }]) => ({ code, line }))];
+  const project = codes.find(({ code }) => codeKind(code) === 'project');
+  const epic = codes.find(({ code }) => codeKind(code) === 'epic');
+  if (project && epic) error('D10', Math.max(project.line, epic.line), `the file mixes project screen codes, such as ${project.code}, with codes of one Epic, such as ${epic.code}: use one kind`);
+}
+
+// D11: a project code is a row of the registry of the project (lib/quality/screen-codes.mjs), not retired, with the
+// same app and route as in the table of Screens: one code names one screen in the whole project. The errors of the
+// registry itself come with its path and line.
+function checkRegistered(design, text, error) {
+  const rows = design.rows.filter(({ code }) => codeKind(code) === 'project');
+  if (rows.length === 0) return;
+  if (text === null) {
+    error('D11', rows[0].line, `the file uses project screen codes, so ${REGISTRY_FILE} lists them; the project has no such file`);
+    return;
+  }
+  const registry = readRegistry(text);
+  for (const { rule, line, message } of checkRegistry(registry)) error('D11', 1, `${REGISTRY_FILE}:${line} ${rule} ${message}`);
+  const column = (name) => design.screenColumns?.findIndex((cell) => cell.toLowerCase() === name) ?? -1;
+  const [appAt, routeAt] = [column('app'), column('route')];
+  const plain = (cell) => (cell ?? '').replace(/`/g, '').trim();
+  for (const { code, line, cells } of rows) {
+    const found = registry.screens.find((screen) => screen.code === code);
+    if (!found) error('D11', line, `${code} is not in ${REGISTRY_FILE}: add its row with its name, app, route, Epic and state`);
+    else if (found.state === 'bỏ') error('D11', line, `${code} is retired (bỏ) in ${REGISTRY_FILE}: a retired code is never used again`);
+    else if (appAt >= 0 && plain(cells[appAt]) !== found.app) error('D11', line, `${code} is a screen of ${found.app} in ${REGISTRY_FILE}, but its App here is ${plain(cells[appAt])}`);
+    else if (routeAt >= 0 && plain(cells[routeAt]) !== found.route) error('D11', line, `${code} has the route ${found.route} in ${REGISTRY_FILE}, but ${plain(cells[routeAt])} here: one code names one screen`);
+  }
 }
 
 // D9: a design with a Figma or Image screen has a Design System section: the tokens and components ux reads from the
@@ -266,9 +322,21 @@ function checkDesignSystem(design, screens, error) {
 }
 
 // D8: images sit in design/ next to design.md, exist, are PNG or JPEG of at most 1 MB and 2,000 px, and every file
-// in design/ is used. For a Git LFS pointer, only the size it records is known.
-function checkImages(design, images, error) {
+// in design/ is used. For a Git LFS pointer, only the size it records is known. A prototype, the HTML of a Claude
+// Design screen for fe-dev to read, sits there too, at most 256 KB (tasks/todo.md item 10).
+function checkImages(design, images, error, screens = new Map()) {
   const used = new Set();
+  for (const [, { prototype, prototypeLine }] of screens) {
+    if (prototype === undefined) continue;
+    const name = String(prototype).match(/^design\/([^/\\]+\.html)$/)?.[1];
+    if (!name) {
+      error('D8', prototypeLine, `${prototype} must be an .html file in the design/ folder next to design.md`);
+      continue;
+    }
+    used.add(name);
+    if (!images.has(name)) error('D8', prototypeLine, `design/${name} does not exist`);
+    else if (images.get(name).length > MAX_PROTOTYPE_BYTES) error('D8', prototypeLine, `design/${name} is ${images.get(name).length} bytes; a prototype is at most 256 KB (${MAX_PROTOTYPE_BYTES} bytes)`);
+  }
   for (const { src, line } of design.images) {
     const name = src.match(/^design\/([^/\\]+)$/)?.[1];
     if (!name) {

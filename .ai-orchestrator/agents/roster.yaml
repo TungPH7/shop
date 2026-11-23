@@ -86,7 +86,7 @@ roles:
     writes: ["docs/specs/**", "CHANGELOG.md", ".ai/**"]
     skills: [spec-driven-development, interview-me]
   ux:
-    description: "UI/UX designer: writes design.md for an Epic that touches the UI, as numbered ASCII screens or from approved Figma images. Give it the Epic key."
+    description: "UI/UX designer: writes design.md for an Epic that touches the UI, as numbered ASCII screens or from approved Figma images and Claude Designs. Give it the Epic key."
     model: sonnet
     effort: xhigh
     max_turns: 60
@@ -94,7 +94,8 @@ roles:
     # comment: ux answers a "Cần ux:" request with a comment, which closes it (human-loop spec 3.3, Lượt 122).
     jira: [read, comment]
     git: write
-    writes: ["docs/specs/**", ".ai/**"]
+    # docs/design-system/screens.md: the registry of screen codes, one row per screen of the project (tasks/todo.md item 10).
+    writes: ["docs/specs/**", "docs/design-system/screens.md", ".ai/**"]
     skills: [frontend-ui-engineering]
   sa:
     description: "Solution Architect: adds the non-functional requirements to a SPEC, then writes the plan of the Epic with its API contract and task list. Give it the Epic key."

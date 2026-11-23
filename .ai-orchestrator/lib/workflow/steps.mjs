@@ -288,6 +288,10 @@ function decideSpec(facts, options) {
   const carried = carryOn('spec', facts, options, pending?.asker);
   if (carried) return { ...carried, lines };
   if (pending) return { ...questionsStop(key, pending.artifact, pending.questions, pending.asker), lines };
+  // ux reads the design inbox, never a link (tasks/todo.md item 10): a Claude artifact the Epic links that /ao-design
+  // has not taken waits for it, in your session, which reads your artifacts.
+  const untaken = (facts.designLinks ?? []).filter((url) => !(facts.designInbox ?? []).includes(url));
+  if (untaken.length > 0) return { ...stop('you', `${key} links ${untaken.length} Claude artifact${untaken.length > 1 ? 's' : ''} that ${untaken.length > 1 ? 'are' : 'is'} not in .ai/design-inbox/${key}/: ${untaken.join(', ')}`, `/ao-design ${key}`), lines };
   // A change you ask for before gate ① (human-loop spec 3.2), unless the same one was made already.
   const revise = note && !noteDone(facts, 'spec', 'spec-revise', note) ? note : undefined;
   if (revise && !docs.spec) return { ...stop('fix', `${key} has no SPEC yet: a change waits for stage spec to write one`, `/ao-spec ${key}`), lines };
@@ -1018,25 +1022,36 @@ function decideAfterMerge(facts, options) {
   }
   lines.push(`To review after merge: ${todo.map(({ number, key: k }) => `PR #${number} (${k})`).join(', ')}; ${m.files.length} file${m.files.length === 1 ? '' : 's'}`);
   if (!m.base || !m.head) return { ...stop('fix', `GitHub did not give the commit before the oldest merge, or the head of develop`, `/ao-review ${key} again`), lines };
+  const afterRuns = (facts.run?.runs ?? []).filter((r) => r.command === 'review' && r.purpose === AFTER_MERGE);
+  const fileOf = (r) => afterMergeReport(key, r.role, r.head);
   // A post that stopped after it marked some PRs goes on with the review of the same PRs: those it marked carry the mark
-  // of this KEY at the head that review read (review of shop PR #93, reviewer Medium 2).
+  // of this KEY at the head that review read (review of shop PR #93, reviewer Medium 2). It goes on only while every
+  // report of that review is still in .ai/reviews/; with one gone, the PRs not marked yet get a review of their own.
   const markedHere = (number, head) => m.pulls.some((p) => p.number === number && p.mark?.key === key && p.mark.head === head);
-  const earlier = (facts.run?.runs ?? [])
-    .filter((r) => r.command === 'review' && r.purpose === AFTER_MERGE && r.outcome === 'done')
+  const lastDone = (note) => [...new Set(afterRuns.filter((r) => r.note === note).map((r) => r.role))]
+    .map((role) => afterRuns.filter((r) => r.note === note && r.role === role).at(-1))
+    .filter((r) => r.outcome === 'done');
+  const earlier = afterRuns
+    .filter((r) => r.outcome === 'done')
     .reverse()
     .find((r) => {
       const listed = noteNumbers(r.note);
-      return listed.length > todo.length && todo.every(({ number }) => listed.includes(number)) && listed.every((n) => todo.some(({ number }) => number === n) || markedHere(n, r.head));
+      return listed.length > todo.length && todo.every(({ number }) => listed.includes(number)) && listed.every((n) => todo.some(({ number }) => number === n) || markedHere(n, r.head))
+        && lastDone(r.note).every((d) => m.reports?.[fileOf(d)] !== undefined);
     });
   const numbers = earlier ? noteNumbers(earlier.note) : todo.map(({ number }) => number);
   const note = afterMergeNote(numbers);
-  // The level of the highest item among them: heavy makes security run, as on a PR (C1 spec 3.2).
+  // The level of the highest item among them: heavy makes security run, as on a PR (C1 spec 3.2). A post that goes on
+  // keeps the roles of the review it goes on with: the PRs left alone may need fewer, and a report left out would drop
+  // its Critical and High from the marks still to post (review of shop PR #97, reviewer Medium 1).
   const level = todo.some(({ key: k }) => m.levels?.[k] === 'heavy') ? 'heavy' : 'standard';
-  const roles = stageRoles(options.contract, 'review').flatMap((role) => {
-    const { effort, reason } = fullReviewEffort({ role, files: m.files, gates: options.gates, rosterEffort: options.roster.roles[role].effort, level });
-    return effort === null ? [] : [{ role, effort, reason }];
-  });
-  const mine = (facts.run?.runs ?? []).filter((r) => r.command === 'review' && r.purpose === AFTER_MERGE && r.note === note);
+  const roles = earlier
+    ? stageRoles(options.contract, 'review').filter((role) => lastDone(note).some((r) => r.role === role)).map((role) => ({ role, effort: lastDone(note).find((r) => r.role === role).effort }))
+    : stageRoles(options.contract, 'review').flatMap((role) => {
+      const { effort, reason } = fullReviewEffort({ role, files: m.files, gates: options.gates, rosterEffort: options.roster.roles[role].effort, level });
+      return effort === null ? [] : [{ role, effort, reason }];
+    });
+  const mine = afterRuns.filter((r) => r.note === note);
   const last = (role) => mine.filter((r) => r.role === role).at(-1);
   // A run that stopped goes on in its session, with its worktree back at the head it was reviewing.
   const stopped = roles.map(({ role }) => last(role)).filter((r) => r && STOPPED.includes(r.outcome) && r.session && r.head);
@@ -1044,15 +1059,23 @@ function decideAfterMerge(facts, options) {
     return go(stopped.map((r) => ({ role: r.role, key, effort: r.effort, purpose: AFTER_MERGE, resume: r.session, prompt: resumePrompt(key, r.role), checkout: r.checkout, head: r.head, note, worktree: { name: afterMergeTree(key, r.role), sha: r.head } })), lines);
   }
   // A run counts when its report is still in .ai/reviews/; one gone from there runs again (review of shop PR #93).
-  const fileOf = (r) => afterMergeReport(key, r.role, r.head);
   const done = roles.map(({ role }) => (last(role)?.outcome === 'done' && m.reports?.[fileOf(last(role))] !== undefined ? last(role) : null));
+  // The reports of one post read one head of develop: the line on KEY and each mark name it (review of shop PR #97,
+  // reviewer Low 2). A role that runs again reads the head of the reports kept.
+  const heads = [...new Set(done.filter(Boolean).map((r) => r.head))];
+  if (heads.length > 1) {
+    const older = done.filter(Boolean).sort((a, b) => Date.parse(a.endedAt ?? a.startedAt ?? 0) - Date.parse(b.endedAt ?? b.startedAt ?? 0))[0].head;
+    return { ...stop('fix', `the reports of the review after merge of ${key} read two heads of develop: ${heads.map((h) => h.slice(0, 7)).join(', ')}`, `Delete the report at ${older.slice(0, 7)}, then /ao-review ${key} again: its role runs again at the head of the other`), lines };
+  }
+  const at = heads[0] ?? m.head;
   if (done.every(Boolean)) {
     const names = Object.fromEntries(done.map((r) => [r.role, fileOf(r)]));
     // The report must be what the run wrote: the hash ao-step kept at its end. Nobody fixes one by hand any more.
     const changed = done.filter((r) => !r.report?.sha256 || reportHash(m.reports[names[r.role]]) !== r.report.sha256);
     if (changed.length > 0) {
       const which = changed.map((r) => `${r.role}: .ai/reviews/${names[r.role]} is not the report ${r.role} wrote${r.report?.sha256 ? ': it changed after its run ended' : ': its run kept no hash of it'}`);
-      return { ...stop('you', `the review after merge of ${key} ran, but ${which.join('; ')}`, `Read what changed in it; to post a new one, delete it, then /ao-review ${key} again: its role runs again`), lines };
+      const then = earlier ? 'the PRs not marked yet get a new review' : 'its role runs again';
+      return { ...stop('you', `the review after merge of ${key} ran, but ${which.join('; ')}`, `Read what changed in it; to post a new one, delete it, then /ao-review ${key} again: ${then}`), lines };
     }
     const unreadable = done.flatMap((r) => {
       const report = readReviewReport(m.reports[names[r.role]], options.gates.github_apps.review.roles);
@@ -1069,10 +1092,10 @@ function decideAfterMerge(facts, options) {
     key,
     effort,
     purpose: AFTER_MERGE,
-    prompt: promptFor(AFTER_MERGE, { key, role, base: m.base, head: m.head, files: m.files, pulls: todo }),
+    prompt: promptFor(AFTER_MERGE, { key, role, base: m.base, head: at, files: m.files, pulls: todo }),
     checkout: { branch: 'develop', pull: true },
-    worktree: { name: afterMergeTree(key, role), sha: m.head },
-    head: m.head,
+    worktree: { name: afterMergeTree(key, role), sha: at },
+    head: at,
     note,
     effortWhy: reason,
   }));
