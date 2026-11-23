@@ -219,7 +219,7 @@ Như CLAUDE.md và mục Code Style của SPEC SHOP-81. Thêm:
   - V8 chạy trên schema V7 có danh mục và sản phẩm: mọi danh mục nhận 0, và danh sách giữ đúng thứ tự trước khi nâng;
   - bản `api` trước Epic thêm và sửa danh mục trên schema V8 mà không làm mất số thứ tự (TW1). Plan chọn cách chạy, như một entity chỉ map các cột của V7.
 - **`admin`:** Vitest, Testing Library và MSW cho ô thứ tự của form thêm và form sửa: số 0 điền sẵn, từng lỗi của AC3, lệnh thêm và sửa gửi số đã nhập; và cho cột thứ tự của bảng.
-- **E2E:** mỗi AC một test Playwright trở lên, tên bắt đầu bằng mã AC, chạy trên app thật và `api` thật, không mock API. Development dùng chung, nên mỗi test tạo danh mục và sản phẩm riêng với tên có `E2E <runId>`, chỉ kiểm thứ tự tương đối giữa các danh mục của lần chạy đó, và xóa những gì nó tạo khi xong (TW3). Các danh mục khác trên môi trường có thể nằm xen giữa. AC7 chờ bằng `expect.poll` tới 60 giây. Mọi E2E của SHOP-81 vẫn pass mà không sửa, vì danh mục mới mặc định số 0 (AC8).
+- **E2E:** mỗi AC một test Playwright trở lên, tên bắt đầu bằng mã AC, chạy trên app thật và `api` thật, không mock API. Development dùng chung, nên mỗi test tạo danh mục và sản phẩm riêng với tên có `E2E <runId>`, chỉ kiểm thứ tự tương đối giữa các danh mục của lần chạy đó, và xóa những gì nó tạo khi xong (TW3). Các danh mục khác trên môi trường có thể nằm xen giữa. AC7 chờ bằng `expect.poll` tới 60 giây. Mọi E2E của SHOP-81 vẫn pass, chỉ sửa helper `expectCells` để thêm ô thứ tự, vì danh mục mới mặc định số 0 (AC8).
 - **Accessibility:** axe (WCAG 2.0/2.1 A và AA) quét form danh mục có ô thứ tự và bảng danh mục có cột thứ tự, ở hai ngôn ngữ.
 
 ## Boundaries
@@ -245,7 +245,7 @@ Như CLAUDE.md và mục Code Style của SPEC SHOP-81. Thêm:
 
 Ngoài DoD của Epic trong `.ai-orchestrator/docs/sdlc.md`:
 
-- Hai item đạt DoD: E2E của từng AC từ AC1 tới AC8 pass trên Development, bộ regression pass, và mọi E2E của SHOP-81 vẫn pass.
+- Hai item đạt DoD: E2E của từng AC từ AC1 tới AC8 pass trên Development, bộ regression pass, và mọi E2E của SHOP-81 vẫn pass, chỉ sửa helper `expectCells` để thêm ô thứ tự.
 - V8 chạy không lỗi sau V7 trên bản sao dữ liệu của Production. Sau khi nâng, mọi danh mục có số 0 và các danh sách giữ thứ tự theo tên, và bản `api` trước Epic vẫn khởi động, thêm và sửa được danh mục trên database đã nâng, để rollback được.
 - OpenAPI ở `/v3/api-docs` mô tả trường thứ tự.
 - axe không báo vi phạm WCAG A/AA nào trên form và bảng danh mục của `admin`.
