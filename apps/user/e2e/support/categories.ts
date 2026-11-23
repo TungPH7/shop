@@ -21,14 +21,17 @@ export type CategoryInput = {
   /** Left out, the api makes the slug from the name. */
   slug?: string;
   status?: CategoryStatus;
+  /** Sent only when set: a category added without one gets 0 (TW3 of SHOP-95). */
+  displayOrder?: number;
 };
 
-/** `AdminCategory` of the API Contract of SHOP-81. */
+/** `AdminCategory` of the API Contract of SHOP-81, with the display order of SHOP-95. */
 export type CreatedCategory = {
   id: string;
   name: string;
   slug: string;
   status: CategoryStatus;
+  displayOrder: number;
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -60,17 +63,20 @@ export async function createCategory(
 
 /**
  * Edits `category` as the form of admin does, with its version: `changes` over its name, slug and status. The name of
- * `changes`, when there is one, is used as given, so a test names it with `categoryName`. Returns the category as the
- * api stored it, with its new version.
+ * `changes`, when there is one, is used as given, so a test names it with `categoryName`. The display order is sent
+ * only when `changes` sets it, as the form of SHOP-81 sends none and the api keeps the stored one. Returns the category
+ * as the api stored it, with its new version.
  */
 export async function updateCategory(
   api: APIRequestContext,
   category: CreatedCategory,
-  changes: Partial<Pick<CreatedCategory, 'name' | 'slug' | 'status'>>,
+  changes: Partial<Pick<CreatedCategory, 'name' | 'slug' | 'status' | 'displayOrder'>>,
 ): Promise<CreatedCategory> {
   const { name, slug, status, version } = { ...category, ...changes };
+  const displayOrder =
+    changes.displayOrder === undefined ? {} : { displayOrder: changes.displayOrder };
   const response = await api.put(`/api/admin/categories/${category.id}`, {
-    data: { name, slug, status, version },
+    data: { name, slug, status, ...displayOrder, version },
   });
   expect(response.status(), await response.text()).toBe(200);
   return (await response.json()) as CreatedCategory;

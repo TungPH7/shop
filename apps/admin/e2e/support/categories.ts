@@ -23,6 +23,8 @@ export interface E2eCategory {
   name: string;
   slug: string;
   status: E2eCategoryStatus;
+  /** 0–9999, 0 when the category was added without one (SHOP-95). */
+  displayOrder: number;
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -37,6 +39,8 @@ export interface NewE2eCategory {
   name: string;
   slug?: string;
   status?: E2eCategoryStatus;
+  /** Sent only when set: a category added without one gets 0 (TW3 of SHOP-95). */
+  displayOrder?: number;
 }
 
 export async function createCategory(
@@ -49,6 +53,7 @@ export async function createCategory(
       name: e2eName(category.name, runId),
       ...(category.slug === undefined ? {} : { slug: category.slug }),
       status: category.status ?? 'VISIBLE',
+      ...(category.displayOrder === undefined ? {} : { displayOrder: category.displayOrder }),
     },
   });
   expect(response.status(), await response.text()).toBe(201);
