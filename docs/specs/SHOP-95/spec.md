@@ -101,9 +101,75 @@ Việc kỹ thuật đi cùng Epic. Plan đưa chúng vào item 1, và chúng kh
 - **TW2 · Hợp đồng API:** phần quản trị, `/api/admin/categories`: danh sách, chi tiết, thêm và sửa trả số thứ tự; thêm và sửa nhận số đó theo Category Rules; mọi giá trị sai nêu trên trường thứ tự trong cùng một 400 với các trường sai khác (AC3 của SHOP-81). Thêm mà không gửi số thì số là 0. Sửa mà không gửi số thì giữ số đang có, vì một tab `admin` mở từ trước khi deploy gửi lệnh sửa không có trường này (AC4, như NFR19 của SHOP-81): `api` không được lặng lẽ đặt nó về 0. Danh sách của quản trị và danh sách của khách, `GET /api/categories`, xếp theo Category Rules; `/api/sitemap/categories` giữ thứ tự theo `id` (Scope: Out). Phản hồi của khách không thêm trường nào. OpenAPI ở `/v3/api-docs` mô tả trường mới. `sa` ghi hợp đồng trong plan, và xem việc đổi số thứ tự làm đổi `updated_at` của danh mục, nên đổi `lastmod` của nó trong sitemap (AC19 của SHOP-81), có chấp nhận được không.
 - **TW3 · Dữ liệu của E2E:** helper danh mục của `apps/admin/e2e/support/` và `apps/user/e2e/support/` nhận thêm số thứ tự khi thêm danh mục qua `/api` của host `admin`, và không gửi số khi test không cần, như AC8. Tên danh mục của E2E vẫn kết thúc bằng `E2E <runId>`, và việc dọn danh mục E2E cũ giữ như TW3 của SHOP-81.
 
+### Non-functional requirements
+
+`sa` ghi mục này ngày 2026-11-23. Mỗi yêu cầu có mã NFR<n> của SHOP-95 để plan và item trỏ tới, và nói cách kiểm. Những yêu cầu của SHOP-81 mà mục này nhắc, như "NFR2 của SHOP-81", vẫn giữ nguyên: Epic không nới yêu cầu nào trong đó. Không quyết định nào ở đây cần quyền mà agent không có. Item 1 bỏ review (Constraints), nên các yêu cầu của item 1 được kiểm bằng test của chính item đó trước khi merge, rồi ở lượt review sau merge.
+
+**Quy mô và hiệu năng**
+
+- **NFR1 · Quy mô:** như NFR1 của SHOP-81: tới 200 danh mục và 10.000 sản phẩm, 1–2 quản trị viên cùng lúc, trang của khách tới 10 yêu cầu/giây. Danh sách của quản trị và danh sách của khách vẫn trả hết trong một lệnh, không phân trang. Số thứ tự không đổi quy mô nào, và tài nguyên giữ như `deploy.yaml`: `api` 768 MB, database 256 MB.
+- **NFR2 · Không có index cho thứ tự** (TW1, quyết định của `sa`): V8 không thêm index nào. 200 danh mục nằm gọn trong vài trang 8 KB của `app.categories`, nên PostgreSQL đọc cả bảng rồi xếp trong bộ nhớ, dù có index hay không: danh sách quản trị đọc mọi danh mục, còn danh sách của khách lọc theo trạng thái và `EXISTS` trên `app.products` trước khi xếp. Một index trên `(display_order, name, id)` chỉ thêm việc cho mỗi lần ghi. Nếu một Epic sau thêm phân trang vì quá 200 danh mục (NFR1 của SHOP-81), Epic đó thêm index cùng với phân trang. Kiểm: NFR3.
+- **NFR3 · `api`:** các ngưỡng của NFR2 của SHOP-81 giữ nguyên, đo cùng cách (Testcontainers, 200 danh mục và 10.000 sản phẩm, trung vị của 5 lần chạy):
+  - danh sách quản trị và danh sách của khách: mỗi lệnh xong trong 200 ms, và vẫn là đúng một câu SQL; `ORDER BY` mới không thêm câu nào;
+  - thêm và sửa danh mục, kể cả lệnh sửa chỉ đổi số thứ tự: mỗi lệnh xong trong 300 ms.
+
+  Kiểm: `CategoryPerformanceIntegrationTest` nạp 200 danh mục với số thứ tự trải từ 0 tới 9, nhiều danh mục cùng số, và pass mà không nới ngưỡng nào.
+- **NFR4 · `admin` và `user`:** `admin` giữ NFR5 của SHOP-81: trang Danh mục (S1) có dữ liệu trong 1 s sau khi mở, và thông báo sau khi bấm Lưu ở S2 hiện trong 1 s. Trang của khách không đổi giao diện hay dữ liệu, chỉ đổi thứ tự của các liên kết danh mục, nên NFR4 của SHOP-81 không cần đo lại. Kiểm: `qa` ghi số đo của S1 và S2 vào báo cáo QA của item 2.
+
+**Độ trễ của dữ liệu**
+
+- **NFR5 · Khi nào thứ tự mới hiện** (Category Rules, Độ trễ):
+  - ở `admin`, ngay sau khi lưu: một lần thêm hay sửa làm mới mọi query có khóa bắt đầu bằng `categories`, gồm bảng S1 và ô Danh mục của form sản phẩm (`categoryOptionsKey`), như `useInvalidateCategories` đang làm. Item 2 giữ cách đó, không thêm cache nào;
+  - ở `user`, trong vòng 60 s, qua profile `catalog` của `cacheLife`, như NFR6 của SHOP-81: không có lệnh báo `user` làm mới, và code của `user` không đổi.
+
+  Kiểm: E2E của AC5 và AC6 thấy thứ tự mới mà không chờ; E2E của AC7 chờ bằng `expect.poll` tới 60 s.
+
+**Bảo mật**
+
+- **NFR6 · Ai ghi và ai thấy số thứ tự:** như NFR7 của SHOP-81, chỉ lệnh thêm và sửa dưới `/api/admin/categories`, sau basic auth của host `admin`, nhận số thứ tự; Epic không thêm lệnh ghi nào. Như NFR8 của SHOP-81, mỗi danh mục trong phản hồi của khách (`GET /api/categories`, `StoreCategory`) vẫn chỉ có `name` và `slug`, và mỗi mục của `/api/sitemap/categories` vẫn chỉ có `slug` và `updatedAt`. Khách chỉ thấy kết quả của số thứ tự qua thứ tự của các liên kết, không bao giờ thấy chính số đó. Kiểm: WebMvc test so đúng tập khóa JSON của từng phần tử của hai phản hồi đó.
+- **NFR7 · Dữ liệu vào** (Category Rules, AC3, AC4): `api` kiểm số thứ tự bằng Bean Validation, cùng lượt với các trường khác, và nêu mọi trường sai trong cùng một 400, như NFR9 của SHOP-81:
+  - chỉ một số nguyên của JSON từ 0 tới 9999 là hợp lệ. 1.5 là lỗi trên trường thứ tự, không bao giờ được làm tròn hay cắt. Jackson của `api` cắt 1.5 thành 1 khi đọc vào một kiểu số nguyên, như ghi chú của `CreateProductRequest` nói về giá, nên trường này đọc vào một kiểu giữ được phần lẻ, như `BigDecimal` của giá (quyết định 7 của plan SHOP-7), hay một cách khác mà plan chọn và test chứng minh. Một số vượt kiểu `int`, như 99999999999, cũng là 400 trên trường thứ tự, không bao giờ 500;
+  - một giá trị không phải số, như `"abc"`, là 400 dạng Problem Details, hoặc trên trường thứ tự, hoặc `MALFORMED_REQUEST` như `GlobalExceptionHandler` đang trả cho thân không đọc được; plan chọn một. Không bao giờ là 500;
+  - trường vắng mặt và trường `null` là như nhau: lệnh thêm cho số 0, lệnh sửa giữ số đang có. `api` không bao giờ đặt số về 0 chỉ vì lệnh sửa thiếu trường (Boundaries). Form của `admin` luôn gửi số một cách tường minh;
+  - OpenAPI ở `/v3/api-docs` mô tả trường là số nguyên từ 0 tới 9999, không bắt buộc: thiếu ở lệnh thêm là 0, thiếu ở lệnh sửa là giữ số đang có.
+
+  Kiểm: unit test của quy tắc kiểm và WebMvc test của AC4, như Testing Strategy, thêm một số vượt `int` và một giá trị `null`, ở cả lệnh thêm lẫn lệnh sửa.
+- **NFR8 · Dependency và CSP:** như NFR13 của SHOP-81: Epic không thêm dependency nào ở ba app, không nới CSP nào, và không thêm extension PostgreSQL nào. Kiểm: `apps/api/pom.xml`, `package.json` của các app và `pnpm-lock.yaml` không đổi trong hai PR.
+
+**Dữ liệu**
+
+- **NFR9 · Cột và ràng buộc** (TW1): `app.categories.display_order INTEGER NOT NULL DEFAULT 0`, có CHECK tên `categories_display_order_range` nhận 0 tới 9999. Database là chốt sau `api`, như NFR14 của SHOP-81. Kiểu là `INTEGER`, không phải `SMALLINT`, vì entity map cột vào một số nguyên Java và `ddl-auto: validate` so kiểu của cột với kiểu đó. Cột không có UNIQUE: nhiều danh mục cùng số được. Kiểm: integration test ghi thẳng -1, 10000 và `NULL` bằng SQL, và thấy database từ chối từng giá trị.
+- **NFR10 · Migration V8** (TW1): chỉ bước expand.
+  - V8 là một lệnh `ALTER TABLE app.categories ADD COLUMN …` trong transaction của Flyway. V8 không sửa V1–V7 và không đụng `app.products`. Từ PostgreSQL 11, thêm cột có DEFAULT là hằng số không viết lại bảng; PostgreSQL chỉ đọc các dòng có sẵn để kiểm CHECK.
+  - V8 khóa `app.categories` (ACCESS EXCLUSIVE) tới hết transaction, nên trong lúc đó mọi lệnh đọc danh mục, và mọi lệnh ghi sản phẩm có danh mục, phải chờ. Với 200 danh mục, V8 xong trong 1 s. V8 đặt `SET LOCAL lock_timeout = '5s'` ở đầu file: nếu một transaction dài đang giữ bảng, V8 lỗi và lần deploy dừng, thay vì mọi lệnh của shop xếp hàng chờ sau nó. Flyway lùi cả V8 trên PostgreSQL, nên lần deploy sau chạy lại V8 từ đầu.
+  - V8 không chạy UPDATE nào trên các dòng có sẵn, nên `updated_at`, `updated_by` và `version` của mọi danh mục giữ nguyên. Vì vậy lần deploy không đổi `lastmod` nào của sitemap, và một form sửa danh mục mở từ trước khi deploy không nhận 409 chỉ vì V8. Mọi danh mục có sẵn có số 0, và mọi danh sách giữ đúng thứ tự trước khi nâng (AC8).
+  - Bản `api` trước Epic chạy đúng trên schema V8, trong lúc chuyển bản và sau một lần rollback. Bản đó là `v0.3.0` của Production, hay bản có SHOP-81 nếu bản đó lên Production trước Epic này. Flyway của nó bỏ qua V8, vì đó là migration "future" (mặc định `*:future`; `application*.yml` không đặt `ignore-migration-patterns`), và `ddl-auto: validate` không xét cột mà entity không map. `v0.3.0` không đọc `app.categories`. Entity `Category` của SHOP-81 viết INSERT và UPDATE với danh sách cột tường minh, không có `display_order`: danh mục nó thêm nhận 0 từ DEFAULT, và danh mục nó sửa giữ số đang có.
+  - Không có bước contract: V8 không thay hay bỏ cột nào, và DEFAULT 0 là quy tắc lâu dài cho danh mục thêm mà không gửi số (Category Rules), nên không bản sau nào phải gỡ gì của V8.
+
+  Kiểm: integration test của migration như Testing Strategy, chạy V8 trên schema V7 có 200 danh mục và có sản phẩm, đo thời gian của V8, và so `updated_at`, `version` và thứ tự của các danh sách trước và sau; và một test chạy câu INSERT và câu UPDATE mà Hibernate viết cho `Category` của SHOP-81 trên schema V8, như `V7CreateCategoriesMigrationTest` đã làm với câu của `v0.3.0`.
+- **NFR11 · Thứ tự ổn định** (Category Rules): `ORDER BY c.display_order, c.name, c.id`, viết một lần trong `CategoryQueryRepository` và dùng cho cả danh sách quản trị lẫn danh sách của khách. `c.name` giữ collation `app.vi_ci` (NFR17 của SHOP-81). `/api/sitemap/categories` giữ `ORDER BY c.id` (Scope: Out). Số được so như số, không như chữ: 9 đứng trước 10. Kiểm: integration test như Testing Strategy, thêm hai danh mục có số 9 và 10.
+- **NFR12 · Ghi chồng, và hai bản chạy lẫn nhau:**
+  - Lệnh sửa vẫn gửi `version` (NFR12 của SHOP-81): khi hai quản trị viên cùng sửa một danh mục, người lưu sau nhận 409, kể cả khi cả hai chỉ đổi số thứ tự. Hai danh mục cùng số không phải là xung đột.
+  - Một tab `admin` mở từ trước khi deploy gửi lệnh sửa không có trường thứ tự, và `api` giữ số đang có (AC4, NFR7). Schema Zod cũ của tab đó là `z.object` không strict, nên nó bỏ qua trường mới trong phản hồi.
+  - `admin` mới có thể gặp `api` trước Epic, chỉ trong lúc chuyển bản. Khi đó một phản hồi thiếu số thứ tự là lỗi tải của S1 hay S2, có nút "Thử lại". `admin` không bao giờ hiện "0" thay cho một số mà nó không nhận được. Một lệnh lưu gửi tới `api` cũ không đổi số đã lưu trong database, vì `api` cũ không ghi cột này.
+  - `user` của mọi bản đọc cùng một phản hồi của khách, chỉ khác thứ tự.
+
+  Kiểm: WebMvc test của lệnh sửa không có trường thứ tự; unit test của schema Zod của `admin` với phản hồi có và không có trường thứ tự.
+- **NFR13 · `lastmod` khi đổi số thứ tự** (TW2, quyết định của `sa`): chấp nhận được. Một lệnh sửa chỉ đổi số thứ tự vẫn là một UPDATE của danh mục: `version` tăng, trigger `trg_categories_set_updated_at` đặt `updated_at`, và `lastmod` của danh mục đó trong sitemap đổi theo. Như vậy vẫn đúng chữ của AC19 của SHOP-81: `lastmod` là lần sửa cuối của danh mục hay của một sản phẩm Đang bán của nó. Trang danh mục (S5 của SHOP-81) không hiện số thứ tự, nên đôi khi `lastmod` tiến lên mà trang không đổi. Giữ `updated_at` cũ cho lần sửa này cần một trigger khác và một ngoại lệ trong auditing của JPA. Không đáng làm, vì việc xếp lại danh mục hiếm, chỉ đụng tối đa 200 đường dẫn, và `lastmod` chỉ tiến, không lùi. Trang `/products`, nơi thứ tự thật sự đổi, không có `lastmod` trong sitemap của `user`. Kiểm: integration test sửa chỉ số thứ tự của một danh mục, và thấy `version` tăng 1 và `updated_at` mới hơn trước.
+
+**Deploy và lưu giữ**
+
+- **NFR14 · Deploy và rollback:** như NFR21 của SHOP-81: Epic không đổi `deploy.yaml`, secret hay biến môi trường nào, và smoke test giữ như `deploy.yaml`. Deployer không tự dump database trước khi chạy migration, nên ở gate ⑤ bạn xác nhận bản backup mới nhất của Production cách đó không quá 24 giờ. Rollback về bản trước để V8 lại trong database (NFR10). Các số đã đặt còn nguyên, và hiện lại khi bản có Epic lên lại.
+- **NFR15 · Lưu giữ:** số thứ tự là một cột của danh mục. Nó không có lịch sử, và không phải dữ liệu cá nhân. Khi danh mục bị xóa, số mất cùng dòng (NFR22 của SHOP-81), và chỉ lấy lại được bằng tay từ các bản backup hằng ngày của kit (khoảng 4 tuần). Danh mục mà E2E tạo trên Development, cùng số của chúng, được dọn như TW3 của SHOP-81.
+
 ## Tech Stack
 
-Không thêm framework, dependency hay extension PostgreSQL nào: stack như README gốc, README của từng app, và mục Tech Stack của SPEC SHOP-81. Epic thêm migration V8 sau V7 ở `api`, và chữ mới trong i18n của `admin`. Thứ tự tên giữ collation ICU `app.vi_ci` của V7 (ADR-0005).
+Không thêm framework, dependency hay extension PostgreSQL nào (NFR8): stack như README gốc, README của từng app, và mục Tech Stack của SPEC SHOP-81. Các phiên bản dưới đây đọc từ `apps/api/pom.xml`, BOM của Spring Boot 4.0.9, `apps/admin/package.json` và `.ai-orchestrator/deploy.yaml` ngày 2026-11-23, và Epic không đổi bản nào. Những điểm Epic này đụng tới:
+
+- **`api`:** Java 21; Spring Boot 4.0.9, với Hibernate 7.2.25.Final, Jackson 3.1.7 và Flyway 11.14.1 theo BOM; springdoc-openapi 3.0.3 cho `/v3/api-docs`; Testcontainers 2.0.5. Thêm migration V8 sau V7: cột `app.categories.display_order` (NFR9, NFR10). Trường của API là `displayOrder`, và plan ghi hợp đồng. Thứ tự tên giữ collation ICU `app.vi_ci` của V7 (ADR-0005).
+- **Database:** PostgreSQL 17, `postgres:17-alpine` ghim theo digest ở `deploy.yaml`, và cùng tag đó ở Testcontainers. Thêm cột có DEFAULT là hằng số không viết lại bảng (NFR10).
+- **`admin`:** React 19.2.7, TanStack Query 5.101.0, react-hook-form 7.80.0, zod 4.6.7 và Vite 8.3.8, không đổi. Thêm chữ mới trong `category.json` của `vi` và `en`.
+- **`user`:** không đổi code (Project Structure).
 
 ## Commands
 
@@ -193,3 +259,5 @@ Không có. Ngày 2026-11-23 cả sáu đề xuất của `ba` được chọn, 
 
 - Bạn đã duyệt bốn Open Points của Epic khi trả lời "OK" cho bản nháp Epic (Phiên 35 · Lượt 67): số thứ tự là số nguyên 0–9999, số nhỏ hiện trước, cùng số được (Category Rules, AC3, AC4); danh mục có sẵn và danh mục mới mang số 0, form thêm điền sẵn 0 (Category Rules, AC1, AC8, TW1); ô Danh mục của form sản phẩm theo thứ tự mới (Category Rules, AC6); `seo` chỉ ghi "không đổi" trong mục `## SEO` (Objective).
 - Claude chọn hai đề xuất mới theo đề xuất của `ba`, vì bạn đã giao cổng ① của Epic này cho Claude (Phiên 35 · Lượt 67: "OK, tôi giao cổng 1, 2, 3 cho bạn"): sitemap giữ thứ tự theo `id` (Scope: Out, TW2), và ô thứ tự trống thì form báo lỗi dưới ô, không hiểu là 0 (Category Rules, AC3).
+
+`sa` không có câu hỏi nào cho bạn. Hai việc TW1 và TW2 giao cho `sa` đã quyết ở mục Non-functional requirements: không thêm index cho thứ tự (NFR2), và chấp nhận việc đổi số thứ tự làm đổi `lastmod` của danh mục trong sitemap (NFR13). Các quyết định khác của `sa`: một trường thứ tự vắng mặt hay `null` đều có nghĩa là số 0 khi thêm và giữ số đang có khi sửa (NFR7); V8 đặt `lock_timeout` 5 s (NFR10); và `admin` mới gặp `api` cũ thì hiện lỗi tải, không hiện số 0 (NFR12).
