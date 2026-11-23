@@ -11,7 +11,7 @@ import { OLD_PREVIEW_FILE, readPreviewConfig } from '../workflow/preview.mjs';
 
 // The scripts a project runs from .ai-orchestrator/scripts/: the hooks, the CI jobs, ao-step and its helpers.
 export const PROJECT_SCRIPTS = [
-  'ao-agent.mjs', 'ao-git-credential.mjs', 'ao-pr.mjs', 'ao-step.mjs', 'audit.mjs', 'check-design.mjs', 'check-policy.mjs', 'ci-java.mjs', 'ci-package-manager.mjs',
+  'ao-agent.mjs', 'ao-git-credential.mjs', 'ao-pr.mjs', 'ao-step.mjs', 'audit.mjs', 'check-design.mjs', 'check-policy.mjs', 'design-inbox.mjs', 'ci-java.mjs', 'ci-package-manager.mjs',
   'commit-msg.mjs',
   'coverage-diff.mjs', 'dep-check.mjs', 'install-hooks.mjs', 'jira-sync.mjs', 'merge-gate.mjs', 'mvnw.mjs', 'pre-commit.mjs', 'pre-push.mjs', 'render-agents.mjs', 'run.mjs',
 ];

@@ -205,12 +205,16 @@ export const itemReview = (jira, mapping) => async (key, { at, projectDefault = 
   const histories = await jira.getAll(`${path}/changelog`);
   const agentAccount = mapping.identities?.find(({ id }) => id === 'agents')?.account_id;
   const names = reviewLabels(mapping);
-  const made = await madeFacts(jira, { fields, labels, names, agentAccount }, mapping);
+  // The labels the choice reads: those at `at` for audit, so a label removed after the merge still counts (review of
+  // shop PR #97, reviewer Medium 3).
+  const then = at === undefined ? labels : labelsAt(labels, histories, at);
+  const made = await madeFacts(jira, { fields, labels: then, names, agentAccount }, mapping);
   return reviewChoice({ labels, histories, agentAccount, names, projectDefault, at, made });
 };
 
 // Who made an item and when, and, for an item the agents' account made with ao-review-skip, when the plan of its parent
-// Epic was approved (the parent's changelog, read only then). fields: creator, created, parent of the item.
+// Epic was approved (the parent's changelog, read only then). fields: creator, created, parent of the item; labels: the
+// labels at the time the choice is read for.
 export async function madeFacts(jira, { fields, labels, names, agentAccount }, mapping) {
   const by = fields.creator?.accountId ?? null;
   const needsPlan = names && agentAccount && by === agentAccount && labels.includes(names.skip) && fields.parent?.key;

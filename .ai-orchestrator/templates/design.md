@@ -11,12 +11,17 @@ Delete the guidance comments and the Example section when you are done.
 > **Epic:** <EPIC-KEY> · **Jira:** <link to the Epic> · **Spec:** docs/specs/<EPIC-KEY>/spec.md · **Status:** Draft | Approved <YYYY-MM-DD>
 >
 > **Figma version:** <name of the approved version in Figma's version history, or "none" when no screen is a Figma screen>
+>
+> **Claude Design version:** <the version of the artifact in .ai/design-inbox/<EPIC-KEY>/inbox.yaml; delete the line when no screen is a Claude Design screen>
 
 ## Screens
 
-<!-- One row per screen. Codes S1, S2… never change after the SPEC is approved: a removed screen leaves its code unused.
-Kind is ASCII when the screen has no design yet, Figma when it has a Figma design, and Image when the human gave a
-screenshot or a mockup made with another tool.
+<!-- One row per screen. A screen has one code in the whole project, <APP>-<AREA><NN> such as USR-CART01, listed in
+docs/design-system/screens.md with its name, app and route; a Claude Design screen keeps the code of its artboard. A
+design.md of an older Epic keeps its codes S1, S2…; one file uses one kind. Codes never change after the SPEC is
+approved: a removed screen leaves its code unused, and a retired code is never given again.
+Kind is ASCII when the screen has no design yet, Figma when it has a Figma design, Claude Design when it has an artboard
+of a Claude Design in the design inbox, and Image when the human gave a screenshot or a mockup made with another tool.
 App is the app of apps/ the screen belongs to, a key of apps: in .ai-orchestrator/project.yaml: seo writes the SEO of
 the screens of an app with seo: true, and no other (C1 spec 6.1). -->
 
@@ -46,13 +51,15 @@ flowchart LR
 - Figma: the exported images, desktop and mobile when there is one, as ![S<n> · <name> · <screen size>](design/S<n>-<size>.png).
   Export at 1x as PNG or JPG; each image at most 1 MB and at most 2,000 px on its long side; slice a long frame.
   Commit only approved images, with the SPEC.
+- Claude Design: the images the main session drew of its artboard (shots/ of the design inbox), shown the same way and
+  with the same limits, and its artboard copied as design/<code>.dc.html for fe-dev to read.
 - Image: a screenshot or a mockup the human put in .ai/design-inbox/<EPIC-KEY>/, shown the same way and with the same
   limits. An image over them goes back to the human: never edit one.
 Right under the drawing or the images comes one ```yaml block with `screen`, `route`, `blocks`, and for a Figma screen
-`figma`, the link of the frame with its node-id, or for an Image screen `screenshot`, where the screenshot or mockup
-comes from. Each block has `name` and `type`, and when needed `content`, `behavior`,
+`figma`, the link of the frame with its node-id, for a Claude Design screen `claude-design`, the link of the artifact,
+and `prototype`, design/<code>.dc.html, or for an Image screen `screenshot`, where the screenshot or mockup comes from. Each block has `name` and `type`, and when needed `content`, `behavior`,
 `validation`, `states`, `a11y`, `ac` (AC<n> codes of the SPEC) and `figma` (node id of the layer). Elsewhere, point to a
-block by its full code, for example S1.4. After approval a removed block leaves its number unused, and a new block takes
+block by its full code, for example USR-CART01.4 (S1.4 in a design.md of an older Epic). After approval a removed block leaves its number unused, and a new block takes
 the next number. -->
 
 ### S1 · <name>

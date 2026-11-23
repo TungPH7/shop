@@ -25,6 +25,7 @@ import { epicOfDocsBranch, readGates } from '../lib/quality/gates.mjs';
 import { withProjectPaths } from '../lib/quality/review-tiers.mjs';
 import { markBody, newestMark, projectReviewDefault, skipBody } from '../lib/quality/review-choice.mjs';
 import { findingId, readReviewReport } from '../lib/quality/pull-request.mjs';
+import { INBOX_FILE, readInbox } from '../lib/quality/design-inbox.mjs';
 import { afterMergeReport, findingsSource, fixSubtask, fixTask, reportComment, reportHash, reportLine, splitFindings } from '../lib/workflow/after-merge.mjs';
 import { matchesGlob } from '../lib/quality/glob.mjs';
 import { DOCKER_INFO, dockerAnswered } from '../lib/quality/maven.mjs';
@@ -313,6 +314,16 @@ async function main() {
     },
     // A file the agents of a release command wrote in .ai/runs/<release>/ (release-workflow T15).
     runFile: (k, name) => readRunFile(k, name),
+    // The links of the Claude artifacts the design inbox of `key` holds (tasks/todo.md item 10), null with no inbox.
+    designInbox: (key) => {
+      const file = join(projectDir, '.ai', 'design-inbox', key, INBOX_FILE);
+      if (!existsSync(file)) return null;
+      try {
+        return readInbox(readFileSync(file, 'utf8')).sources.map(({ url }) => url);
+      } catch {
+        return [];
+      }
+    },
     // The reports of a review after merge in .ai/reviews/ whose name starts with `prefix` (SPEC-review-per-item.md 4.4).
     reviews: (prefix) => {
       const dir = join(projectDir, '.ai', 'reviews');
@@ -1366,11 +1377,16 @@ async function watchLoop({ files, flaggedNow, options, state: first, stamp }) {
     const result = look({ now, locks, logAt: files.logAt, lastTool: files.lastTool, dispatcher: files.dispatcher(), events, flagged, boardFailed }, new Set(state.told), options);
     idleSince = result.running ? null : (idleSince ?? now);
     const ends = idleSince !== null && now - idleSince >= WATCH.endMs;
+    // The file of this watcher, written again at each round: one not written for three rounds holds nothing. A watcher
+    // that finds another holding it ends, before it writes the state the other one keeps (review of shop PR #97).
+    const held = files.beat(process.pid);
+    if (!held.ok) {
+      console.log(`${stamp()} ao-step watch:\n- another watcher (process ${held.pid ?? 'unknown'}) took over this project while this one waited, so this one ends`);
+      return;
+    }
     state = nextWatchState(state, { marks: result.marks, forget: result.forget, offsets, sizes });
     mkdirSync(dirname(files.stateFile), { recursive: true });
     writeFileSync(files.stateFile, `${JSON.stringify(state, null, 2)}\n`);
-    // The file of this watcher, written again at each round: one not written for three rounds holds nothing.
-    files.beat(process.pid);
     if (result.tell.length > 0 || ends) {
       const lines = [...result.tell, ...(ends ? [`nothing of the kit has run for ${WATCH.endMs / 60_000} min, so the watcher ends`] : [])];
       console.log([`${stamp()} ao-step watch:`, ...lines.map((line) => `- ${line}`)].join('\n'));

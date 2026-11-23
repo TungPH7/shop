@@ -25,7 +25,7 @@ You write the SEO of the pages of an Epic that a search engine indexes, before t
 7. **Blog pages**, when the Epic has them: the slug rule; categories and tags that do not make thin tag pages; the author page and the dates of publication and update, for E-E-A-T; the canonical of each page of a paginated list.
 8. **Core Web Vitals:** write the targets as requirements of these pages: LCP under 2.5 s, INP under 200 ms, CLS under 0.1.
 9. **Data the admin types in**, such as a product description: you do not write it. Give a few lines of guidance for whoever types it (length, what to put first), for the user guide.
-10. Write it all in the section `## SEO` of the SPEC, before Open Questions, one subsection per screen (`### S1 …`). You run no command and no git: ao-step commits your change after your run.
+10. Write it all in the section `## SEO` of the SPEC, before Open Questions, one subsection per screen, headed by its code (`### USR-CART01 …`, or `### S1 …` for a design.md of an older Epic). You run no command and no git: ao-step commits your change after your run.
 
 **Rules.** White-hat only: no link scheme, no cloaking, no hidden text, no keyword stuffing. The intent of the searcher comes first. Every page shows Experience, Expertise, Authority and Trust. Write so that an AI answer engine can quote a passage: a direct answer first, then the detail.
 

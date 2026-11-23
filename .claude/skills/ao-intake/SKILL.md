@@ -40,6 +40,11 @@ them. Write no code, and change nothing in the repository but the draft below.
      paragraph that starts `Cần seo:` and says what seo must write, such as the title, the meta description, the copy
      or the structured data of which page. A Bug that is wrong against the section `## SEO` of an older SPEC needs no
      `Cần seo:`: its draft points to that section, with the path of the SPEC and the screen code.
+   - **Designs of an Epic** (tasks/todo.md item 10): ask where the designs of its screens are: none yet, screenshots,
+     a Design or a Design System made in Claude (the link of its artifact, `https://claude.ai/artifact/<id>`), or
+     Figma. Write each link in the draft with the screens it holds. Tell the human that each artboard of a Claude Design
+     is named after its screen code, such as the file `USR-CART01.dc.html` and the title "USR-CART01 · Giỏ hàng", and
+     that `/ao-design <KEY>` takes the designs before `/ao-spec`.
    - **An Epic of a blog** (C1 spec 6.7): its draft also asks for posts in draft that only the admin sees, a preview link
      that people outside cannot open, and a tool that publishes a post through the API of the admin, such as
      `scripts/post-publish.mjs <post file>`, reviewed once. The workflow that writes posts (row D2) needs all three.
@@ -61,5 +66,5 @@ them. Write no code, and change nothing in the repository but the draft below.
    of another item. If a call fails, show the error and stop: do not try another way.
 6. **Report.** Run `node .ai-orchestrator/scripts/ao-step.mjs status <KEY>` with the key Jira gave, and show its output.
    Then tell the human, in Vietnamese, the key, its link, and the next step as numbered clicks: for an Epic, Start spec
-   on it, then `/ao-spec <KEY>`; for a Task or a Bug, read it on Jira, then Refine. With a `Cần seo:` comment, first
+   on it, then `/ao-design <KEY>` when it links designs of Claude, then `/ao-spec <KEY>`; for a Task or a Bug, read it on Jira, then Refine. With a `Cần seo:` comment, first
    `/ao-request <KEY>`, which runs seo; read the SEO part seo comments on the item, then Refine.

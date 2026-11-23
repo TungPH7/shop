@@ -3,6 +3,9 @@
 // the Epic's documents over many turns. On PR #4 of ao-sample it cut a reviewer run from 38 turns to 10. Pure: the
 // script reads git, GitHub and Jira and passes the text here.
 
+import { ANY_CODE } from '../quality/screen-codes.mjs';
+
+const SCREEN_REF = new RegExp(`\\b(${ANY_CODE})(?:\\.\\d+)?\\b`, 'g');
 const norm = (text) => text.normalize('NFC').trim().toLowerCase();
 const indentOf = (line) => line.match(/^(\s*)/)[1].length;
 
@@ -42,7 +45,8 @@ export function namedCodes(text) {
   for (const [, first, last] of text.matchAll(/\bAC(\d+)\s*[–-]\s*AC(\d+)\b/g)) for (let n = Number(first); n <= Number(last); n += 1) criteria.add(n);
   for (const [, n] of text.matchAll(/\bAC(\d+)\b/g)) criteria.add(Number(n));
   const adrs = [...new Set([...text.matchAll(/\bADR-(\d{4})\b/g)].map(([, n]) => n))].sort();
-  const screens = [...new Set([...text.matchAll(/\b(S\d+)(?:\.\d+)?\b/g)].map(([, screen]) => screen))].sort();
+  // A screen code of the project, such as USR-CART01, or of one Epic, S1; a block code (S1.4) names its screen.
+  const screens = [...new Set([...text.matchAll(SCREEN_REF)].map(([, screen]) => screen))].sort();
   return { criteria: [...criteria].sort((a, b) => a - b).map((n) => `AC${n}`), adrs, screens };
 }
 

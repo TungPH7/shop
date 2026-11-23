@@ -45,7 +45,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 ## Reference codes
 
 - Acceptance criteria are numbered `AC1`, `AC2`… across an Epic, and a Story keeps the numbers of the SPEC.
-- Screens of `design.md` are `S1`, `S2`; a block of a screen is `S1.4`.
+- A screen has one code in the whole project, `<APP>-<AREA><NN>` such as `USR-CART01`, listed in `docs/design-system/screens.md`; a block of a screen is `USR-CART01.4`. A `design.md` written before these codes keeps the codes of its Epic, `S1`, `S2` and `S1.4`. Write the code of a screen in comments and test names of the code that builds it, never in a file, component or route name.
 - The name of an E2E test starts with the code of its criterion, such as `AC3 applies a valid coupon`.
 
 ## Ledger
