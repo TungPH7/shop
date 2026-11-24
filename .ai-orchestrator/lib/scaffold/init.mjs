@@ -16,8 +16,9 @@ const RENDER = ['node', '.ai-orchestrator/scripts/render-agents.mjs', '--project
 // The packages of the kit copy, which its scripts import (yaml, ajv), as the workflows of CI install them. Without them
 // the render fails (T16 of project-scaffold).
 const KIT_PACKAGES = ['npm', 'ci', '--prefix', '.ai-orchestrator', '--no-audit', '--no-fund'];
-// What may sit in a folder ao-kit init still takes for empty: a new repo of GitHub has a README, a .gitignore, a LICENSE.
-const EMPTY_ENOUGH = new Set(['.git', 'README.md', 'LICENSE', '.gitignore']);
+// What may sit in a folder ao-kit init still takes for empty: a new repo of GitHub has a README, a .gitignore, a LICENSE;
+// and .ai/, where ao-kit-setup.md keeps your answers before init (SPEC-guided-setup.md 3.2), and git ignores it.
+const EMPTY_ENOUGH = new Set(['.git', 'README.md', 'LICENSE', '.gitignore', '.ai']);
 const list = (value) => (value ?? '').split(',').map((part) => part.trim()).filter(Boolean);
 // The TODO values of a config, by their path.
 const todoPaths = (value, path = '') => {
@@ -123,7 +124,7 @@ function ensureOrigin(projectDir, repo, git) {
 
 const NEXT_EMPTY = 'Next: ao-kit setup jira; add the repo to the two GitHub Apps; run lint, typecheck, test:coverage and build, commit (the first commit needs no Jira key) and push develop and main; ao-kit setup github; ao-kit doctor; then open claude in the folder, trust it, and allow its two MCP servers (docs/getting-started.md, part 3)';
 // After base-pnpm, the apps come first (project-scaffold part 2, spec 2.2).
-const NEXT_ROOT = 'Next: add each app with ao-kit add <dir> <app> --stack nextjs|react [--from <template>] [--public]; then the steps of an empty folder (docs/getting-started.md)';
+const NEXT_ROOT = 'Next: add each app with ao-kit add <dir> <app> --stack nextjs|react|spring-boot [--from <template>] [--public --seo|--no-seo]; spring-boot comes from a template only; then the steps of an empty folder (docs/getting-started.md)';
 const NEXT_CODE = 'Next: fix what is missing above; add the repo to the two GitHub Apps; ao-kit setup jira; open claude in the folder, trust it, allow its two MCP servers, and run /ao-intake for the Task of the kit copy; commit with its key on develop and push it; ao-kit setup github; ao-kit doctor (docs/getting-started.md, part 4)';
 
 // ao-kit init <dir>: an empty folder gets the skeleton of the profile, then the kit; a repo that has code gets the kit

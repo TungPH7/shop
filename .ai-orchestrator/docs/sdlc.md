@@ -327,7 +327,7 @@ Giới hạn mặc định, chỉnh được ở retro:
 | Artifact | Template | Ai tạo | Lưu ở đâu |
 | --- | --- | --- | --- |
 | SPEC của Epic | `templates/spec.md` | `ba` | Git: `docs/specs/<EPIC-KEY>/spec.md` |
-| Thiết kế màn hình | `templates/design.md` | `ux` | Git: `docs/specs/<EPIC-KEY>/design.md`; Git: `docs/specs/<EPIC-KEY>/design/`, ảnh của màn hình kiểu Figma hay Ảnh |
+| Thiết kế màn hình | `templates/design.md` | `ux` | Git: `docs/specs/<EPIC-KEY>/design.md`; Git: `docs/specs/<EPIC-KEY>/design/`, ảnh của màn hình kiểu Figma, Claude Design hay Ảnh, và prototype <mã>.html của màn hình Claude Design, trang không script mà /ao-design viết |
 | Plan | `templates/plan.md` | `sa` | Git: `docs/specs/<EPIC-KEY>/plan.md` |
 | ADR | `templates/adr.md` | `sa` | Git: `docs/adr/NNNN-<slug>.md` |
 | Epic | `templates/epic.md` | `human` | Jira: Mô tả item |

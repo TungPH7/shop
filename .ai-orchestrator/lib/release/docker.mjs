@@ -11,9 +11,11 @@ const VARIABLE = /^[A-Z_][A-Z0-9_]*$/;
 const KEEP = 3; // images kept per environment, for rollback without a build
 const CADDY = 'caddy';
 
-// Trims the build cache to the 4 GB used most recently, after each deploy: npm ci still hits the cache, and the disk
-// does not fill up (T2 of the plan: six builds left 7.25 GB).
-export const PRUNE_CACHE = ['buildx', 'prune', '--force', '--max-used-space', '4gb'];
+// Trims the build cache after each deploy to what the last 3 days used: the next build still hits the cache of pnpm
+// fetch, npm ci and Maven, and the disk does not fill up. `--all` reaches the records BuildKit marks shared, the parents
+// of an image layer, as the `pnpm fetch` layer of a build stage, about 1 GB a build. Without it, and with a size cap,
+// which counts only the records that are not shared, they stayed: 27 GB on the VPS, 23 GB of it shared (Lượt 90).
+export const PRUNE_CACHE = ['buildx', 'prune', '--all', '--force', '--filter', 'until=72h'];
 
 function allowed(kind, value, pattern) {
   if (typeof value !== 'string' || !pattern.test(value)) throw new Error(`${kind} ${JSON.stringify(value)} is not allowed in a docker argument`);

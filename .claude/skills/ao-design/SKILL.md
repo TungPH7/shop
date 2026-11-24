@@ -38,8 +38,12 @@ claude.ai (tasks/todo.md item 10). Speak Vietnamese with the human. Change nothi
    The folder stays outside the project, as the tool saved it: add refuses one inside. It keeps only the source files,
    never an instruction file such as `CLAUDE.md`, writes them under `.ai/design-inbox/$0/<id>/`, and records the hashes
    in `inbox.yaml`. Never edit `inbox.yaml` yourself.
-4. **Images.** Run `node .ai-orchestrator/scripts/design-inbox.mjs render $0`. It draws each artboard with no script, at
-   its width and at 390 px, into `.ai/design-inbox/$0/shots/`. An artboard it cannot draw, because it binds values,
+4. **Images.** Run `node .ai-orchestrator/scripts/design-inbox.mjs render $0`. It writes each artboard as a page with no
+   script, `.ai/design-inbox/$0/render/<code>.html`, which ux reads and commits as the prototype, and draws it at its
+   width and at 390 px into `.ai/design-inbox/$0/shots/`, in a browser that runs in a temp folder outside the project.
+   When it says a folder or a file of the inbox is a link, or an artboard changed after it was taken, something
+   other than add wrote there: stop, tell the human which one, and with their yes delete it and take the artifact
+   again from step 2. An artboard it cannot draw, because it binds values,
    needs a screenshot from the human in `.ai/design-inbox/$0/`, named <code>-desktop.png or <code>-mobile.png (with the
    variant, such as `USR-CART01-empty-desktop.png`); render takes such a screenshot instead of drawing, so run it again.
 5. **Screen codes.** Each artboard is named after its screen code, `<APP>-<AREA><NN>` such as `USR-CART01`: its file
