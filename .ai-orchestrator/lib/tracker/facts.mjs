@@ -196,8 +196,10 @@ const PASSED = ['success', 'neutral', 'skipped'];
 const NOT_CI = ['jira-sync', 'pr-review-relay', 'pr-events-relay'];
 // The jobs of the kit that are check runs on the head of a branch but not its CI (T14 of C2): merge-gate and jira-sync
 // run on workflow_run, and GitHub puts their check runs on the head of the default branch, where merge-gate may wait for
-// QA up to 100 minutes; and audit, which a deploy workflow calls.
-export const NOT_BRANCH_CI = [...NOT_CI, 'merge-gate', 'audit'];
+// QA up to 100 minutes; and audit, which a deploy workflow calls. Not the kit's, but no CI either: the security updates
+// of Dependabot, check runs named Dependabot on the head of the default branch, one of which fails on every push when
+// it cannot bump a package deep in the lockfile (du-an-1, tasks/guided-setup/verification.md).
+export const NOT_BRANCH_CI = [...NOT_CI, 'merge-gate', 'audit', 'Dependabot'];
 const FAILED = ['failure', 'timed_out'];
 // Review states that decide; COMMENTED does not.
 const DECISIVE = ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'];

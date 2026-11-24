@@ -2,6 +2,7 @@
 // or of a screenshot (project-scaffold part 2, spec 2.5), the YAML under it, and the Design System section of a design
 // with images. Pure: scripts/check-design.mjs reads the file. Errors are { rule, line, message }, line 1-based.
 import { parse } from 'yaml';
+import { isArtifactLink, renderedPageProblems } from './design-inbox.mjs';
 import { ANY_CODE, REGISTRY_FILE, checkRegistry, codeKind, readRegistry } from './screen-codes.mjs';
 
 // Claude Design screens and project screen codes come from tasks/todo.md item 10 (Phiên 35 · Lượt 84–87).
@@ -13,8 +14,6 @@ const MAX_COLUMNS = 100;
 const MAX_IMAGE_BYTES = 1024 * 1024;
 const MAX_IMAGE_SIDE = 2000;
 const MAX_PROTOTYPE_BYTES = 256 * 1024;
-// A Claude artifact: a Design made in Claude, which the Artifact tool of the main session reads.
-const CLAUDE_LINK = /^https:\/\/claude\.ai\/(artifact\/[A-Za-z0-9]{10,40}|code\/artifact\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const FIGMA_LINK = /^https:\/\/(www\.)?figma\.com\/(design|file|proto)\/[^?\s]+\?([^\s]*&)?node-id=[^&\s]+/;
 // Unicode box drawing and block elements, and emoji. ASCII frames use + - | [ ] _ only (rule 2).
@@ -107,7 +106,7 @@ export function screenApps(text) {
 export function checkDesign(text, { images, registry } = {}) {
   const design = readDesign(text);
   const errors = [];
-  const error = (rule, line, message) => errors.push({ rule, line, message });
+  const error = (rule, line, message, more = {}) => errors.push({ rule, line, message, ...more });
   const screens = readScreens(design, error);
 
   checkDrawings(design, screens, error);
@@ -271,7 +270,8 @@ function checkFigma(design, screens, error) {
     if (given.length === 0) error('D7', line, `${code} is shown by images, so its YAML says where they come from: figma, the link of its frame with node-id, or screenshot, where the screenshot was taken, or claude-design, the link of its Claude artifact`);
     else if (given.length > 1) error('D7', sources[given[1]].line, `${code} has more than one of figma, claude-design and screenshot: an image screen comes from one of them`);
     else if (given[0] === 'figma' && !FIGMA_LINK.test(String(figma.value))) error('D7', figma.line, `figma of ${code} must be a figma.com link with node-id`);
-    else if (given[0] === 'claude-design' && !CLAUDE_LINK.test(String(claude.value))) error('D7', claude.line, `claude-design of ${code} must be the link of a Claude artifact, such as https://claude.ai/artifact/<id>`);
+    // The link of a Claude artifact as /ao-design takes it (review of shop PR #98: one pattern for both).
+    else if (given[0] === 'claude-design' && !isArtifactLink(claude.value)) error('D7', claude.line, `claude-design of ${code} must be the link of a Claude artifact, such as https://claude.ai/artifact/<id>`);
     else if (given[0] === 'screenshot' && (typeof screenshot.value !== 'string' || screenshot.value.trim() === '')) error('D7', screenshot.line, `screenshot of ${code} names where the screenshot or mockup comes from, such as the page it was taken of`);
   }
   for (const [key, name, version] of [['figma', 'Figma', design.figmaVersion], ['claude-design', 'Claude Design', design.claudeVersion]]) {
@@ -289,9 +289,14 @@ function checkCodeKinds(design, screens, error) {
   if (project && epic) error('D10', Math.max(project.line, epic.line), `the file mixes project screen codes, such as ${project.code}, with codes of one Epic, such as ${epic.code}: use one kind`);
 }
 
+// Whether a design.md names its screens with project codes, such as USR-CART01: the policy job checks it against the
+// registry whenever a PR changes the registry.
+export const usesProjectCodes = (text) => readDesign(String(text ?? '')).rows.some(({ code }) => codeKind(code) === 'project');
+
 // D11: a project code is a row of the registry of the project (lib/quality/screen-codes.mjs), not retired, with the
-// same app and route as in the table of Screens: one code names one screen in the whole project. The errors of the
-// registry itself come with its path and line.
+// same app and route as in the table of Screens: one code names one screen in the whole project. Of the errors of the
+// registry itself, only how many, in an error marked registry: `design-inbox.mjs codes` and the policy job list them,
+// so each is listed once (review of shop PR #98).
 function checkRegistered(design, text, error) {
   const rows = design.rows.filter(({ code }) => codeKind(code) === 'project');
   if (rows.length === 0) return;
@@ -300,7 +305,8 @@ function checkRegistered(design, text, error) {
     return;
   }
   const registry = readRegistry(text);
-  for (const { rule, line, message } of checkRegistry(registry)) error('D11', 1, `${REGISTRY_FILE}:${line} ${rule} ${message}`);
+  const wrong = checkRegistry(registry).length;
+  if (wrong > 0) error('D11', 1, `${REGISTRY_FILE} has ${wrong} problem${wrong === 1 ? '' : 's'}: node .ai-orchestrator/scripts/design-inbox.mjs codes lists ${wrong === 1 ? 'it' : 'them'}`, { registry: true });
   const column = (name) => design.screenColumns?.findIndex((cell) => cell.toLowerCase() === name) ?? -1;
   const [appAt, routeAt] = [column('app'), column('route')];
   const plain = (cell) => (cell ?? '').replace(/`/g, '').trim();
@@ -323,7 +329,8 @@ function checkDesignSystem(design, screens, error) {
 
 // D8: images sit in design/ next to design.md, exist, are PNG or JPEG of at most 1 MB and 2,000 px, and every file
 // in design/ is used. For a Git LFS pointer, only the size it records is known. A prototype, the HTML of a Claude
-// Design screen for fe-dev to read, sits there too, at most 256 KB (tasks/todo.md item 10).
+// Design screen for fe-dev to read, sits there too, at most 256 KB (tasks/todo.md item 10), and is the page render of
+// /ao-design wrote, with no script, never the artboard itself (security review of shop PR #98).
 function checkImages(design, images, error, screens = new Map()) {
   const used = new Set();
   for (const [, { prototype, prototypeLine }] of screens) {
@@ -336,6 +343,7 @@ function checkImages(design, images, error, screens = new Map()) {
     used.add(name);
     if (!images.has(name)) error('D8', prototypeLine, `design/${name} does not exist`);
     else if (images.get(name).length > MAX_PROTOTYPE_BYTES) error('D8', prototypeLine, `design/${name} is ${images.get(name).length} bytes; a prototype is at most 256 KB (${MAX_PROTOTYPE_BYTES} bytes)`);
+    else if (renderedPageProblems(images.get(name).toString('utf8')).length > 0) error('D8', prototypeLine, `design/${name} is not a page that render of /ao-design wrote: copy .ai/design-inbox/<EPIC-KEY>/render/${name}, which has no script`);
   }
   for (const { src, line } of design.images) {
     const name = src.match(/^design\/([^/\\]+)$/)?.[1];

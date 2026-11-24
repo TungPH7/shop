@@ -396,7 +396,9 @@ export async function gatherFacts({ command, arg, jira, github, local, ...ctx })
   // /ao-spec of an Epic: the Claude artifacts its description links, and those the design inbox holds; one not taken
   // stops stage spec for /ao-design (tasks/todo.md item 10).
   // The links are read from the whole description, smart links and link marks included, which plain text leaves out.
-  const designLinks = command === 'spec' && item.workType === 'epic' ? (await maybe(async () => descriptionLinks((await jira.get(`/rest/api/3/issue/${encodeURIComponent(item.key)}`, { fields: 'description' })).fields?.description))) ?? [] : undefined;
+  // null when Jira answers 404 for the Epic: /ao-spec stops then, as its links are not known (review of shop PR #98: []
+  // let stage spec run ux with no design).
+  const designLinks = command === 'spec' && item.workType === 'epic' ? await maybe(async () => descriptionLinks((await jira.get(`/rest/api/3/issue/${encodeURIComponent(item.key)}`, { fields: 'description' })).fields?.description)) : undefined;
   // A kit another project reviewed needs no agent (kit-copy-review spec 2.1). Only on an open PR with green CI, which
   // /ao-review would review, and while a report is missing on its head: the compare reads GitHub and renders the agents
   // (review of ao-pilot PR #24). ctx.kitCopy(pr) resolves to null when the PR claims no such thing.

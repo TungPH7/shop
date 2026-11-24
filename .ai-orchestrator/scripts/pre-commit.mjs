@@ -35,7 +35,11 @@ if (!scan.ok) {
 // next to this script.
 const gates = readGates(fileURLToPath(new URL('../quality', import.meta.url)));
 const staged = git('diff', '--cached', '--unified=0', '--no-color', '--no-ext-diff', '--diff-filter=ACMR').stdout;
-const suppressed = findSuppressions(addedLines(staged), gates.suppressions);
+// The first commit of a repo brings code that is there already, such as the apps ao-kit add copies from your templates
+// (SPEC-guided-setup.md 3.6): the check watches what a change adds, as the policy job does on a PR, and a push has none.
+const first = git('rev-parse', '--verify', '--quiet', 'HEAD').status !== 0;
+if (first) console.error('pre-commit: the first commit of the repo: the Suppressions check starts with the next commit, and the policy job checks every PR');
+const suppressed = first ? [] : findSuppressions(addedLines(staged), gates.suppressions);
 if (suppressed.length > 0) {
   for (const line of suppressed) console.error(line);
   console.error(`pre-commit: a staged line switches a check off. Put "${gates.suppressions.reason_marker} <why>" on the same line, or remove it (docs/quality-gates.md).`);

@@ -13,6 +13,7 @@ import { unquotePath } from '../lib/quality/diff-paths.mjs';
 import { readGates } from '../lib/quality/gates.mjs';
 import { auditArgs, managerFromLockfile, PNPM_MISSING, runManager } from '../lib/quality/package-manager.mjs';
 import { checkDesignFile } from '../lib/quality/design-files.mjs';
+import { usesProjectCodes } from '../lib/quality/design.mjs';
 import { REGISTRY_FILE, checkRegistry, readRegistry } from '../lib/quality/screen-codes.mjs';
 import { auditProblems, checkConventions, designFilesToCheck, osvProblems, pomsToScan, scanTries } from '../lib/quality/policy.mjs';
 import { addedLines, deletedTests, findSuppressions, loweredThresholds } from '../lib/quality/suppressions.mjs';
@@ -102,10 +103,21 @@ try {
       sections.push(['New dependencies', unapprovedDependencies(added, projectDependencies(project).approved, own, { catalogs })]);
     } else notes.push('no .ai-orchestrator/project.yaml: new dependencies are not checked');
     const designs = designFilesToCheck(changes, (path) => existsSync(join(root, path)));
-    // The registry of screen codes, when the PR changes it (tasks/todo.md item 10): one code a screen, declared prefixes.
-    const registryChanged = changes.some(({ status, path }) => path === REGISTRY_FILE && status !== 'D') && existsSync(join(root, REGISTRY_FILE));
-    const registryErrors = registryChanged ? checkRegistry(readRegistry(readFileSync(join(root, REGISTRY_FILE), 'utf8'))).map(({ rule, line, message }) => `${REGISTRY_FILE}:${line} ${rule} ${message}`) : [];
-    sections.push(['Design', [...designs.flatMap((path) => checkDesignFile(join(root, path)).map(({ rule, line, message }) => `${path}:${line} ${rule} ${message}`)), ...registryErrors]]);
+    // The registry of screen codes, when the PR changes it (tasks/todo.md item 10): one code a screen, declared prefixes,
+    // listed here once and not again by each design.md; and D11 of every design.md with project codes, which a retired
+    // code or a new route of the registry breaks though the PR does not change it (review of shop PR #98).
+    // A deleted or renamed registry counts too: every design.md with project codes then lacks it (independent pass).
+    const registryChanged = changes.some(({ path }) => path === REGISTRY_FILE);
+    const registryErrors = registryChanged && existsSync(join(root, REGISTRY_FILE)) ? checkRegistry(readRegistry(readFileSync(join(root, REGISTRY_FILE), 'utf8'))).map(({ rule, line, message }) => `${REGISTRY_FILE}:${line} ${rule} ${message}`) : [];
+    const coded = registryChanged
+      ? globSync('docs/specs/*/design.md', { cwd: root }).map((path) => path.replaceAll('\\', '/')).filter((path) => !designs.includes(path) && usesProjectCodes(readFileSync(join(root, path), 'utf8'))).sort()
+      : [];
+    const lines = (path, errors) => errors.filter((error) => !(registryChanged && error.registry)).map(({ rule, line, message }) => `${path}:${line} ${rule} ${message}`);
+    sections.push(['Design', [
+      ...designs.flatMap((path) => lines(path, checkDesignFile(join(root, path)))),
+      ...coded.flatMap((path) => lines(path, checkDesignFile(join(root, path)).filter(({ rule }) => rule === 'D11'))),
+      ...registryErrors,
+    ]]);
   }
 
   const manager = managerFromLockfile((path) => existsSync(join(root, path)));

@@ -1,11 +1,11 @@
-// ao-kit add <dir> <app> --stack <nextjs|react|spring-boot> [--from <template> [--ref <branch>]] [--exclude <path>]... [--public]
+// ao-kit add <dir> <app> --stack <nextjs|react|spring-boot> [--from <template> [--ref <branch>]] [--exclude <path>]... [--public --seo|--no-seo]
 // (project-scaffold part 2, spec 2.2; spring-boot from part 3, spec 2.1, with --from only): one app more in a pnpm project. Its code is the skeleton of the stack, or HEAD of your template
 // without what the kit replaces (template.mjs). The app goes into project.yaml, deploy.yaml and roster.local.yaml, the
 // packages of the repo are installed again, settings.json and the agents are rendered again, and ao-kit add says what
 // the code of the app still has to change, without changing it. Nothing is committed. git(args, cwd) and run(argv, cwd)
 // are given, as for init.
-import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { isCollection, parseDocument, stringify } from 'yaml';
 import { devCommand, managerOf } from '../quality/package-manager.mjs';
 import { appReport } from './app-report.mjs';
@@ -16,6 +16,7 @@ import { copyTemplate } from './template.mjs';
 
 const DEPLOY_FILE = '.ai-orchestrator/deploy.yaml';
 const ROSTER_FILE = '.ai-orchestrator/roster.local.yaml';
+export const ADD_REPORT = '.ai/setup/add-report.md';
 const RENDER = ['node', '.ai-orchestrator/scripts/render-agents.mjs', '--project', '.'];
 const TODO = 'TODO';
 // An app name of deploy.yaml: lower case, at most 20 characters, so it fits a container name on the VPS.
@@ -37,6 +38,51 @@ function setYaml(file, path, value, header) {
   blockAlong(doc, path.slice(0, -1));
   writeFileSync(file, String(doc));
   return doc;
+}
+
+// What the files of .ai-orchestrator/ still lack for a Spring Boot app, which add does not write (project-scaffold part
+// 3, T21; du-an-1, SPEC-guided-setup.md 6): the env: of the app and the database of deploy.yaml, and the coverage_exclude
+// JaCoCo's excludes call for. Read after the app is in. These files steer the kit, so they go into the first commit, or
+// a PR you merge.
+function kitFilesByHand({ projectDir, app, profile, read }) {
+  if (profile !== 'spring-boot') return [];
+  const lines = [];
+  const deploy = parseDocument(readFileSync(join(projectDir, DEPLOY_FILE), 'utf8')).toJSON() ?? {};
+  // The variables the VPS gives the app: its profile when the Dockerfile sets one for every environment, and the
+  // database ones its config reads, with a default or not (DB_HOST is db on the VPS, localhost on your machine).
+  const config = ['application.yml', 'application.yaml', 'application.properties'].map((name) => read(`src/main/resources/${name}`)).find((text) => text != null) ?? '';
+  const wanted = [
+    ...(/^\s*ENV\s+SPRING_PROFILES_ACTIVE[=\s]/m.test(read('Dockerfile') ?? '') ? ['SPRING_PROFILES_ACTIVE'] : []),
+    ...[...config.matchAll(/\$\{((?:DB|POSTGRES)_[A-Z0-9_]*)[:}]/g)].map((match) => match[1]),
+    ...[...config.matchAll(/\$\{([A-Z][A-Z0-9_]*)\}/g)].map((match) => match[1]),
+  ];
+  const missing = [...new Set(wanted)].filter((name) => !(deploy.apps?.[app]?.env ?? []).includes(name));
+  if (missing.length > 0) lines.push(`${DEPLOY_FILE} names no ${missing.join(', ')} under env: of ${app}: write env: [ ${missing.join(', ')} ], so the deployer passes each from /etc/ao/secrets/<project>/<environment>.env`);
+  if (!deploy.database) lines.push(`${DEPLOY_FILE} has no database: key, which ${app} needs for its PostgreSQL: write image, init and memory as docs/vps-setup.md section 14 shows`);
+  const project = parseDocument(readFileSync(join(projectDir, PROJECT_FILE), 'utf8')).toJSON();
+  // Only the <exclude> of the JaCoCo plugin: the pom has others, such as Lombok left out of the Spring Boot plugin.
+  const jacoco = /<artifactId>jacoco-maven-plugin<\/artifactId>([\s\S]*?)<\/plugin>/.exec(read('pom.xml') ?? '')?.[1] ?? '';
+  const excluded = [...jacoco.matchAll(/<exclude>\s*([^<\s]+)\s*<\/exclude>/g)].map((match) => match[1]);
+  if (excluded.length > 0 && !project?.apps?.[app]?.coverage_exclude) {
+    // A class pattern as a source path; a nested class ($) lives in the file of its outer class.
+    const paths = excluded.filter((pattern) => !pattern.includes('$')).map((pattern) => `src/main/java/${pattern.replace(/\.class$/, '.java')}`);
+    lines.push(`apps/${app}/pom.xml leaves ${excluded.length} patterns out of JaCoCo: write them as source paths under coverage_exclude of ${app} in ${PROJECT_FILE}, or build-test fails on files the report lacks. From its <excludes>: ${paths.join(', ')}`);
+  }
+  return lines;
+}
+
+// .ai/setup/add-report.md (SPEC-guided-setup.md section 4): one section for each app, the one of `app` written again.
+// The second session of ao-kit-setup.md reads it to make the Task that changes the code; .ai/ is ignored by git.
+function writeAddReport({ projectDir, app, stack, changes, byHand }) {
+  const file = join(projectDir, ADD_REPORT);
+  const header = '# What ao-kit add says each app still needs\n\nao-kit add writes one section for each app. The code changes go through one Task and one PR (SPEC-project-scaffold-2.md 2.3); the lines under "By hand" go into the first commit.\n';
+  const old = existsSync(file) ? readFileSync(file, 'utf8') : header;
+  const sections = old.split(/^(?=## )/m);
+  const kept = sections.filter((section) => !section.startsWith(`## ${app} (`));
+  const list = (lines) => (lines.length > 0 ? lines.map((line) => `- ${line}`).join('\n') : '- Nothing.');
+  const section = `## ${app} (${stack})\n\nCode to change:\n\n${list(changes)}\n${byHand.length > 0 ? `\nBy hand:\n\n${list(byHand)}\n` : ''}\n`;
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `${[...kept.map((text) => text.replace(/\n*$/, '\n\n')), section].join('').replace(/\n+$/, '\n')}`);
 }
 
 export function addApp({ kitDir, projectDir, app, options, git, run }) {
@@ -153,6 +199,10 @@ export function addApp({ kitDir, projectDir, app, options, git, run }) {
 
   const changes = [...appReport({ app, profile: stack.profile, read, port }), ...(intl?.problem ? [intl.problem] : [])];
   if (changes.length > 0) notes.push(`The code of ${app} still has to change, through a Task and a PR (SPEC-project-scaffold-2.md 2.3):`, ...changes.map((line) => `  - ${line}`));
+  const byHand = kitFilesByHand({ projectDir, app, profile: stack.profile, read });
+  if (byHand.length > 0) notes.push(`Write by hand before the first commit, since these files steer the kit:`, ...byHand.map((line) => `  - ${line}`));
+  writeAddReport({ projectDir, app, stack: stack.name, changes, byHand });
+  notes.push(`Wrote the section of ${app} in ${ADD_REPORT}, which git ignores, for the Task of ao-kit-setup.md`);
   notes.push(`Next: ao-kit check <dir>; ${options.public ? `when two or more apps are public, write the hosts of ${app} in development, staging and production under hosts: in ${PROJECT_FILE}, and ao-kit doctor prints the lines of /etc/ao/deployer.yaml; ` : ''}then the steps of docs/getting-started.md`);
   return { ok: true, notes };
 }

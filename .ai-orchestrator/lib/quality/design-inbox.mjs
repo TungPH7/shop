@@ -3,6 +3,7 @@
 // and the screens of a Design. ux reads it; it never opens a link itself. Pure: scripts/design-inbox.mjs reads and
 // writes the files.
 import { createHash } from 'node:crypto';
+import { join } from 'node:path';
 import { parse, stringify } from 'yaml';
 import { PROJECT_CODE, codeKind } from './screen-codes.mjs';
 
@@ -17,11 +18,16 @@ const INSTRUCTION_NAME = /(^|\/)(claude(\.local)?\.md|agents\.md|\.claude|\.mcp\
 
 export const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
-// The links of Claude artifacts in a text, such as the description of an Epic, each once, in order.
+// The links of Claude artifacts in a text, such as the description of an Epic, each once, in order. A link may end with
+// a slash, which is left out (review of shop PR #98: `<id>/` was missed, so /ao-spec ran ux with no design); a longer
+// path after the id is no link of an artifact.
 export function artifactLinks(text) {
-  const found = String(text ?? '').match(new RegExp(`${ARTIFACT}(?![A-Za-z0-9/-])`, 'g')) ?? [];
+  const found = String(text ?? '').match(new RegExp(`${ARTIFACT}(?=\\/?(?![A-Za-z0-9/-]))`, 'g')) ?? [];
   return [...new Set(found)];
 }
+
+// A link as the inbox records it: without the slash at its end.
+export const normalLink = (url) => String(url ?? '').replace(/\/$/, '');
 
 // The id of an artifact, the folder of its files in the inbox: null for anything but the link of a Claude artifact, so
 // a link never names a folder outside the inbox (review before kit PR of item 10: a URL ending in `..\..\.claude\rules`).
@@ -55,8 +61,9 @@ export function boardsOf(canvasText) {
   let canvas;
   try {
     canvas = JSON.parse(canvasText);
-  } catch (cause) {
-    return { screens: [], systems: [], problems: [`canvas.json does not parse: ${cause.message}`] };
+  } catch {
+    // Named, not quoted: the error of JSON.parse shows the start of the text, which could be any file a link led to.
+    return { screens: [], systems: [], problems: ['canvas.json does not parse as JSON'] };
   }
   const boards = canvas?.boards && typeof canvas.boards === 'object' && !Array.isArray(canvas.boards) ? canvas.boards : {};
   const order = Array.isArray(canvas?.order) ? canvas.order.filter((file) => typeof file === 'string' && Object.hasOwn(boards, file)) : [];
@@ -93,9 +100,12 @@ export function boardsOf(canvasText) {
 
 // A page a browser renders with no script: the artboard of a Claude Design without its canvas runtime.
 // - <head> is built, not copied: the CSP, the stylesheets of Google Fonts the helmet names (rebuilt from their parsed
-//   URL), and the text of its <style> blocks.
-// - In the body, every tag that runs, loads, frames or moves the page (script, iframe, object, embed, frame, base, form,
-//   meta, link, style, template, portal, applet, noscript) has its "<" escaped, so it shows as text and is never a tag.
+//   URL), and the text of its <style> blocks, every "<" of it written \3c , which CSS reads as "<" in a string and
+//   which never starts a tag (review of shop PR #98: deleting "</style" let `</sty</stylele>` close the block, and a
+//   refresh after it ran in <head>).
+// - In the body, every tag that runs, loads, frames or moves the page (script, iframe, fencedframe, object, embed,
+//   frame, base, form, meta, link, style, template, portal, applet, noscript) has its "<" escaped, so it shows as text
+//   and is never a tag. Event handlers go, after a space, a slash or a quote alike; the CSP blocks any left.
 //   Nothing is deleted at that step: a deletion could join two halves into a new tag (review before kit PR of item 10:
 //   `<me<meta http-equiv>ta http-equiv="refresh">` came back as a refresh, which left the page and its CSP).
 // - The Content-Security-Policy, in the page and as a header of the local server, lets in only inline styles, Google
@@ -105,7 +115,7 @@ export function boardsOf(canvasText) {
 export const RENDER_POLICY = "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; base-uri 'none'; form-action 'none'";
 const FONT_SHEET = /https:\/\/fonts\.googleapis\.com\/css2?\?[A-Za-z0-9=:;,@&%+._~-]+/g;
 // Inline <svg> icons stay: an SVG moves no page by itself, and a <script> inside one is escaped like any other.
-const LIVE_TAG = /<(\/?)(?=(script|iframe|object|embed|frame|frameset|base|form|meta|link|style|template|portal|applet|noscript)\b)/gi;
+const LIVE_TAG = /<(\/?)(?=(script|iframe|fencedframe|object|embed|frame|frameset|base|form|meta|link|style|template|portal|applet|noscript)\b)/gi;
 const escapeLive = (part) => part.replace(LIVE_TAG, '&lt;$1');
 const attribute = (value) => value.replace(/&amp;/g, '&').replace(/[<>"']/g, '');
 export function stripCanvas(html) {
@@ -117,9 +127,9 @@ export function stripCanvas(html) {
   const body = inner.replace(/<helmet>[\s\S]*?<\/helmet>/i, '');
   const dynamic = /\{\{|<sc-(if|for)\b|<dc-import\b/i.test(body);
   const sheets = [...new Set((helmet.replace(/&amp;/g, '&').match(FONT_SHEET) ?? []).map(attribute))];
-  const styles = [...helmet.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)].map(([, css]) => css.replace(/<\/?style/gi, ''));
+  const styles = [...helmet.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style\s*>/gi)].map(([, css]) => css.replace(/</g, '\\3c '));
   const cleanBody = escapeLive(body
-    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, ' ')
+    .replace(/(?<=[\s/"'])on[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, ' ')
     .replace(/(href|src|action|formaction|data)\s*=\s*("|')\s*javascript:[^"']*\2/gi, '$1="#"'));
   const head = [
     '<meta charset="utf-8">',
@@ -129,6 +139,39 @@ export function stripCanvas(html) {
   ].join('\n');
   return { html: `<!doctype html>\n<html lang="${lang}">\n<head>\n${head}\n</head>\n<body>\n${cleanBody}\n</body>\n</html>\n`, dynamic };
 }
+
+// What keeps a page from being one stripCanvas wrote, as check-design D8 reads a prototype (review of shop PR #98: ux
+// committed the artboard itself, its script and all, for fe-dev to read): its head the kit's own, in its order, and no
+// tag in its body that runs, loads, frames or moves the page. [] for a page render wrote.
+const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const RENDERED = /^<!doctype html>\n<html lang="[A-Za-z-]{2,12}">\n<head>\n([\s\S]*?)\n<\/head>\n<body>\n([\s\S]*)\n<\/body>\n<\/html>\n?$/;
+const RENDERED_HEAD = new RegExp(`^<meta charset="utf-8">\\n<meta http-equiv="Content-Security-Policy" content="${escapeRe(RENDER_POLICY)}">(\\n<link rel="stylesheet" href="https://fonts\\.googleapis\\.com/css2?\\?[A-Za-z0-9=:;,@&%+._~-]+">)*(\\n<style>[^<]*</style>)*$`);
+export function renderedPageProblems(html) {
+  const page = RENDERED.exec(String(html ?? '').replace(/\r\n/g, '\n'));
+  if (!page) return ['it is not laid out as a page render wrote'];
+  const [, head, body] = page;
+  const problems = [];
+  if (!RENDERED_HEAD.test(head)) problems.push('its <head> is not the one render writes: the CSP of the kit, the fonts of Google and style text only');
+  const live = body.match(new RegExp(LIVE_TAG.source, 'i'));
+  if (live) problems.push(`its body has a tag that runs, loads or moves the page: ${body.slice(live.index, live.index + 20)}`);
+  return problems;
+}
+
+// What @playwright/cli runs with in render (review of shop PR #98): a folder of its own outside the project, so no
+// node_modules or .playwright/cli.config.json an agent put in the inbox is read; requests to the local server and Google
+// Fonts only, which also stops a refresh to another origin; no download; its files in that folder.
+export const cliConfig = ({ base, work }) => ({
+  browser: { isolated: true, contextOptions: { acceptDownloads: false } },
+  outputDir: join(work, 'out'),
+  outputMode: 'file',
+  network: { allowedOrigins: [base, 'https://fonts.googleapis.com', 'https://fonts.gstatic.com'] },
+});
+// The environment of the CLI: without the variables it reads as config (PLAYWRIGHT_MCP_*, PWTEST_*) or that load code
+// into node (NODE_OPTIONS), and with the folder of its global config set to the work folder, where there is none.
+export const cliEnv = (env, work) => ({
+  ...Object.fromEntries(Object.entries(env).filter(([name]) => !/^(PLAYWRIGHT_MCP_|PWTEST_|NODE_OPTIONS$)/i.test(name))),
+  PWTEST_CLI_GLOBAL_CONFIG: work,
+});
 
 // Whether an artboard named in inbox.yaml may be read: its folder an artifact id, its file a kept artboard. inbox.yaml
 // sits in .ai/, which agents write, so render reads only what add could have written (threat model of item 10).

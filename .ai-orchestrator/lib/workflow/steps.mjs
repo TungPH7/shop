@@ -290,6 +290,7 @@ function decideSpec(facts, options) {
   if (pending) return { ...questionsStop(key, pending.artifact, pending.questions, pending.asker), lines };
   // ux reads the design inbox, never a link (tasks/todo.md item 10): a Claude artifact the Epic links that /ao-design
   // has not taken waits for it, in your session, which reads your artifacts.
+  if (facts.designLinks === null) return { ...stop('you', `Jira gave no description of ${key}, so the Claude artifacts it links are not known`, `Check that ${key} is an Epic of the space in Jira, then /ao-spec ${key} again`), lines };
   const untaken = (facts.designLinks ?? []).filter((url) => !(facts.designInbox ?? []).includes(url));
   if (untaken.length > 0) return { ...stop('you', `${key} links ${untaken.length} Claude artifact${untaken.length > 1 ? 's' : ''} that ${untaken.length > 1 ? 'are' : 'is'} not in .ai/design-inbox/${key}/: ${untaken.join(', ')}`, `/ao-design ${key}`), lines };
   // A change you ask for before gate ① (human-loop spec 3.2), unless the same one was made already.
@@ -1352,7 +1353,7 @@ function qaLight(facts, options, { env, where, lines }) {
   const report = options.lightReport;
   if (report !== undefined) {
     const result = qaReportResult(report);
-    const again = `Write it from .ai-orchestrator/templates/qa-report.md, then /ao-qa ${key} --light-report <file> again`;
+    const again = `Write it from .ai-orchestrator/templates/qa-report.md, then node .ai-orchestrator/scripts/ao-step.mjs qa ${key} --light-report <file> --go again`;
     if (!result) return stop('fix', 'the light report has no "# QA report" heading, or no PASS, FAIL or NOT TESTED under "## Result"', again, { lines });
     if (!new RegExp(`^#\\s*QA report:\\s*${key}\\b`, 'm').test(report)) return stop('fix', `the light report is not about ${key}: its heading must read "# QA report: ${key} …"`, again, { lines });
     return go([{ action: 'qa-light-report', key, result, body: report }], lines);
@@ -1361,7 +1362,7 @@ function qaLight(facts, options, { env, where, lines }) {
   const checks = lightChecks(facts.description, item.workType);
   return stop('you',
     `${key} is at level light: no qa run. Check each line below on ${env}, then write a short report from templates/qa-report.md`,
-    `Check ${key} on ${where}, write .ai/runs/${key}/light-report.md, then /ao-qa ${key} --light-report .ai/runs/${key}/light-report.md`,
+    `Check ${key} on ${where}, write .ai/runs/${key}/light-report.md, then node .ai-orchestrator/scripts/ao-step.mjs qa ${key} --light-report .ai/runs/${key}/light-report.md --go`,
     { lines: [...lines, ...(checks.length > 0 ? ['To check:', ...checks] : [`To check: the description of ${key} has no section to check; read it on Jira`])] },
   );
 }

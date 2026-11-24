@@ -59,7 +59,7 @@ These rules apply to every agent of the SDLC contract, and to the main session u
 | Artifact | Template | Created by | Stored in |
 |---|---|---|---|
 | SPEC của Epic | `.ai-orchestrator/templates/spec.md` | `ba` | Git: `docs/specs/<EPIC-KEY>/spec.md` |
-| Thiết kế màn hình | `.ai-orchestrator/templates/design.md` | `ux` | Git: `docs/specs/<EPIC-KEY>/design.md`; Git: `docs/specs/<EPIC-KEY>/design/` (ảnh của màn hình kiểu Figma hay Ảnh) |
+| Thiết kế màn hình | `.ai-orchestrator/templates/design.md` | `ux` | Git: `docs/specs/<EPIC-KEY>/design.md`; Git: `docs/specs/<EPIC-KEY>/design/` (ảnh của màn hình kiểu Figma, Claude Design hay Ảnh, và prototype <mã>.html của màn hình Claude Design, trang không script mà /ao-design viết) |
 | Plan | `.ai-orchestrator/templates/plan.md` | `sa` | Git: `docs/specs/<EPIC-KEY>/plan.md` |
 | ADR | `.ai-orchestrator/templates/adr.md` | `sa` | Git: `docs/adr/NNNN-<slug>.md` |
 | Epic | `.ai-orchestrator/templates/epic.md` | `human` | Jira: Mô tả item |

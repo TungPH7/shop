@@ -39,6 +39,8 @@ export function renderChecklist(contract, mapping) {
     '',
     'Checklist dựng tay theo hợp đồng trong `contract/` và ánh xạ `tracker/jira.yaml`, cho gói Jira Free. Làm theo thứ tự, vì mục sau dùng thứ mục trước tạo ra; mỗi dự án chỉ dựng một lần. Lý do của từng mục nằm ở [SPEC-tracker-integration.md](../SPEC-tracker-integration.md), mục 2.',
     '',
+    'Từ `project-scaffold` (B1), checklist này chỉ cần cho space đầu tiên của site: space mẫu mà các dự án sau chép scheme. Với mỗi dự án sau, `ao-kit setup jira` tạo space theo các scheme của space mẫu, tạo filter và board, rồi chạy `jira:check`. Ở mục 9 và 10, phần còn làm tay chỉ là cột của board, vì Jira không có API sửa cột. Từng bước: [getting-started.md](getting-started.md), phần 3, bước 3.',
+    '',
     'Mỗi mục có phần **Cách làm** (bấm vào đâu) và danh sách `- [ ]` (tạo những gì). Tên nút lấy từ tài liệu của Atlassian; giao diện thật có thể khác một chút. Chỗ nào ghi "đối chiếu giao diện" là tài liệu không nêu tên nút: nếu không thấy, chụp màn hình rồi hỏi.',
     ...sections.flatMap(([title, body], index) => ['', `## ${index + 1}. ${title}`, '', ...body]),
   ];
